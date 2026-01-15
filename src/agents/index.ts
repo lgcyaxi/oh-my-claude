@@ -1,0 +1,83 @@
+/**
+ * Agent definitions for oh-my-claude
+ *
+ * Agents are organized by execution mode:
+ * - Task tool agents (Claude subscription): sisyphus, claude-reviewer, claude-scout
+ * - MCP background agents (external APIs): oracle, librarian, explore, frontend-ui-ux, document-writer
+ */
+
+export * from "./types";
+
+// Claude subscription agents (Task tool - sync)
+export { sisyphusAgent } from "./sisyphus";
+export { claudeReviewerAgent } from "./claude-reviewer";
+export { claudeScoutAgent } from "./claude-scout";
+
+// External API agents (MCP - async)
+export { oracleAgent } from "./oracle";
+export { librarianAgent } from "./librarian";
+export { exploreAgent } from "./explore";
+export { frontendUiUxAgent } from "./frontend-ui-ux";
+export { documentWriterAgent } from "./document-writer";
+
+// Re-export individual agents
+import { sisyphusAgent } from "./sisyphus";
+import { claudeReviewerAgent } from "./claude-reviewer";
+import { claudeScoutAgent } from "./claude-scout";
+import { oracleAgent } from "./oracle";
+import { librarianAgent } from "./librarian";
+import { exploreAgent } from "./explore";
+import { frontendUiUxAgent } from "./frontend-ui-ux";
+import { documentWriterAgent } from "./document-writer";
+import type { AgentDefinition } from "./types";
+
+/**
+ * All available agents
+ */
+export const agents: Record<string, AgentDefinition> = {
+  // Claude subscription agents
+  sisyphus: sisyphusAgent,
+  "claude-reviewer": claudeReviewerAgent,
+  "claude-scout": claudeScoutAgent,
+
+  // External API agents
+  oracle: oracleAgent,
+  librarian: librarianAgent,
+  explore: exploreAgent,
+  "frontend-ui-ux": frontendUiUxAgent,
+  "document-writer": documentWriterAgent,
+};
+
+/**
+ * Agents that run via Claude Code Task tool (sync, uses Claude subscription)
+ */
+export const taskAgents = [sisyphusAgent, claudeReviewerAgent, claudeScoutAgent];
+
+/**
+ * Agents that run via MCP background server (async, uses external APIs)
+ */
+export const mcpAgents = [
+  oracleAgent,
+  librarianAgent,
+  exploreAgent,
+  frontendUiUxAgent,
+  documentWriterAgent,
+];
+
+/**
+ * Get agent by name
+ */
+export function getAgent(name: string): AgentDefinition | undefined {
+  return agents[name.toLowerCase()];
+}
+
+/**
+ * Check if agent uses Claude subscription (Task tool) or external API (MCP)
+ */
+export function isTaskAgent(agent: AgentDefinition): boolean {
+  return agent.executionMode === "task";
+}
+
+export function isMcpAgent(agent: AgentDefinition): boolean {
+  return agent.executionMode === "mcp";
+}

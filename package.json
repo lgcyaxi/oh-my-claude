@@ -1,0 +1,46 @@
+{
+  "name": "oh-my-claude",
+  "version": "0.1.0",
+  "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "oh-my-claude": "./bin/oh-my-claude.js"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts src/cli.ts --outdir dist --target node --splitting",
+    "build:mcp": "bun build src/mcp/background-agent-server/server.ts --outdir dist/mcp --target node",
+    "build:hooks": "bun build src/hooks/comment-checker.ts src/hooks/todo-continuation.ts --outdir dist/hooks --target node",
+    "build:all": "bun run build && bun run build:mcp && bun run build:hooks",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "dev": "bun run --watch src/index.ts",
+    "install-local": "bun run build:all && bun run src/cli.ts install",
+    "uninstall-local": "bun run src/cli.ts uninstall"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "zod": "^3.24.0",
+    "commander": "^14.0.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.3"
+  },
+  "keywords": [
+    "claude-code",
+    "ai-agent",
+    "multi-agent",
+    "orchestration",
+    "deepseek",
+    "zhipu",
+    "minimax"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/oh-my-claude"
+  }
+}
