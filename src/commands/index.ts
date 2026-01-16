@@ -18,6 +18,7 @@ export const agentCommands = [
   "omc-explore",
   "omc-plan",
   "omc-start-work",
+  "omc-status",
 ] as const;
 
 // Quick action commands (omcx- prefix)
@@ -26,10 +27,16 @@ export const actionCommands = [
   "omcx-implement",
   "omcx-refactor",
   "omcx-docs",
+  "omcx-issue",
+] as const;
+
+// Special mode commands
+export const modeCommands = [
+  "ulw", // Ultrawork mode - work until done
 ] as const;
 
 // All commands
-export const commands = [...agentCommands, ...actionCommands] as const;
+export const commands = [...agentCommands, ...actionCommands, ...modeCommands] as const;
 
 export type CommandName = typeof commands[number];
 

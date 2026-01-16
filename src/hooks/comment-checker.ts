@@ -31,7 +31,7 @@ interface ToolInput {
 }
 
 interface HookResponse {
-  decision: "approve" | "block" | "skip";
+  decision: "approve" | "block";
   reason?: string;
 }
 
@@ -125,7 +125,7 @@ async function main() {
 
   // Only check Edit and Write tools
   if (toolInput.tool !== "Edit" && toolInput.tool !== "Write") {
-    const response: HookResponse = { decision: "skip" };
+    const response: HookResponse = { decision: "approve" };
     console.log(JSON.stringify(response));
     return;
   }

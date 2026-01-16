@@ -5,11 +5,19 @@
  * - Launch tasks with agent/category routing
  * - Track task status and results
  * - Handle concurrency limits per provider
+ * - Write status file for statusline display
  */
 
 import { routeByAgent, routeByCategory, FallbackRequiredError } from "../../providers/router";
 import { getAgent } from "../../agents";
 import type { ChatMessage } from "../../providers/types";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { homedir } from "node:os";
+import { getConcurrencyStatus } from "./concurrency";
+
+// Status file path for statusline integration
+const STATUS_FILE_PATH = join(homedir(), ".claude", "oh-my-claude", "status.json");
 
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "fallback_required";
 
@@ -39,6 +47,42 @@ const tasks = new Map<string, Task>();
 // Generate unique task ID
 function generateTaskId(): string {
   return `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
+ * Write current status to file for statusline integration
+ * Called on every task state change and on server startup
+ */
+export function updateStatusFile(): void {
+  try {
+    // Ensure directory exists
+    const dir = dirname(STATUS_FILE_PATH);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+
+    // Get active tasks
+    const activeTasks = Array.from(tasks.values())
+      .filter((t) => t.status === "running" || t.status === "pending")
+      .map((t) => ({
+        agent: t.agentName || t.categoryName || "unknown",
+        startedAt: t.startedAt || t.createdAt,
+      }));
+
+    // Get provider concurrency
+    const providers = getConcurrencyStatus();
+
+    const status = {
+      activeTasks,
+      providers,
+      updatedAt: new Date().toISOString(),
+    };
+
+    writeFileSync(STATUS_FILE_PATH, JSON.stringify(status, null, 2));
+  } catch (error) {
+    // Silently fail - statusline is non-critical
+    console.error("Failed to update status file:", error);
+  }
 }
 
 /**
@@ -77,6 +121,7 @@ export async function launchTask(options: {
   };
 
   tasks.set(taskId, task);
+  updateStatusFile();
 
   // Start the task asynchronously
   runTask(task, finalSystemPrompt).catch((error) => {
@@ -94,6 +139,7 @@ async function runTask(task: Task, systemPrompt?: string): Promise<void> {
   task.status = "running";
   task.startedAt = Date.now();
   tasks.set(task.id, task);
+  updateStatusFile();
 
   try {
     const messages: ChatMessage[] = [];
@@ -129,6 +175,7 @@ async function runTask(task: Task, systemPrompt?: string): Promise<void> {
     task.result = result;
     task.completedAt = Date.now();
     tasks.set(task.id, task);
+    updateStatusFile();
   } catch (error) {
     // Handle fallback required error specially
     if (error instanceof FallbackRequiredError) {
@@ -146,6 +193,7 @@ async function runTask(task: Task, systemPrompt?: string): Promise<void> {
     }
     task.completedAt = Date.now();
     tasks.set(task.id, task);
+    updateStatusFile();
   }
 }
 
@@ -199,6 +247,7 @@ export function cancelTask(taskId: string): boolean {
     task.status = "cancelled";
     task.completedAt = Date.now();
     tasks.set(taskId, task);
+    updateStatusFile();
     return true;
   }
 
@@ -218,6 +267,10 @@ export function cancelAllTasks(): number {
       tasks.set(taskId, task);
       cancelled++;
     }
+  }
+
+  if (cancelled > 0) {
+    updateStatusFile();
   }
 
   return cancelled;

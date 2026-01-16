@@ -14,7 +14,7 @@ import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 
 import { generateAllAgentFiles, removeAgentFiles } from "../generators/agent-generator";
-import { installHooks, installMcpServer, uninstallFromSettings } from "./settings-merger";
+import { installHooks, installMcpServer, installStatusLine, uninstallFromSettings, uninstallStatusLine } from "./settings-merger";
 import { DEFAULT_CONFIG } from "../config/schema";
 
 /**
@@ -52,12 +52,20 @@ export function getConfigPath(): string {
   return join(homedir(), ".claude", "oh-my-claude.json");
 }
 
+/**
+ * Get statusline script path
+ */
+export function getStatusLineScriptPath(): string {
+  return join(getInstallDir(), "dist", "statusline", "statusline.js");
+}
+
 export interface InstallResult {
   success: boolean;
   agents: { generated: string[]; skipped: string[] };
   commands: { installed: string[]; skipped: string[] };
   hooks: { installed: string[]; skipped: string[] };
   mcp: { installed: boolean };
+  statusLine: { installed: boolean; wrapperCreated: boolean };
   config: { created: boolean };
   errors: string[];
 }
@@ -74,6 +82,8 @@ export async function install(options?: {
   skipHooks?: boolean;
   /** Skip MCP server installation */
   skipMcp?: boolean;
+  /** Skip statusline installation */
+  skipStatusLine?: boolean;
   /** Force overwrite existing files */
   force?: boolean;
   /** Source directory (for built files) */
@@ -85,6 +95,7 @@ export async function install(options?: {
     commands: { installed: [], skipped: [] },
     hooks: { installed: [], skipped: [] },
     mcp: { installed: false },
+    statusLine: { installed: false, wrapperCreated: false },
     config: { created: false },
     errors: [],
   };
@@ -213,7 +224,30 @@ process.exit(1);
       }
     }
 
-    // 4. Create default config if not exists
+    // 4. Install statusline
+    if (!options?.skipStatusLine) {
+      try {
+        const statusLineDir = join(installDir, "dist", "statusline");
+        if (!existsSync(statusLineDir)) {
+          mkdirSync(statusLineDir, { recursive: true });
+        }
+
+        // Copy statusline script (assuming it's built to dist/statusline/)
+        const builtStatusLineDir = join(sourceDir, "dist", "statusline");
+        if (existsSync(builtStatusLineDir)) {
+          cpSync(builtStatusLineDir, statusLineDir, { recursive: true });
+        }
+
+        // Install statusline into settings.json
+        const statusLineResult = installStatusLine(getStatusLineScriptPath());
+        result.statusLine.installed = statusLineResult.installed;
+        result.statusLine.wrapperCreated = statusLineResult.wrapperCreated;
+      } catch (error) {
+        result.errors.push(`Failed to install statusline: ${error}`);
+      }
+    }
+
+    // 5. Create default config if not exists
     const configPath = getConfigPath();
     if (!existsSync(configPath) || options?.force) {
       try {
@@ -243,6 +277,7 @@ export interface UninstallResult {
   commands: string[];
   hooks: string[];
   mcp: boolean;
+  statusLine: boolean;
   errors: string[];
 }
 
@@ -259,6 +294,7 @@ export async function uninstall(options?: {
     commands: [],
     hooks: [],
     mcp: false,
+    statusLine: false,
     errors: [],
   };
 
@@ -284,11 +320,13 @@ export async function uninstall(options?: {
           "omc-explore",
           "omc-plan",
           "omc-start-work",
+          "omc-status",
           // Quick action commands (omcx-)
           "omcx-commit",
           "omcx-implement",
           "omcx-refactor",
           "omcx-docs",
+          "omcx-issue",
         ];
         const { unlinkSync } = require("node:fs");
         for (const cmd of ourCommands) {
@@ -312,7 +350,14 @@ export async function uninstall(options?: {
       result.errors.push(`Failed to update settings: ${error}`);
     }
 
-    // 3. Remove installation directory
+    // 4. Remove statusline
+    try {
+      result.statusLine = uninstallStatusLine();
+    } catch (error) {
+      result.errors.push(`Failed to remove statusline: ${error}`);
+    }
+
+    // 5. Remove installation directory
     const installDir = getInstallDir();
     if (existsSync(installDir)) {
       try {
@@ -323,7 +368,7 @@ export async function uninstall(options?: {
       }
     }
 
-    // 4. Remove config (unless keepConfig)
+    // 6. Remove config (unless keepConfig)
     if (!options?.keepConfig) {
       const configPath = getConfigPath();
       if (existsSync(configPath)) {
@@ -354,13 +399,18 @@ export function checkInstallation(): {
     agents: boolean;
     hooks: boolean;
     mcp: boolean;
+    statusLine: boolean;
     config: boolean;
   };
 } {
   const installDir = getInstallDir();
   const hooksDir = getHooksDir();
   const mcpServerPath = getMcpServerPath();
+  const statusLineScriptPath = getStatusLineScriptPath();
   const configPath = getConfigPath();
+
+  // Check if statusline is configured in settings
+  const { isStatusLineConfigured } = require("./statusline-merger");
 
   return {
     installed:
@@ -371,6 +421,7 @@ export function checkInstallation(): {
       agents: existsSync(join(homedir(), ".claude", "agents", "sisyphus.md")),
       hooks: existsSync(join(hooksDir, "comment-checker.js")),
       mcp: existsSync(mcpServerPath),
+      statusLine: existsSync(statusLineScriptPath) && isStatusLineConfigured(),
       config: existsSync(configPath),
     },
   };

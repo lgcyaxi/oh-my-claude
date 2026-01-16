@@ -19,7 +19,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.0.1");
+  .version("1.1.1");
 
 // Install command
 program
@@ -206,6 +206,7 @@ program
     console.log(`  ${status.components.agents ? ok("Agent files generated") : fail("Agent files generated")}`);
     console.log(`  ${status.components.hooks ? ok("Hooks configured") : fail("Hooks configured")}`);
     console.log(`  ${status.components.mcp ? ok("MCP server configured") : fail("MCP server configured")}`);
+    console.log(`  ${status.components.statusLine ? ok("StatusLine configured") : warn("StatusLine not configured")}`);
     console.log(`  ${status.components.config ? ok("Configuration file exists") : fail("Configuration file exists")}`);
 
 
@@ -243,11 +244,13 @@ program
         "omc-explore",
         "omc-plan",
         "omc-start-work",
+        "omc-status",
         // Quick action commands
         "omcx-commit",
         "omcx-implement",
         "omcx-refactor",
         "omcx-docs",
+        "omcx-issue",
       ];
       console.log(`  ${subheader("Agent commands (omc-):")}`);
       for (const cmd of expectedCommands.filter(c => c.startsWith("omc-"))) {
@@ -291,11 +294,42 @@ program
       // Hooks detail
       console.log(`\n${header("Hooks (detailed):")}`);
       const hooksDir = join(homedir(), ".claude", "oh-my-claude", "hooks");
-      const expectedHooks = ["comment-checker.js", "todo-continuation.js"];
+      const expectedHooks = ["comment-checker.js", "todo-continuation.js", "task-notification.js"];
       for (const hook of expectedHooks) {
         const hookPath = join(hooksDir, hook);
         const exists = existsSync(hookPath);
         console.log(`  ${exists ? ok(hook) : fail(hook)}`);
+      }
+
+      // StatusLine detail
+      console.log(`\n${header("StatusLine (detailed):")}`);
+      const statusLineDir = join(homedir(), ".claude", "oh-my-claude", "dist", "statusline");
+      const statusLineScript = join(statusLineDir, "statusline.js");
+      const statusFileExists = existsSync(statusLineScript);
+      console.log(`  ${statusFileExists ? ok("statusline.js installed") : fail("statusline.js not installed")}`);
+
+      try {
+        const settingsPath = join(homedir(), ".claude", "settings.json");
+        if (existsSync(settingsPath)) {
+          const settings = JSON.parse(require("node:fs").readFileSync(settingsPath, "utf-8"));
+          if (settings.statusLine) {
+            const cmd = settings.statusLine.command || "";
+            const isOurs = cmd.includes("oh-my-claude");
+            const isWrapper = cmd.includes("statusline-wrapper");
+            console.log(`  ${ok("StatusLine configured in settings.json")}`);
+            if (isWrapper) {
+              console.log(`    Mode: ${c.yellow}Merged (wrapper)${c.reset}`);
+            } else if (isOurs) {
+              console.log(`    Mode: ${c.green}Direct${c.reset}`);
+            } else {
+              console.log(`    Mode: ${c.cyan}External${c.reset}`);
+            }
+          } else {
+            console.log(`  ${warn("StatusLine not configured in settings.json")}`);
+          }
+        }
+      } catch {
+        console.log(`  ${fail("Failed to read settings.json")}`);
       }
     }
 
@@ -484,6 +518,106 @@ program
       console.log(`${dimText("Try running manually:")}`);
       console.log(`  ${c.cyan}npx ${PACKAGE_NAME}@latest install --force${c.reset}`);
       process.exit(1);
+    }
+  });
+
+// StatusLine command
+program
+  .command("statusline")
+  .description("Manage statusline integration")
+  .option("--enable", "Enable statusline")
+  .option("--disable", "Disable statusline")
+  .option("--status", "Show current statusline configuration")
+  .action((options) => {
+    const { readFileSync, existsSync } = require("node:fs");
+    const { join } = require("node:path");
+    const { homedir } = require("node:os");
+
+    // Color helpers
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+
+    const ok = (text: string) => `${c.green}+${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}x${c.reset} ${text}`;
+    const warn = (text: string) => `${c.yellow}!${c.reset} ${text}`;
+
+    const settingsPath = join(homedir(), ".claude", "settings.json");
+
+    if (options.status || (!options.enable && !options.disable)) {
+      // Show status
+      console.log(`${c.bold}StatusLine Status${c.reset}\n`);
+
+      if (!existsSync(settingsPath)) {
+        console.log(fail("settings.json not found"));
+        process.exit(1);
+      }
+
+      try {
+        const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+
+        if (!settings.statusLine) {
+          console.log(fail("StatusLine not configured"));
+          console.log(`\nRun ${c.cyan}oh-my-claude statusline --enable${c.reset} to enable.`);
+        } else {
+          const cmd = settings.statusLine.command || "";
+          const isOurs = cmd.includes("oh-my-claude");
+          const isWrapper = cmd.includes("statusline-wrapper");
+
+          console.log(ok("StatusLine configured"));
+          console.log(`  Command: ${c.dim}${cmd}${c.reset}`);
+
+          if (isWrapper) {
+            console.log(`  Mode: ${c.yellow}Merged (wrapper)${c.reset}`);
+          } else if (isOurs) {
+            console.log(`  Mode: ${c.green}Direct${c.reset}`);
+          } else {
+            console.log(`  Mode: ${c.cyan}External${c.reset}`);
+          }
+        }
+      } catch (error) {
+        console.log(fail(`Failed to read settings: ${error}`));
+        process.exit(1);
+      }
+    } else if (options.enable) {
+      // Enable statusline
+      const { installStatusLine } = require("./installer/settings-merger");
+      const { getStatusLineScriptPath } = require("./installer");
+
+      try {
+        const result = installStatusLine(getStatusLineScriptPath());
+        if (result.installed) {
+          console.log(ok("StatusLine enabled"));
+          if (result.wrapperCreated) {
+            console.log(warn("Wrapper created to merge with existing statusLine"));
+          }
+        }
+      } catch (error) {
+        console.log(fail(`Failed to enable statusline: ${error}`));
+        process.exit(1);
+      }
+    } else if (options.disable) {
+      // Disable statusline
+      const { uninstallStatusLine } = require("./installer/settings-merger");
+
+      try {
+        const result = uninstallStatusLine();
+        if (result) {
+          console.log(ok("StatusLine disabled"));
+        } else {
+          console.log(warn("StatusLine was not configured"));
+        }
+      } catch (error) {
+        console.log(fail(`Failed to disable statusline: ${error}`));
+        process.exit(1);
+      }
     }
   });
 

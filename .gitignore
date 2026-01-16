@@ -39,6 +39,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .DS_Store
 Thumbs.db
 
+# oh-my-claude session state
+.sisyphus/
+
 # lock files (optional - bun.lock is committed)
 # bun.lock
 # package-lock.json

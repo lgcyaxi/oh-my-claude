@@ -11,10 +11,11 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) v
 - **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax
 - **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Librarian, etc.)
 - **Slash Commands** - Quick actions (`/omcx-commit`, `/omcx-implement`) and agent activation (`/omc-sisyphus`, `/omc-plan`)
+- **Real-Time StatusLine** - Live status bar showing active agents, task progress, and provider availability
 - **Planning System** - Strategic planning with Prometheus agent and boulder-state tracking
 - **Official MCP Setup** - One-command installation for Sequential Thinking, MiniMax, and GLM MCPs
 - **Concurrent Execution** - Per-provider rate limiting and parallel task management
-- **Hook Integration** - Code quality checks and todo tracking
+- **Hook Integration** - Code quality checks, todo tracking, and agent monitoring
 
 ## Quick Start
 
@@ -89,6 +90,7 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omc-explore` | Activate Explore - codebase search |
 | `/omc-plan` | Start strategic planning with Prometheus |
 | `/omc-start-work` | Begin work on an existing plan |
+| `/omc-status` | Display MCP background agent status dashboard |
 
 ### Quick Action Commands (`/omcx-*`)
 
@@ -98,6 +100,67 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omcx-implement` | Implement a feature with best practices |
 | `/omcx-refactor` | Refactor code with quality improvements |
 | `/omcx-docs` | Generate or update documentation |
+| `/omcx-issue` | Report a bug to oh-my-claude GitHub Issues |
+
+### Mode Commands
+
+| Command | Description |
+|---------|-------------|
+| `/ulw` | **Ultrawork Mode** - Maximum performance, work until done |
+
+#### Ultrawork Mode (`/ulw`)
+
+Ultrawork mode activates **maximum performance execution** with zero-tolerance completion policy:
+
+- **100% Delivery** - No partial completion, no scope reduction, no placeholders
+- **Aggressive Parallelization** - Fire multiple agents simultaneously
+- **Mandatory Verification** - Code compiles, tests pass, build succeeds
+- **Work Until Done** - Continue until ALL tasks are marked complete
+
+**Usage:**
+```bash
+/ulw implement the authentication system from the plan
+/ulw fix all type errors in the codebase
+/ulw add comprehensive test coverage for the API
+```
+
+**Key Features:**
+- Automatically creates comprehensive todo lists
+- Uses sync agents (Task tool) and async agents (MCP) in parallel
+- Verifies each step before marking complete
+- Boulder state persistence for session continuity
+
+## Real-Time StatusLine
+
+oh-my-claude provides a real-time status bar that shows active agents and provider availability directly in Claude Code.
+
+### Status Display
+
+```
+omc ready | DS: 10 ZP: 10 MM: 5                    # Idle - showing available slots
+omc [Oracle: 32s] [@Scout: 15s] | DS: 1/10 ...    # Active tasks with elapsed time
+```
+
+### Legend
+
+- **omc ready** - System is ready, no active tasks
+- **[Oracle: 32s]** - MCP background agent running (via external API)
+- **[@Scout: 15s]** - Task tool agent running (via Claude subscription)
+- **DS: 1/10** - DeepSeek: 1 active / 10 max concurrent slots
+- **ZP: 0/10** - ZhiPu: 0 active / 10 max concurrent
+- **MM: 0/5** - MiniMax: 0 active / 5 max concurrent
+
+### CLI Control
+
+```bash
+npx @lgcyaxi/oh-my-claude statusline --status    # Check statusline status
+npx @lgcyaxi/oh-my-claude statusline --enable    # Enable statusline
+npx @lgcyaxi/oh-my-claude statusline --disable   # Disable statusline
+```
+
+### Multi-Line Support
+
+When you have an existing statusline (like CCometixLine), oh-my-claude automatically creates a wrapper that shows both on separate lines.
 
 ## Agent Workflows
 
@@ -167,6 +230,11 @@ npx @lgcyaxi/oh-my-claude setup-mcp --glm      # GLM/ZhiPu servers only
 # Uninstall
 npx @lgcyaxi/oh-my-claude uninstall            # Remove oh-my-claude
 npx @lgcyaxi/oh-my-claude uninstall --keep-config  # Keep config file
+
+# StatusLine
+npx @lgcyaxi/oh-my-claude statusline --status  # Check statusline status
+npx @lgcyaxi/oh-my-claude statusline --enable  # Enable statusline
+npx @lgcyaxi/oh-my-claude statusline --disable # Disable statusline
 ```
 
 ## Configuration

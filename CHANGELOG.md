@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Individual version changelogs are available in the [changelog/](./changelog/) directory.
 
+## [1.1.1] - 2026-01-16
+
+See [changelog/v1.1.1.md](./changelog/v1.1.1.md) for details.
+
+### Added
+- Real-time StatusLine showing active agents and provider availability
+- Task tool agent tracking (Claude-Reviewer, Claude-Scout, etc.)
+- StatusLine CLI subcommand (`statusline --enable/--disable/--status`)
+- Multi-line statusline support (merges with existing statusline)
+
+### Changed
+- MCP server now writes status file on startup
+- Doctor command shows statusline status
+
+## [1.1.0] - 2026-01-15
+
+See [changelog/v1.1.0.md](./changelog/v1.1.0.md) for details.
+
+### Added
+- Bug reporting command (`/omcx-issue`)
+- GitHub issue template for bug reports
+
 ## [1.0.1] - 2025-01-15
 
 See [changelog/v1.0.1.md](./changelog/v1.0.1.md) for details.

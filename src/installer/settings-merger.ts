@@ -32,6 +32,11 @@ interface ClaudeSettings {
       env?: Record<string, string>;
     }
   >;
+  statusLine?: {
+    type: "command";
+    command: string;
+    padding?: number;
+  };
   [key: string]: unknown;
 }
 
@@ -199,6 +204,34 @@ export function installHooks(hooksDir: string): { installed: string[]; skipped: 
     skipped.push("todo-continuation (already installed)");
   }
 
+  // Task tracker hook (PreToolUse for Task tool)
+  if (
+    addHook(
+      settings,
+      "PreToolUse",
+      "Task",
+      `node ${hooksDir}/task-tracker.js`
+    )
+  ) {
+    installed.push("task-tracker (PreToolUse:Task)");
+  } else {
+    skipped.push("task-tracker (already installed)");
+  }
+
+  // Task tracker hook (PostToolUse for Task tool completion)
+  if (
+    addHook(
+      settings,
+      "PostToolUse",
+      "Task",
+      `node ${hooksDir}/task-tracker.js`
+    )
+  ) {
+    installed.push("task-tracker (PostToolUse:Task)");
+  } else {
+    skipped.push("task-tracker (already installed)");
+  }
+
   saveSettings(settings);
   return { installed, skipped };
 }
@@ -292,4 +325,57 @@ export function uninstallFromSettings(): {
   }
 
   return { removedHooks, removedMcp };
+}
+
+/**
+ * Install oh-my-claude statusLine
+ * If user has existing statusLine, creates a wrapper that calls both
+ */
+export function installStatusLine(statusLineScriptPath: string): {
+  installed: boolean;
+  wrapperCreated: boolean;
+  existingBackedUp: boolean;
+} {
+  const { mergeStatusLine } = require("./statusline-merger");
+
+  const settings = loadSettings();
+  const existing = settings.statusLine;
+
+  const result = mergeStatusLine(existing);
+
+  if (result.config.command !== existing?.command) {
+    settings.statusLine = result.config;
+    saveSettings(settings);
+  }
+
+  return {
+    installed: true,
+    wrapperCreated: result.wrapperCreated,
+    existingBackedUp: result.backupCreated,
+  };
+}
+
+/**
+ * Remove oh-my-claude statusLine and restore original if backed up
+ */
+export function uninstallStatusLine(): boolean {
+  const { restoreStatusLine, isStatusLineConfigured } = require("./statusline-merger");
+
+  if (!isStatusLineConfigured()) {
+    return false;
+  }
+
+  const settings = loadSettings();
+
+  // Try to restore original statusLine
+  const backup = restoreStatusLine();
+  if (backup) {
+    settings.statusLine = backup;
+  } else {
+    // No backup - just remove our statusLine
+    delete settings.statusLine;
+  }
+
+  saveSettings(settings);
+  return true;
 }

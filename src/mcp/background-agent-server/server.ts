@@ -24,6 +24,7 @@ import {
   cancelAllTasks,
   listTasks,
   cleanupTasks,
+  updateStatusFile,
 } from "./task-manager";
 import { getConcurrencyStatus } from "./concurrency";
 import { getProvidersStatus } from "../../providers/router";
@@ -373,6 +374,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Write initial status file for statusline display
+  updateStatusFile();
+
   console.error("oh-my-claude Background Agent MCP Server running");
 }
 
