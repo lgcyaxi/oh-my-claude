@@ -50,6 +50,9 @@ Use this for async operations that should run in parallel without blocking.
 - visual-engineering: UI/UX work
 - writing: Documentation and text
 
+**Fallback Behavior**:
+If the provider's API key is not configured, the task will return with status "fallback_required" and include fallback info. When this happens, use Claude Code's Task tool with the specified fallback model instead.
+
 Note: Agents using Claude subscription (sisyphus, claude-reviewer, claude-scout) should use Claude Code's Task tool instead.`,
     inputSchema: {
       type: "object",
@@ -117,8 +120,8 @@ Note: Agents using Claude subscription (sisyphus, claude-reviewer, claude-scout)
       properties: {
         status: {
           type: "string",
-          enum: ["pending", "running", "completed", "failed", "cancelled"],
-          description: "Filter by status",
+          enum: ["pending", "running", "completed", "failed", "cancelled", "fallback_required"],
+          description: "Filter by status. 'fallback_required' means the provider API key is not configured and Claude Task tool should be used instead.",
         },
         limit: {
           type: "number",
@@ -320,6 +323,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     completed: new Date(t.completedAt).toISOString(),
                   }),
                   ...(t.error && { error: t.error }),
+                  ...(t.fallback && { fallback: t.fallback }),
                 })),
               }),
             },

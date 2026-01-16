@@ -101,6 +101,11 @@ export const frontendUiUxAgent: AgentDefinition = {
   defaultTemperature: 0.7,
   executionMode: "mcp",
   category: "specialist",
+  fallback: {
+    provider: "claude",
+    model: "claude-sonnet-4-5",
+    executionMode: "task",
+  },
 };
 
 export default frontendUiUxAgent;

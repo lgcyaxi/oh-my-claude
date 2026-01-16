@@ -101,17 +101,29 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 
 ## Agent Workflows
 
-| Agent | Provider | Model | Role |
-|-------|----------|-------|------|
-| **Sisyphus** | Claude (Task tool) | claude-opus-4-5 | Primary orchestrator |
-| **Claude-Reviewer** | Claude (Task tool) | claude-sonnet-4-5 | Code review, QA |
-| **Claude-Scout** | Claude (Task tool) | claude-haiku-4-5 | Fast exploration |
-| **Prometheus** | Claude (Task tool) | claude-opus-4-5 | Strategic planning |
-| **Oracle** | DeepSeek (MCP) | deepseek-reasoner | Deep reasoning |
-| **Librarian** | ZhiPu (MCP) | glm-4.7 | External research |
-| **Explore** | DeepSeek (MCP) | deepseek-chat | Codebase search |
-| **Frontend-UI-UX** | ZhiPu (MCP) | glm-4v-flash | Visual/UI design |
-| **Document-Writer** | MiniMax (MCP) | MiniMax-M2.1 | Documentation |
+| Agent | Provider | Model | Role | Fallback |
+|-------|----------|-------|------|----------|
+| **Sisyphus** | Claude (Task tool) | claude-opus-4-5 | Primary orchestrator | - |
+| **Claude-Reviewer** | Claude (Task tool) | claude-sonnet-4-5 | Code review, QA | - |
+| **Claude-Scout** | Claude (Task tool) | claude-haiku-4-5 | Fast exploration | - |
+| **Prometheus** | Claude (Task tool) | claude-opus-4-5 | Strategic planning | - |
+| **Oracle** | DeepSeek (MCP) | deepseek-reasoner | Deep reasoning | claude-opus-4-5 |
+| **Librarian** | ZhiPu (MCP) | glm-4.7 | External research | claude-sonnet-4-5 |
+| **Explore** | DeepSeek (MCP) | deepseek-chat | Codebase search | claude-haiku-4-5 |
+| **Frontend-UI-UX** | ZhiPu (MCP) | glm-4v-flash | Visual/UI design | claude-sonnet-4-5 |
+| **Document-Writer** | MiniMax (MCP) | MiniMax-M2.1 | Documentation | claude-sonnet-4-5 |
+
+### Automatic Fallback
+
+MCP agents automatically fall back to Claude models when the provider's API key is not configured:
+
+- **Oracle** → `claude-opus-4-5` (preserves deep reasoning capability)
+- **Librarian** → `claude-sonnet-4-5` (balanced research capability)
+- **Explore** → `claude-haiku-4-5` (fast search operations)
+- **Frontend-UI-UX** → `claude-sonnet-4-5` (quality visual design)
+- **Document-Writer** → `claude-sonnet-4-5` (quality documentation)
+
+This allows oh-my-claude to work with Claude Code's subscription even without external API keys.
 
 ## Official MCP Servers
 
@@ -133,6 +145,11 @@ The `setup-mcp` command installs these official MCP servers:
 npx @lgcyaxi/oh-my-claude install              # Install oh-my-claude
 npx @lgcyaxi/oh-my-claude install --force      # Force reinstall
 npx @lgcyaxi/oh-my-claude install --skip-mcp   # Skip MCP server setup
+
+# Update
+npx @lgcyaxi/oh-my-claude update               # Update to latest version
+npx @lgcyaxi/oh-my-claude update --check       # Check for updates only
+npx @lgcyaxi/oh-my-claude update --force       # Force reinstall latest
 
 # Status & Diagnostics
 npx @lgcyaxi/oh-my-claude status               # Check installation status

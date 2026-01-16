@@ -101,17 +101,29 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 
 ## 智能体工作流
 
-| 智能体 | 供应商 | 模型 | 角色 |
-|--------|--------|------|------|
-| **Sisyphus** | Claude（Task 工具）| claude-opus-4-5 | 主编排器 |
-| **Claude-Reviewer** | Claude（Task 工具）| claude-sonnet-4-5 | 代码审查、质量保证 |
-| **Claude-Scout** | Claude（Task 工具）| claude-haiku-4-5 | 快速探索 |
-| **Prometheus** | Claude（Task 工具）| claude-opus-4-5 | 战略规划 |
-| **Oracle** | DeepSeek（MCP）| deepseek-reasoner | 深度推理 |
-| **Librarian** | 智谱（MCP）| glm-4.7 | 外部研究 |
-| **Explore** | DeepSeek（MCP）| deepseek-chat | 代码库搜索 |
-| **Frontend-UI-UX** | 智谱（MCP）| glm-4v-flash | 视觉/UI 设计 |
-| **Document-Writer** | MiniMax（MCP）| MiniMax-M2.1 | 文档编写 |
+| 智能体 | 供应商 | 模型 | 角色 | 降级模型 |
+|--------|--------|------|------|----------|
+| **Sisyphus** | Claude（Task 工具）| claude-opus-4-5 | 主编排器 | - |
+| **Claude-Reviewer** | Claude（Task 工具）| claude-sonnet-4-5 | 代码审查、质量保证 | - |
+| **Claude-Scout** | Claude（Task 工具）| claude-haiku-4-5 | 快速探索 | - |
+| **Prometheus** | Claude（Task 工具）| claude-opus-4-5 | 战略规划 | - |
+| **Oracle** | DeepSeek（MCP）| deepseek-reasoner | 深度推理 | claude-opus-4-5 |
+| **Librarian** | 智谱（MCP）| glm-4.7 | 外部研究 | claude-sonnet-4-5 |
+| **Explore** | DeepSeek（MCP）| deepseek-chat | 代码库搜索 | claude-haiku-4-5 |
+| **Frontend-UI-UX** | 智谱（MCP）| glm-4v-flash | 视觉/UI 设计 | claude-sonnet-4-5 |
+| **Document-Writer** | MiniMax（MCP）| MiniMax-M2.1 | 文档编写 | claude-sonnet-4-5 |
+
+### 自动降级
+
+当供应商的 API 密钥未配置时，MCP 智能体会自动降级到 Claude 模型：
+
+- **Oracle** → `claude-opus-4-5`（保持深度推理能力）
+- **Librarian** → `claude-sonnet-4-5`（平衡的研究能力）
+- **Explore** → `claude-haiku-4-5`（快速搜索操作）
+- **Frontend-UI-UX** → `claude-sonnet-4-5`（优质视觉设计）
+- **Document-Writer** → `claude-sonnet-4-5`（优质文档编写）
+
+这使得 oh-my-claude 即使没有外部 API 密钥也能通过 Claude Code 订阅正常工作。
 
 ## 官方 MCP 服务
 
@@ -133,6 +145,11 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 npx @lgcyaxi/oh-my-claude install              # 安装 oh-my-claude
 npx @lgcyaxi/oh-my-claude install --force      # 强制重新安装
 npx @lgcyaxi/oh-my-claude install --skip-mcp   # 跳过 MCP 服务设置
+
+# 更新
+npx @lgcyaxi/oh-my-claude update               # 更新到最新版本
+npx @lgcyaxi/oh-my-claude update --check       # 仅检查更新
+npx @lgcyaxi/oh-my-claude update --force       # 强制重新安装最新版
 
 # 状态和诊断
 npx @lgcyaxi/oh-my-claude status               # 检查安装状态

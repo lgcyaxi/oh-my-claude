@@ -99,6 +99,11 @@ export const oracleAgent: AgentDefinition = {
   executionMode: "mcp",
   category: "advisor",
   restrictedTools: ["Edit", "Write", "Task"],
+  fallback: {
+    provider: "claude",
+    model: "claude-opus-4-5",
+    executionMode: "task",
+  },
 };
 
 export default oracleAgent;

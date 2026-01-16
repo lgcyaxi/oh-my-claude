@@ -7,6 +7,7 @@
  *   npx oh-my-claude uninstall   # Uninstall oh-my-claude
  *   npx oh-my-claude status      # Check installation status
  *   npx oh-my-claude doctor      # Diagnose configuration issues
+ *   npx oh-my-claude update      # Update oh-my-claude to latest version
  *   npx oh-my-claude setup-mcp   # Install official MCP servers (MiniMax, GLM)
  */
 
@@ -18,7 +19,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.0.0");
+  .version("1.0.1");
 
 // Install command
 program
@@ -359,6 +360,130 @@ program
 
     if (!detail) {
       console.log(`\n${dimText("Tip: Run 'oh-my-claude doctor --detail' for detailed component status")}`);
+    }
+  });
+
+// Update command
+program
+  .command("update")
+  .description("Update oh-my-claude to the latest version")
+  .option("--check", "Only check for updates without installing")
+  .option("--force", "Force update even if already on latest version")
+  .action(async (options) => {
+    const { execSync } = require("node:child_process");
+    const { readFileSync, existsSync } = require("node:fs");
+    const { join } = require("node:path");
+    const { homedir } = require("node:os");
+
+    // Color helpers
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      magenta: useColor ? "\x1b[35m" : "",
+    };
+
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+    const warn = (text: string) => `${c.yellow}⚠${c.reset} ${text}`;
+    const header = (text: string) => `${c.cyan}${c.bold}${text}${c.reset}`;
+    const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
+
+    const PACKAGE_NAME = "@lgcyaxi/oh-my-claude";
+
+    console.log(`${c.bold}${c.magenta}oh-my-claude Update${c.reset}\n`);
+
+    // Get current version
+    let currentVersion = "unknown";
+    try {
+      // Try to read from package.json in the installed location
+      const installDir = join(homedir(), ".claude", "oh-my-claude");
+      const localPkgPath = join(installDir, "package.json");
+
+      if (existsSync(localPkgPath)) {
+        const pkg = JSON.parse(readFileSync(localPkgPath, "utf-8"));
+        currentVersion = pkg.version;
+      } else {
+        // Fall back to the version from the running CLI
+        currentVersion = program.version() || "unknown";
+      }
+    } catch (error) {
+      // Use the CLI version as fallback
+      currentVersion = program.version() || "unknown";
+    }
+
+    console.log(`Current version: ${c.cyan}${currentVersion}${c.reset}`);
+
+    // Fetch latest version from npm
+    let latestVersion = "unknown";
+    try {
+      console.log(`${dimText("Checking npm registry for latest version...")}`);
+      const npmInfo = execSync(`npm view ${PACKAGE_NAME} version 2>/dev/null`, {
+        encoding: "utf-8",
+      }).trim();
+      latestVersion = npmInfo;
+      console.log(`Latest version:  ${c.cyan}${latestVersion}${c.reset}\n`);
+    } catch (error) {
+      console.log(`${fail("Failed to fetch latest version from npm")}`);
+      console.log(`${dimText("Check your internet connection or try again later")}\n`);
+      process.exit(1);
+    }
+
+    // Compare versions
+    const isUpToDate = currentVersion === latestVersion;
+    const needsUpdate = !isUpToDate || options.force;
+
+    if (isUpToDate && !options.force) {
+      console.log(ok("You are already on the latest version!"));
+      process.exit(0);
+    }
+
+    if (options.check) {
+      if (needsUpdate) {
+        console.log(warn(`Update available: ${currentVersion} → ${latestVersion}`));
+        console.log(`\nRun ${c.cyan}npx ${PACKAGE_NAME} update${c.reset} to update.`);
+      }
+      process.exit(0);
+    }
+
+    // Perform update
+    console.log(header("Updating oh-my-claude...\n"));
+
+    try {
+      // Step 1: Clear npx cache for the package
+      console.log(`${dimText("Clearing npx cache...")}`);
+      try {
+        execSync(`npx --yes clear-npx-cache 2>/dev/null || true`, { stdio: "pipe" });
+      } catch {
+        // Ignore errors - cache clear is optional
+      }
+
+      // Step 2: Install latest version via npx
+      console.log(`${dimText("Downloading latest version...")}`);
+
+      // Use npx with --yes to ensure latest version is fetched
+      // The @latest tag forces npm to check for the newest version
+      const updateCmd = `npx --yes ${PACKAGE_NAME}@latest install --force`;
+      console.log(`${dimText(`Running: ${updateCmd}`)}\n`);
+
+      execSync(updateCmd, { stdio: "inherit" });
+
+      console.log(`\n${ok("Update complete!")}`);
+      console.log(`Updated from ${c.yellow}${currentVersion}${c.reset} to ${c.green}${latestVersion}${c.reset}`);
+
+      // Show changelog hint
+      console.log(`\n${dimText("View changelog at: https://github.com/lgcyaxi/oh-my-claude/blob/main/CHANGELOG.md")}`);
+
+    } catch (error) {
+      console.log(`\n${fail("Update failed")}`);
+      console.log(`${dimText("Try running manually:")}`);
+      console.log(`  ${c.cyan}npx ${PACKAGE_NAME}@latest install --force${c.reset}`);
+      process.exit(1);
     }
   });
 

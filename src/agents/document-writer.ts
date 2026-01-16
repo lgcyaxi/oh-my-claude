@@ -146,6 +146,11 @@ export const documentWriterAgent: AgentDefinition = {
   defaultTemperature: 0.5,
   executionMode: "mcp",
   category: "specialist",
+  fallback: {
+    provider: "claude",
+    model: "claude-sonnet-4-5",
+    executionMode: "task",
+  },
 };
 
 export default documentWriterAgent;

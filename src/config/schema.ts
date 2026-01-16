@@ -15,6 +15,13 @@ export const ProviderConfigSchema = z.object({
   note: z.string().optional(),
 });
 
+// Agent fallback configuration schema
+export const AgentFallbackConfigSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  executionMode: z.enum(["task", "mcp"]).optional(),
+});
+
 // Agent configuration schema
 export const AgentConfigSchema = z.object({
   provider: z.string(),
@@ -27,6 +34,7 @@ export const AgentConfigSchema = z.object({
       budget_tokens: z.number().optional(),
     })
     .optional(),
+  fallback: AgentFallbackConfigSchema.optional(),
 });
 
 // Category configuration schema
@@ -77,6 +85,7 @@ export const OhMyClaudeConfigSchema = z.object({
   }),
 
   agents: z.record(z.string(), AgentConfigSchema).default({
+    // Claude subscription agents (no fallback needed)
     Sisyphus: { provider: "claude", model: "claude-opus-4-5" },
     "claude-reviewer": {
       provider: "claude",
@@ -88,22 +97,36 @@ export const OhMyClaudeConfigSchema = z.object({
       model: "claude-haiku-4-5",
       temperature: 0.3,
     },
+    // External API agents (with Claude fallbacks)
     oracle: {
       provider: "deepseek",
       model: "deepseek-reasoner",
       temperature: 0.1,
+      fallback: { provider: "claude", model: "claude-opus-4-5", executionMode: "task" },
     },
-    librarian: { provider: "zhipu", model: "glm-4.7", temperature: 0.3 },
-    explore: { provider: "deepseek", model: "deepseek-chat", temperature: 0.1 },
+    librarian: {
+      provider: "zhipu",
+      model: "glm-4.7",
+      temperature: 0.3,
+      fallback: { provider: "claude", model: "claude-sonnet-4-5", executionMode: "task" },
+    },
+    explore: {
+      provider: "deepseek",
+      model: "deepseek-chat",
+      temperature: 0.1,
+      fallback: { provider: "claude", model: "claude-haiku-4-5", executionMode: "task" },
+    },
     "frontend-ui-ux": {
       provider: "zhipu",
       model: "glm-4v-flash",
       temperature: 0.7,
+      fallback: { provider: "claude", model: "claude-sonnet-4-5", executionMode: "task" },
     },
     "document-writer": {
       provider: "minimax",
       model: "MiniMax-M2.1",
       temperature: 0.5,
+      fallback: { provider: "claude", model: "claude-sonnet-4-5", executionMode: "task" },
     },
   }),
 

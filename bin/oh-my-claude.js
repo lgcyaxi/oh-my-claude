@@ -8,7 +8,7 @@
 
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distCli = join(__dirname, "..", "dist", "cli.js");
@@ -17,7 +17,9 @@ const srcCli = join(__dirname, "..", "src", "cli.ts");
 async function main() {
   if (existsSync(distCli)) {
     // Use compiled version
-    await import(distCli);
+    // Convert to file:// URL for Windows compatibility
+    const distCliUrl = pathToFileURL(distCli).href;
+    await import(distCliUrl);
   } else if (existsSync(srcCli)) {
     // Fall back to source (requires Bun)
     const { spawn } = await import("node:child_process");

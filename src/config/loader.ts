@@ -103,3 +103,76 @@ export function getProviderDetails(
   }
   return null;
 }
+
+/**
+ * Check if a provider is configured (has API key set)
+ */
+export function isProviderConfigured(
+  config: OhMyClaudeConfig,
+  providerName: string
+): boolean {
+  const providerConfig = config.providers[providerName];
+  if (!providerConfig) {
+    return false;
+  }
+
+  // Claude subscription is always "configured"
+  if (providerConfig.type === "claude-subscription") {
+    return true;
+  }
+
+  // Check if API key environment variable is set
+  if (providerConfig.api_key_env) {
+    const apiKey = process.env[providerConfig.api_key_env];
+    return !!apiKey && apiKey.length > 0;
+  }
+
+  return false;
+}
+
+/**
+ * Get fallback configuration for an agent
+ */
+export function getAgentFallback(
+  config: OhMyClaudeConfig,
+  agentName: string
+): { provider: string; model: string; executionMode?: string } | null {
+  const agentConfig = config.agents[agentName];
+  if (agentConfig?.fallback) {
+    return {
+      provider: agentConfig.fallback.provider,
+      model: agentConfig.fallback.model,
+      executionMode: agentConfig.fallback.executionMode,
+    };
+  }
+  return null;
+}
+
+/**
+ * Check if an agent should use fallback (primary provider not configured)
+ */
+export function shouldUseFallback(
+  config: OhMyClaudeConfig,
+  agentName: string
+): { useFallback: boolean; reason?: string; fallback?: { provider: string; model: string; executionMode?: string } } {
+  const agentConfig = config.agents[agentName];
+  if (!agentConfig) {
+    return { useFallback: false };
+  }
+
+  // Check if primary provider is configured
+  if (!isProviderConfigured(config, agentConfig.provider)) {
+    const fallback = getAgentFallback(config, agentName);
+    if (fallback) {
+      const providerConfig = config.providers[agentConfig.provider];
+      const envVar = providerConfig?.api_key_env ?? `${agentConfig.provider.toUpperCase()}_API_KEY`;
+      return {
+        useFallback: true,
+        reason: `${envVar} is not set`,
+        fallback,
+      };
+    }
+  }
+
+  return { useFallback: false };
+}

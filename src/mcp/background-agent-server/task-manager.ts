@@ -7,11 +7,11 @@
  * - Handle concurrency limits per provider
  */
 
-import { routeByAgent, routeByCategory } from "../../providers/router";
+import { routeByAgent, routeByCategory, FallbackRequiredError } from "../../providers/router";
 import { getAgent } from "../../agents";
 import type { ChatMessage } from "../../providers/types";
 
-export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "fallback_required";
 
 export interface Task {
   id: string;
@@ -21,6 +21,13 @@ export interface Task {
   status: TaskStatus;
   result?: string;
   error?: string;
+  /** Fallback info when primary provider is not configured */
+  fallback?: {
+    provider: string;
+    model: string;
+    executionMode?: string;
+    reason: string;
+  };
   createdAt: number;
   startedAt?: number;
   completedAt?: number;
@@ -123,8 +130,20 @@ async function runTask(task: Task, systemPrompt?: string): Promise<void> {
     task.completedAt = Date.now();
     tasks.set(task.id, task);
   } catch (error) {
-    task.status = "failed";
-    task.error = error instanceof Error ? error.message : String(error);
+    // Handle fallback required error specially
+    if (error instanceof FallbackRequiredError) {
+      task.status = "fallback_required";
+      task.error = error.message;
+      task.fallback = {
+        provider: error.fallback.provider,
+        model: error.fallback.model,
+        executionMode: error.fallback.executionMode,
+        reason: error.reason,
+      };
+    } else {
+      task.status = "failed";
+      task.error = error instanceof Error ? error.message : String(error);
+    }
     task.completedAt = Date.now();
     tasks.set(task.id, task);
   }
@@ -144,6 +163,12 @@ export function pollTask(taskId: string): {
   status: TaskStatus;
   result?: string;
   error?: string;
+  fallback?: {
+    provider: string;
+    model: string;
+    executionMode?: string;
+    reason: string;
+  };
 } {
   const task = tasks.get(taskId);
 
@@ -155,6 +180,7 @@ export function pollTask(taskId: string): {
     status: task.status,
     result: task.result,
     error: task.error,
+    fallback: task.fallback,
   };
 }
 

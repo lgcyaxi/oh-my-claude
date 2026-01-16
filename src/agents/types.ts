@@ -2,6 +2,15 @@
  * Agent definition types for oh-my-claude
  */
 
+export interface AgentFallback {
+  /** Fallback provider (usually "claude") */
+  provider: string;
+  /** Fallback model */
+  model: string;
+  /** Fallback execution mode (usually "task" for Claude) */
+  executionMode: "task" | "mcp";
+}
+
 export interface AgentDefinition {
   /** Agent identifier (used in config) */
   name: string;
@@ -21,6 +30,8 @@ export interface AgentDefinition {
   category: "orchestrator" | "reviewer" | "scout" | "advisor" | "explorer" | "specialist" | "planner";
   /** Tools this agent should NOT use (restrictions) */
   restrictedTools?: string[];
+  /** Fallback configuration when primary provider API key is not available */
+  fallback?: AgentFallback;
 }
 
 export interface AgentMarkdownOptions {

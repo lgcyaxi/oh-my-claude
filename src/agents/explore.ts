@@ -108,6 +108,11 @@ export const exploreAgent: AgentDefinition = {
   executionMode: "mcp",
   category: "explorer",
   restrictedTools: ["Edit", "Write", "Task"],
+  fallback: {
+    provider: "claude",
+    model: "claude-haiku-4-5",
+    executionMode: "task",
+  },
 };
 
 export default exploreAgent;

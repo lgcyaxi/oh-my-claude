@@ -16,6 +16,8 @@ import {
   resolveProviderForAgent,
   resolveProviderForCategory,
   getProviderDetails,
+  shouldUseFallback,
+  isProviderConfigured,
   type OhMyClaudeConfig,
 } from "../config";
 
@@ -81,6 +83,21 @@ function getProviderClient(
 }
 
 /**
+ * Custom error class for fallback scenarios
+ */
+export class FallbackRequiredError extends Error {
+  constructor(
+    message: string,
+    public readonly agentName: string,
+    public readonly fallback: { provider: string; model: string; executionMode?: string },
+    public readonly reason: string
+  ) {
+    super(message);
+    this.name = "FallbackRequiredError";
+  }
+}
+
+/**
  * Route a request to the appropriate provider based on agent name
  */
 export async function routeByAgent(
@@ -103,6 +120,17 @@ export async function routeByAgent(
   if (providerDetails?.type === "claude-subscription") {
     throw new Error(
       `Agent "${agentName}" uses Claude subscription. Use Claude Code's Task tool instead of MCP.`
+    );
+  }
+
+  // Check if fallback should be used (primary provider not configured)
+  const fallbackCheck = shouldUseFallback(config, agentName);
+  if (fallbackCheck.useFallback && fallbackCheck.fallback) {
+    throw new FallbackRequiredError(
+      `Agent "${agentName}" requires fallback: ${fallbackCheck.reason}. Use Task tool with ${fallbackCheck.fallback.model} instead.`,
+      agentName,
+      fallbackCheck.fallback,
+      fallbackCheck.reason ?? "Provider not configured"
     );
   }
 

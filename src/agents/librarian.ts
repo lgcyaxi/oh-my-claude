@@ -211,6 +211,11 @@ export const librarianAgent: AgentDefinition = {
   executionMode: "mcp",
   category: "explorer",
   restrictedTools: ["Edit", "Write"],
+  fallback: {
+    provider: "claude",
+    model: "claude-sonnet-4-5",
+    executionMode: "task",
+  },
 };
 
 export default librarianAgent;
