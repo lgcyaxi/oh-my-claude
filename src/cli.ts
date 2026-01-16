@@ -19,7 +19,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.1.1");
+  .version("1.1.2");
 
 // Install command
 program
@@ -268,7 +268,7 @@ program
       // Detailed MCP status
       console.log(`\n${header("MCP Server (detailed):")}`);
       try {
-        const mcpList = execSync("claude mcp list 2>/dev/null", { encoding: "utf-8" });
+        const mcpList = execSync("claude mcp list", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
         const omcLine = mcpList.split("\n").find((line: string) => line.includes("oh-my-claude-background"));
         if (omcLine) {
           const isConnected = omcLine.includes("✓ Connected");
@@ -457,8 +457,10 @@ program
     let latestVersion = "unknown";
     try {
       console.log(`${dimText("Checking npm registry for latest version...")}`);
-      const npmInfo = execSync(`npm view ${PACKAGE_NAME} version 2>/dev/null`, {
+      // Use stdio: 'pipe' to suppress stderr instead of shell redirection (Windows compatible)
+      const npmInfo = execSync(`npm view ${PACKAGE_NAME} version`, {
         encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
       }).trim();
       latestVersion = npmInfo;
       console.log(`Latest version:  ${c.cyan}${latestVersion}${c.reset}\n`);
@@ -489,12 +491,16 @@ program
     console.log(header("Updating oh-my-claude...\n"));
 
     try {
-      // Step 1: Clear npx cache for the package
+      // Step 1: Clear npx cache for the package (optional, may fail on some systems)
       console.log(`${dimText("Clearing npx cache...")}`);
       try {
-        execSync(`npx --yes clear-npx-cache 2>/dev/null || true`, { stdio: "pipe" });
+        // Use stdio: 'pipe' for Windows compatibility instead of shell redirection
+        execSync(`npx --yes clear-npx-cache`, {
+          stdio: ["pipe", "pipe", "pipe"],
+          timeout: 10000
+        });
       } catch {
-        // Ignore errors - cache clear is optional
+        // Ignore errors - cache clear is optional and may not be available
       }
 
       // Step 2: Install latest version via npx
@@ -732,7 +738,7 @@ program
     if (installThinking) {
       console.log(`${c.bold}Anthropic Official:${c.reset}`);
       try {
-        const mcpList = execSync("claude mcp list 2>/dev/null", { encoding: "utf-8" });
+        const mcpList = execSync("claude mcp list", { encoding: "utf-8" });
         if (mcpList.includes("sequential-thinking")) {
           console.log(`  ${ok("sequential-thinking already installed")}`);
         } else {
@@ -755,7 +761,7 @@ program
       } else {
         try {
           // Check if already installed
-          const mcpList = execSync("claude mcp list 2>/dev/null", { encoding: "utf-8" });
+          const mcpList = execSync("claude mcp list", { encoding: "utf-8" });
           if (mcpList.includes("MiniMax")) {
             console.log(`  ${ok("MiniMax already installed")}`);
           } else {
@@ -782,7 +788,7 @@ program
         for (const [key, server] of glmServers) {
           try {
             // Check if already installed
-            const mcpList = execSync("claude mcp list 2>/dev/null", { encoding: "utf-8" });
+            const mcpList = execSync("claude mcp list", { encoding: "utf-8" });
             if (mcpList.includes(server.name)) {
               console.log(`  ${ok(`${server.name} already installed`)}`);
             } else {

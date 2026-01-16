@@ -1,12 +1,12 @@
 {
   "name": "@lgcyaxi/oh-my-claude",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "oh-my-claude": "./bin/oh-my-claude.js"
+    "oh-my-claude": "bin/oh-my-claude.js"
   },
   "scripts": {
     "build": "bun build src/index.ts src/cli.ts --outdir dist --target node --splitting",
@@ -44,7 +44,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lgcyaxi/oh-my-claude"
+    "url": "git+https://github.com/lgcyaxi/oh-my-claude.git"
   },
   "homepage": "https://github.com/lgcyaxi/oh-my-claude#readme",
   "bugs": {

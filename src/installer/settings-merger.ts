@@ -246,7 +246,7 @@ export function installMcpServer(serverPath: string): boolean {
     // Check if already installed
     let alreadyInstalled = false;
     try {
-      const list = execSync("claude mcp list 2>/dev/null", { encoding: "utf-8" });
+      const list = execSync("claude mcp list", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
       alreadyInstalled = list.includes("oh-my-claude-background");
     } catch {
       // Ignore if list fails
@@ -313,7 +313,7 @@ export function uninstallFromSettings(): {
   // Remove MCP server via CLI
   let removedMcp = false;
   try {
-    execSync("claude mcp remove --scope user oh-my-claude-background 2>/dev/null");
+    execSync("claude mcp remove --scope user oh-my-claude-background", { stdio: ["pipe", "pipe", "pipe"] });
     removedMcp = true;
   } catch {
     // Try removing from settings.json as fallback
