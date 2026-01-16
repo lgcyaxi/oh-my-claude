@@ -12,6 +12,44 @@
 import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
+
+/**
+ * Get the package root directory
+ * Works correctly whether running from source or bundled npm package
+ */
+function getPackageRoot(): string {
+  // Use import.meta.url to get the current file's URL
+  // This works correctly in both ESM and bundled code
+  const currentFile = fileURLToPath(import.meta.url);
+  const currentDir = dirname(currentFile);
+
+  // Debug: show where we're looking
+  const debug = process.env.DEBUG_INSTALL === "1";
+  if (debug) {
+    console.log(`[DEBUG] import.meta.url: ${import.meta.url}`);
+    console.log(`[DEBUG] currentFile: ${currentFile}`);
+    console.log(`[DEBUG] currentDir: ${currentDir}`);
+  }
+
+  // When running from dist/cli.js, go up one level to package root
+  // When running from src/installer/index.ts, go up two levels
+  // Check which one contains package.json
+  let root = dirname(currentDir); // Try one level up (dist -> root)
+  if (debug) console.log(`[DEBUG] Trying root (1 up): ${root}, has package.json: ${existsSync(join(root, "package.json"))}`);
+
+  if (!existsSync(join(root, "package.json"))) {
+    root = dirname(root); // Try two levels up (src/installer -> src -> root)
+    if (debug) console.log(`[DEBUG] Trying root (2 up): ${root}, has package.json: ${existsSync(join(root, "package.json"))}`);
+  }
+  if (!existsSync(join(root, "package.json"))) {
+    root = dirname(root); // Try three levels up (for deeply nested)
+    if (debug) console.log(`[DEBUG] Trying root (3 up): ${root}, has package.json: ${existsSync(join(root, "package.json"))}`);
+  }
+
+  if (debug) console.log(`[DEBUG] Final root: ${root}`);
+  return root;
+}
 
 import { generateAllAgentFiles, removeAgentFiles } from "../generators/agent-generator";
 import { installHooks, installMcpServer, installStatusLine, uninstallFromSettings, uninstallStatusLine } from "./settings-merger";
@@ -102,7 +140,18 @@ export async function install(options?: {
 
   const installDir = getInstallDir();
   const hooksDir = getHooksDir();
-  const sourceDir = options?.sourceDir ?? dirname(dirname(__dirname)); // Default to project root
+  const sourceDir = options?.sourceDir ?? getPackageRoot(); // Use package root detection
+
+  // Debug output
+  const debug = process.env.DEBUG_INSTALL === "1";
+  if (debug) {
+    console.log(`[DEBUG] installDir: ${installDir}`);
+    console.log(`[DEBUG] sourceDir: ${sourceDir}`);
+    console.log(`[DEBUG] src/commands exists: ${existsSync(join(sourceDir, "src", "commands"))}`);
+    console.log(`[DEBUG] dist/hooks exists: ${existsSync(join(sourceDir, "dist", "hooks"))}`);
+    console.log(`[DEBUG] dist/mcp exists: ${existsSync(join(sourceDir, "dist", "mcp"))}`);
+    console.log(`[DEBUG] dist/statusline exists: ${existsSync(join(sourceDir, "dist", "statusline"))}`);
+  }
 
   try {
     // Create installation directory
@@ -141,6 +190,8 @@ export async function install(options?: {
               result.commands.skipped.push(file.replace(".md", ""));
             }
           }
+        } else {
+          result.errors.push(`Commands source directory not found: ${srcCommandsDir}`);
         }
       } catch (error) {
         result.errors.push(`Failed to install commands: ${error}`);

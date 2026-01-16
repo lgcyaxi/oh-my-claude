@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Individual version changelogs are available in the [changelog/](./changelog/) directory.
 
+## [1.1.3] - 2026-01-16
+
+See [changelog/v1.1.3.md](./changelog/v1.1.3.md) for details.
+
+### Fixed
+- Commands not being installed when running via `npx`
+- Hooks, MCP server, and statusline not being installed
+- Path resolution using `import.meta.url` instead of unreliable `__dirname`
+
+### Added
+- Debug mode (`DEBUG_INSTALL=1`) for troubleshooting installation issues
+
 ## [1.1.2] - 2026-01-16
 
 See [changelog/v1.1.2.md](./changelog/v1.1.2.md) for details.
