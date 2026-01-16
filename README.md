@@ -28,10 +28,10 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) v
 
 ```bash
 # Install from npm (recommended)
-npx oh-my-claude install
+npx @lgcyaxi/oh-my-claude install
 
 # Or clone and install locally
-git clone https://github.com/anthropics/oh-my-claude.git
+git clone https://github.com/lgcyaxi/oh-my-claude.git
 cd oh-my-claude
 bun install && bun run build:all
 bun run install-local
@@ -54,25 +54,25 @@ export MINIMAX_API_KEY=your-minimax-api-key
 
 ```bash
 # Install all official MCP servers (Sequential Thinking, MiniMax, GLM)
-npx oh-my-claude setup-mcp
+npx @lgcyaxi/oh-my-claude setup-mcp
 
 # Or install specific ones
-npx oh-my-claude setup-mcp --thinking  # Sequential Thinking only
-npx oh-my-claude setup-mcp --minimax   # MiniMax only
-npx oh-my-claude setup-mcp --glm       # GLM/ZhiPu servers only
+npx @lgcyaxi/oh-my-claude setup-mcp --thinking  # Sequential Thinking only
+npx @lgcyaxi/oh-my-claude setup-mcp --minimax   # MiniMax only
+npx @lgcyaxi/oh-my-claude setup-mcp --glm       # GLM/ZhiPu servers only
 
 # List available MCP servers
-npx oh-my-claude setup-mcp --list
+npx @lgcyaxi/oh-my-claude setup-mcp --list
 ```
 
 ### Verify Installation
 
 ```bash
 # Check installation status
-npx oh-my-claude status
+npx @lgcyaxi/oh-my-claude status
 
 # Diagnose configuration (with detailed component status)
-npx oh-my-claude doctor --detail
+npx @lgcyaxi/oh-my-claude doctor --detail
 ```
 
 ## Slash Commands
@@ -130,26 +130,26 @@ The `setup-mcp` command installs these official MCP servers:
 
 ```bash
 # Installation
-npx oh-my-claude install              # Install oh-my-claude
-npx oh-my-claude install --force      # Force reinstall
-npx oh-my-claude install --skip-mcp   # Skip MCP server setup
+npx @lgcyaxi/oh-my-claude install              # Install oh-my-claude
+npx @lgcyaxi/oh-my-claude install --force      # Force reinstall
+npx @lgcyaxi/oh-my-claude install --skip-mcp   # Skip MCP server setup
 
 # Status & Diagnostics
-npx oh-my-claude status               # Check installation status
-npx oh-my-claude doctor               # Diagnose configuration
-npx oh-my-claude doctor --detail      # Detailed component status
-npx oh-my-claude doctor --no-color    # Disable colored output
+npx @lgcyaxi/oh-my-claude status               # Check installation status
+npx @lgcyaxi/oh-my-claude doctor               # Diagnose configuration
+npx @lgcyaxi/oh-my-claude doctor --detail      # Detailed component status
+npx @lgcyaxi/oh-my-claude doctor --no-color    # Disable colored output
 
 # MCP Server Setup
-npx oh-my-claude setup-mcp            # Install all official MCPs
-npx oh-my-claude setup-mcp --list     # List available MCPs
-npx oh-my-claude setup-mcp --thinking # Sequential Thinking only
-npx oh-my-claude setup-mcp --minimax  # MiniMax only
-npx oh-my-claude setup-mcp --glm      # GLM/ZhiPu servers only
+npx @lgcyaxi/oh-my-claude setup-mcp            # Install all official MCPs
+npx @lgcyaxi/oh-my-claude setup-mcp --list     # List available MCPs
+npx @lgcyaxi/oh-my-claude setup-mcp --thinking # Sequential Thinking only
+npx @lgcyaxi/oh-my-claude setup-mcp --minimax  # MiniMax only
+npx @lgcyaxi/oh-my-claude setup-mcp --glm      # GLM/ZhiPu servers only
 
 # Uninstall
-npx oh-my-claude uninstall            # Remove oh-my-claude
-npx oh-my-claude uninstall --keep-config  # Keep config file
+npx @lgcyaxi/oh-my-claude uninstall            # Remove oh-my-claude
+npx @lgcyaxi/oh-my-claude uninstall --keep-config  # Keep config file
 ```
 
 ## Configuration
@@ -261,13 +261,13 @@ Some agents use Claude Code's Task tool, not the MCP server. These run synchrono
 Rebuild the MCP server:
 ```bash
 bun run build:mcp
-npx oh-my-claude install --force
+npx @lgcyaxi/oh-my-claude install --force
 ```
 
 ### Check detailed status
 
 ```bash
-npx oh-my-claude doctor --detail
+npx @lgcyaxi/oh-my-claude doctor --detail
 ```
 
 ## Contributing

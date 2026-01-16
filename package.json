@@ -1,5 +1,5 @@
 {
-  "name": "oh-my-claude",
+  "name": "@lgcyaxi/oh-my-claude",
   "version": "1.0.0",
   "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
   "type": "module",
@@ -43,6 +43,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/oh-my-claude"
+    "url": "https://github.com/lgcyaxi/oh-my-claude"
+  },
+  "homepage": "https://github.com/lgcyaxi/oh-my-claude#readme",
+  "bugs": {
+    "url": "https://github.com/lgcyaxi/oh-my-claude/issues"
   }
 }

@@ -28,10 +28,10 @@
 
 ```bash
 # 从 npm 安装（推荐）
-npx oh-my-claude install
+npx @lgcyaxi/oh-my-claude install
 
 # 或者克隆并本地安装
-git clone https://github.com/anthropics/oh-my-claude.git
+git clone https://github.com/lgcyaxi/oh-my-claude.git
 cd oh-my-claude
 bun install && bun run build:all
 bun run install-local
@@ -54,25 +54,25 @@ export MINIMAX_API_KEY=your-minimax-api-key
 
 ```bash
 # 安装所有官方 MCP 服务（Sequential Thinking、MiniMax、GLM）
-npx oh-my-claude setup-mcp
+npx @lgcyaxi/oh-my-claude setup-mcp
 
 # 或者安装特定服务
-npx oh-my-claude setup-mcp --thinking  # 仅 Sequential Thinking
-npx oh-my-claude setup-mcp --minimax   # 仅 MiniMax
-npx oh-my-claude setup-mcp --glm       # 仅 GLM/智谱服务
+npx @lgcyaxi/oh-my-claude setup-mcp --thinking  # 仅 Sequential Thinking
+npx @lgcyaxi/oh-my-claude setup-mcp --minimax   # 仅 MiniMax
+npx @lgcyaxi/oh-my-claude setup-mcp --glm       # 仅 GLM/智谱服务
 
 # 列出可用的 MCP 服务
-npx oh-my-claude setup-mcp --list
+npx @lgcyaxi/oh-my-claude setup-mcp --list
 ```
 
 ### 验证安装
 
 ```bash
 # 检查安装状态
-npx oh-my-claude status
+npx @lgcyaxi/oh-my-claude status
 
 # 诊断配置（显示详细组件状态）
-npx oh-my-claude doctor --detail
+npx @lgcyaxi/oh-my-claude doctor --detail
 ```
 
 ## 斜杠命令
@@ -130,26 +130,26 @@ npx oh-my-claude doctor --detail
 
 ```bash
 # 安装
-npx oh-my-claude install              # 安装 oh-my-claude
-npx oh-my-claude install --force      # 强制重新安装
-npx oh-my-claude install --skip-mcp   # 跳过 MCP 服务设置
+npx @lgcyaxi/oh-my-claude install              # 安装 oh-my-claude
+npx @lgcyaxi/oh-my-claude install --force      # 强制重新安装
+npx @lgcyaxi/oh-my-claude install --skip-mcp   # 跳过 MCP 服务设置
 
 # 状态和诊断
-npx oh-my-claude status               # 检查安装状态
-npx oh-my-claude doctor               # 诊断配置
-npx oh-my-claude doctor --detail      # 详细组件状态
-npx oh-my-claude doctor --no-color    # 禁用彩色输出
+npx @lgcyaxi/oh-my-claude status               # 检查安装状态
+npx @lgcyaxi/oh-my-claude doctor               # 诊断配置
+npx @lgcyaxi/oh-my-claude doctor --detail      # 详细组件状态
+npx @lgcyaxi/oh-my-claude doctor --no-color    # 禁用彩色输出
 
 # MCP 服务设置
-npx oh-my-claude setup-mcp            # 安装所有官方 MCP
-npx oh-my-claude setup-mcp --list     # 列出可用 MCP
-npx oh-my-claude setup-mcp --thinking # 仅 Sequential Thinking
-npx oh-my-claude setup-mcp --minimax  # 仅 MiniMax
-npx oh-my-claude setup-mcp --glm      # 仅 GLM/智谱服务
+npx @lgcyaxi/oh-my-claude setup-mcp            # 安装所有官方 MCP
+npx @lgcyaxi/oh-my-claude setup-mcp --list     # 列出可用 MCP
+npx @lgcyaxi/oh-my-claude setup-mcp --thinking # 仅 Sequential Thinking
+npx @lgcyaxi/oh-my-claude setup-mcp --minimax  # 仅 MiniMax
+npx @lgcyaxi/oh-my-claude setup-mcp --glm      # 仅 GLM/智谱服务
 
 # 卸载
-npx oh-my-claude uninstall            # 移除 oh-my-claude
-npx oh-my-claude uninstall --keep-config  # 保留配置文件
+npx @lgcyaxi/oh-my-claude uninstall            # 移除 oh-my-claude
+npx @lgcyaxi/oh-my-claude uninstall --keep-config  # 保留配置文件
 ```
 
 ## 配置
@@ -261,13 +261,13 @@ export DEEPSEEK_API_KEY=your-key
 重新构建 MCP 服务器：
 ```bash
 bun run build:mcp
-npx oh-my-claude install --force
+npx @lgcyaxi/oh-my-claude install --force
 ```
 
 ### 检查详细状态
 
 ```bash
-npx oh-my-claude doctor --detail
+npx @lgcyaxi/oh-my-claude doctor --detail
 ```
 
 ## 贡献
