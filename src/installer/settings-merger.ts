@@ -204,21 +204,53 @@ export function installHooks(hooksDir: string): { installed: string[]; skipped: 
 }
 
 /**
- * Install oh-my-claude MCP server into settings
+ * Install oh-my-claude MCP server using claude mcp add CLI
  */
 export function installMcpServer(serverPath: string): boolean {
-  const settings = loadSettings();
+  const { execSync } = require("node:child_process");
 
-  const result = addMcpServer(settings, "oh-my-claude-background", {
-    command: "node",
-    args: [serverPath],
-  });
+  try {
+    // Check if already installed
+    let alreadyInstalled = false;
+    try {
+      const list = execSync("claude mcp list 2>/dev/null", { encoding: "utf-8" });
+      alreadyInstalled = list.includes("oh-my-claude-background");
+    } catch {
+      // Ignore if list fails
+    }
 
-  if (result) {
-    saveSettings(settings);
+    if (alreadyInstalled) {
+      // Already installed - just return success
+      // Note: To update the path, user needs to run `claude mcp remove oh-my-claude-background` first
+      return true;
+    }
+
+    // Add MCP server globally (--scope user)
+    execSync(
+      `claude mcp add --scope user oh-my-claude-background -- node "${serverPath}"`,
+      { encoding: "utf-8" }
+    );
+    return true;
+  } catch (error) {
+    // Check if the error is "already exists" - that's actually success
+    const errorStr = String(error);
+    if (errorStr.includes("already exists")) {
+      return true;
+    }
+
+    console.error("Failed to add MCP server via CLI:", error);
+
+    // Fallback to settings.json method
+    const settings = loadSettings();
+    const result = addMcpServer(settings, "oh-my-claude-background", {
+      command: "node",
+      args: [serverPath],
+    });
+    if (result) {
+      saveSettings(settings);
+    }
+    return result;
   }
-
-  return result;
 }
 
 /**
@@ -228,6 +260,7 @@ export function uninstallFromSettings(): {
   removedHooks: string[];
   removedMcp: boolean;
 } {
+  const { execSync } = require("node:child_process");
   const settings = loadSettings();
   const removedHooks: string[] = [];
 
@@ -242,10 +275,21 @@ export function uninstallFromSettings(): {
     removedHooks.push("Stop");
   }
 
-  // Remove MCP server
-  const removedMcp = removeMcpServer(settings, "oh-my-claude-background");
-
   saveSettings(settings);
+
+  // Remove MCP server via CLI
+  let removedMcp = false;
+  try {
+    execSync("claude mcp remove --scope user oh-my-claude-background 2>/dev/null");
+    removedMcp = true;
+  } catch {
+    // Try removing from settings.json as fallback
+    const settingsAgain = loadSettings();
+    removedMcp = removeMcpServer(settingsAgain, "oh-my-claude-background");
+    if (removedMcp) {
+      saveSettings(settingsAgain);
+    }
+  }
 
   return { removedHooks, removedMcp };
 }

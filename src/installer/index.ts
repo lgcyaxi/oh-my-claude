@@ -3,18 +3,26 @@
  *
  * Installs:
  * - Agent .md files to ~/.claude/agents/
+ * - Slash commands to ~/.claude/commands/
  * - Hook scripts to ~/.claude/oh-my-claude/hooks/
  * - MCP server configuration to ~/.claude/settings.json
  * - Default configuration to ~/.claude/oh-my-claude.json
  */
 
-import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 
 import { generateAllAgentFiles, removeAgentFiles } from "../generators/agent-generator";
 import { installHooks, installMcpServer, uninstallFromSettings } from "./settings-merger";
 import { DEFAULT_CONFIG } from "../config/schema";
+
+/**
+ * Get commands directory
+ */
+export function getCommandsDir(): string {
+  return join(homedir(), ".claude", "commands");
+}
 
 /**
  * Get oh-my-claude installation directory
@@ -47,6 +55,7 @@ export function getConfigPath(): string {
 export interface InstallResult {
   success: boolean;
   agents: { generated: string[]; skipped: string[] };
+  commands: { installed: string[]; skipped: string[] };
   hooks: { installed: string[]; skipped: string[] };
   mcp: { installed: boolean };
   config: { created: boolean };
@@ -59,6 +68,8 @@ export interface InstallResult {
 export async function install(options?: {
   /** Skip agent file generation */
   skipAgents?: boolean;
+  /** Skip commands installation */
+  skipCommands?: boolean;
   /** Skip hooks installation */
   skipHooks?: boolean;
   /** Skip MCP server installation */
@@ -71,6 +82,7 @@ export async function install(options?: {
   const result: InstallResult = {
     success: true,
     agents: { generated: [], skipped: [] },
+    commands: { installed: [], skipped: [] },
     hooks: { installed: [], skipped: [] },
     mcp: { installed: false },
     config: { created: false },
@@ -96,7 +108,35 @@ export async function install(options?: {
       }
     }
 
-    // 2. Install hooks
+    // 2. Install slash commands
+    if (!options?.skipCommands) {
+      try {
+        const commandsDir = getCommandsDir();
+        if (!existsSync(commandsDir)) {
+          mkdirSync(commandsDir, { recursive: true });
+        }
+
+        // Copy command files from src/commands/
+        const srcCommandsDir = join(sourceDir, "src", "commands");
+        if (existsSync(srcCommandsDir)) {
+          const commandFiles = readdirSync(srcCommandsDir).filter(f => f.endsWith(".md"));
+          for (const file of commandFiles) {
+            const srcPath = join(srcCommandsDir, file);
+            const destPath = join(commandsDir, file);
+            if (!existsSync(destPath) || options?.force) {
+              copyFileSync(srcPath, destPath);
+              result.commands.installed.push(file.replace(".md", ""));
+            } else {
+              result.commands.skipped.push(file.replace(".md", ""));
+            }
+          }
+        }
+      } catch (error) {
+        result.errors.push(`Failed to install commands: ${error}`);
+      }
+    }
+
+    // 3. Install hooks
     if (!options?.skipHooks) {
       try {
         // Create hooks directory
@@ -200,6 +240,7 @@ process.exit(1);
 export interface UninstallResult {
   success: boolean;
   agents: string[];
+  commands: string[];
   hooks: string[];
   mcp: boolean;
   errors: string[];
@@ -215,6 +256,7 @@ export async function uninstall(options?: {
   const result: UninstallResult = {
     success: true,
     agents: [],
+    commands: [],
     hooks: [],
     mcp: false,
     errors: [],
@@ -228,7 +270,40 @@ export async function uninstall(options?: {
       result.errors.push(`Failed to remove agents: ${error}`);
     }
 
-    // 2. Remove from settings.json
+    // 2. Remove command files
+    try {
+      const commandsDir = getCommandsDir();
+      if (existsSync(commandsDir)) {
+        const ourCommands = [
+          // Agent commands (omc-)
+          "omc-sisyphus",
+          "omc-oracle",
+          "omc-librarian",
+          "omc-reviewer",
+          "omc-scout",
+          "omc-explore",
+          "omc-plan",
+          "omc-start-work",
+          // Quick action commands (omcx-)
+          "omcx-commit",
+          "omcx-implement",
+          "omcx-refactor",
+          "omcx-docs",
+        ];
+        const { unlinkSync } = require("node:fs");
+        for (const cmd of ourCommands) {
+          const cmdPath = join(commandsDir, `${cmd}.md`);
+          if (existsSync(cmdPath)) {
+            unlinkSync(cmdPath);
+            result.commands.push(cmd);
+          }
+        }
+      }
+    } catch (error) {
+      result.errors.push(`Failed to remove commands: ${error}`);
+    }
+
+    // 3. Remove from settings.json
     try {
       const { removedHooks, removedMcp } = uninstallFromSettings();
       result.hooks = removedHooks;

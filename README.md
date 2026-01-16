@@ -1,32 +1,22 @@
 # oh-my-claude
 
-Multi-agent orchestration plugin for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with multi-provider support.
+[English](README.md) | [中文](README.zh-CN.md)
 
-Bring the power of specialized AI agents working together to your Claude Code sessions. Inspired by [oh-my-opencode](https://github.com/nicepkg/opencode).
+Multi-provider MCP server for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with specialized agent workflows.
+
+Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) via Anthropic-compatible APIs while leveraging Claude Code's native capabilities.
 
 ## Features
 
-- **8 Specialized Agents** - Each optimized for specific tasks
-- **Multi-Provider Support** - Use Claude subscription + DeepSeek, ZhiPu GLM, MiniMax
-- **Background Tasks** - Run async operations via MCP server
-- **Smart Delegation** - Sisyphus orchestrates work to the right specialist
-- **Parallel Execution** - Maximum throughput with concurrent agents
+- **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax
+- **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Librarian, etc.)
+- **Slash Commands** - Quick actions (`/omcx-commit`, `/omcx-implement`) and agent activation (`/omc-sisyphus`, `/omc-plan`)
+- **Planning System** - Strategic planning with Prometheus agent and boulder-state tracking
+- **Official MCP Setup** - One-command installation for Sequential Thinking, MiniMax, and GLM MCPs
+- **Concurrent Execution** - Per-provider rate limiting and parallel task management
 - **Hook Integration** - Code quality checks and todo tracking
 
-## Agent Roles
-
-| Agent | Provider | Model | Role |
-|-------|----------|-------|------|
-| **Sisyphus** | Claude | claude-opus-4-5 | Primary orchestrator, full implementation |
-| **Claude-Reviewer** | Claude | claude-sonnet-4-5 | Code review, test verification, QA |
-| **Claude-Scout** | Claude | claude-haiku-4-5 | Fast exploration, quick tasks |
-| **Oracle** | DeepSeek | deepseek-reasoner | Deep reasoning, architecture advice |
-| **Librarian** | ZhiPu | glm-4.7 | External docs, library research |
-| **Explore** | DeepSeek | deepseek-chat | Codebase search |
-| **Frontend-UI-UX** | ZhiPu | glm-4v-flash | Visual/UI design |
-| **Document-Writer** | MiniMax | MiniMax-M2.1 | Documentation, README, guides |
-
-## Installation
+## Quick Start
 
 ### Prerequisites
 
@@ -34,34 +24,20 @@ Bring the power of specialized AI agents working together to your Claude Code se
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI installed
 - API keys for providers you want to use
 
-### Quick Install
+### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/oh-my-claude.git
+# Install from npm (recommended)
+npx oh-my-claude install
+
+# Or clone and install locally
+git clone https://github.com/anthropics/oh-my-claude.git
 cd oh-my-claude
-
-# Install dependencies
-bun install
-
-# Build all components
-bun run build:all
-
-# Install into Claude Code
+bun install && bun run build:all
 bun run install-local
 ```
 
-### Manual Install via npx (coming soon)
-
-```bash
-npx oh-my-claude install
-```
-
-## Configuration
-
-### API Keys
-
-Set environment variables for the providers you want to use:
+### Set API Keys
 
 ```bash
 # DeepSeek (for Oracle, Explore agents)
@@ -72,14 +48,113 @@ export ZHIPU_API_KEY=your-zhipu-api-key
 
 # MiniMax (for Document-Writer agent)
 export MINIMAX_API_KEY=your-minimax-api-key
-
-# OpenRouter (optional, for GPT/Grok/Gemini)
-export OPENROUTER_API_KEY=your-openrouter-api-key
 ```
 
-### Configuration File
+### Setup Official MCP Servers
 
-The configuration file is located at `~/.claude/oh-my-claude.json`:
+```bash
+# Install all official MCP servers (Sequential Thinking, MiniMax, GLM)
+npx oh-my-claude setup-mcp
+
+# Or install specific ones
+npx oh-my-claude setup-mcp --thinking  # Sequential Thinking only
+npx oh-my-claude setup-mcp --minimax   # MiniMax only
+npx oh-my-claude setup-mcp --glm       # GLM/ZhiPu servers only
+
+# List available MCP servers
+npx oh-my-claude setup-mcp --list
+```
+
+### Verify Installation
+
+```bash
+# Check installation status
+npx oh-my-claude status
+
+# Diagnose configuration (with detailed component status)
+npx oh-my-claude doctor --detail
+```
+
+## Slash Commands
+
+### Agent Commands (`/omc-*`)
+
+| Command | Description |
+|---------|-------------|
+| `/omc-sisyphus` | Activate Sisyphus - full implementation orchestrator |
+| `/omc-oracle` | Activate Oracle - deep reasoning and architecture |
+| `/omc-librarian` | Activate Librarian - external research and docs |
+| `/omc-reviewer` | Activate Claude-Reviewer - code review and QA |
+| `/omc-scout` | Activate Claude-Scout - fast exploration |
+| `/omc-explore` | Activate Explore - codebase search |
+| `/omc-plan` | Start strategic planning with Prometheus |
+| `/omc-start-work` | Begin work on an existing plan |
+
+### Quick Action Commands (`/omcx-*`)
+
+| Command | Description |
+|---------|-------------|
+| `/omcx-commit` | Smart git commit with conventional format |
+| `/omcx-implement` | Implement a feature with best practices |
+| `/omcx-refactor` | Refactor code with quality improvements |
+| `/omcx-docs` | Generate or update documentation |
+
+## Agent Workflows
+
+| Agent | Provider | Model | Role |
+|-------|----------|-------|------|
+| **Sisyphus** | Claude (Task tool) | claude-opus-4-5 | Primary orchestrator |
+| **Claude-Reviewer** | Claude (Task tool) | claude-sonnet-4-5 | Code review, QA |
+| **Claude-Scout** | Claude (Task tool) | claude-haiku-4-5 | Fast exploration |
+| **Prometheus** | Claude (Task tool) | claude-opus-4-5 | Strategic planning |
+| **Oracle** | DeepSeek (MCP) | deepseek-reasoner | Deep reasoning |
+| **Librarian** | ZhiPu (MCP) | glm-4.7 | External research |
+| **Explore** | DeepSeek (MCP) | deepseek-chat | Codebase search |
+| **Frontend-UI-UX** | ZhiPu (MCP) | glm-4v-flash | Visual/UI design |
+| **Document-Writer** | MiniMax (MCP) | MiniMax-M2.1 | Documentation |
+
+## Official MCP Servers
+
+The `setup-mcp` command installs these official MCP servers:
+
+| Server | Provider | Description | API Key Required |
+|--------|----------|-------------|------------------|
+| **sequential-thinking** | Anthropic | Structured problem-solving | No |
+| **MiniMax** | MiniMax | Coding plan assistance | MINIMAX_API_KEY |
+| **web-reader** | ZhiPu GLM | Web content extraction | ZHIPU_API_KEY |
+| **web-search-prime** | ZhiPu GLM | Web search | ZHIPU_API_KEY |
+| **zread** | ZhiPu GLM | GitHub repository reader | ZHIPU_API_KEY |
+| **zai-mcp-server** | ZhiPu GLM | Image/video analysis | ZHIPU_API_KEY |
+
+## CLI Commands
+
+```bash
+# Installation
+npx oh-my-claude install              # Install oh-my-claude
+npx oh-my-claude install --force      # Force reinstall
+npx oh-my-claude install --skip-mcp   # Skip MCP server setup
+
+# Status & Diagnostics
+npx oh-my-claude status               # Check installation status
+npx oh-my-claude doctor               # Diagnose configuration
+npx oh-my-claude doctor --detail      # Detailed component status
+npx oh-my-claude doctor --no-color    # Disable colored output
+
+# MCP Server Setup
+npx oh-my-claude setup-mcp            # Install all official MCPs
+npx oh-my-claude setup-mcp --list     # List available MCPs
+npx oh-my-claude setup-mcp --thinking # Sequential Thinking only
+npx oh-my-claude setup-mcp --minimax  # MiniMax only
+npx oh-my-claude setup-mcp --glm      # GLM/ZhiPu servers only
+
+# Uninstall
+npx oh-my-claude uninstall            # Remove oh-my-claude
+npx oh-my-claude uninstall --keep-config  # Keep config file
+```
+
+## Configuration
+
+Configuration file: `~/.claude/oh-my-claude.json`
 
 ```json
 {
@@ -89,18 +164,18 @@ The configuration file is located at `~/.claude/oh-my-claude.json`:
       "note": "Uses Claude Code's native subscription"
     },
     "deepseek": {
-      "type": "openai-compatible",
-      "base_url": "https://api.deepseek.com/v1",
+      "type": "anthropic-compatible",
+      "base_url": "https://api.deepseek.com/anthropic",
       "api_key_env": "DEEPSEEK_API_KEY"
     },
     "zhipu": {
-      "type": "openai-compatible",
-      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "type": "anthropic-compatible",
+      "base_url": "https://open.bigmodel.cn/api/anthropic",
       "api_key_env": "ZHIPU_API_KEY"
     },
     "minimax": {
-      "type": "openai-compatible",
-      "base_url": "https://api.minimax.chat/v1",
+      "type": "anthropic-compatible",
+      "base_url": "https://api.minimaxi.com/anthropic",
       "api_key_env": "MINIMAX_API_KEY"
     }
   },
@@ -113,43 +188,11 @@ The configuration file is located at `~/.claude/oh-my-claude.json`:
     "default": 5,
     "per_provider": {
       "deepseek": 10,
-      "zhipu": 10
+      "zhipu": 10,
+      "minimax": 5
     }
   }
 }
-```
-
-## Usage
-
-### In Claude Code
-
-After installation, agents are available in Claude Code:
-
-```
-# Use Sisyphus for complex tasks
-@sisyphus Implement user authentication with JWT
-
-# Explore codebase
-@claude-scout Where is the database connection handled?
-
-# Get architecture advice via MCP
-Use launch_background_task with agent="oracle" to get architecture recommendations
-```
-
-### CLI Commands
-
-```bash
-# Check installation status
-oh-my-claude status
-
-# Diagnose configuration
-oh-my-claude doctor
-
-# Reinstall with force
-oh-my-claude install --force
-
-# Uninstall
-oh-my-claude uninstall
 ```
 
 ## Architecture
@@ -158,7 +201,7 @@ oh-my-claude uninstall
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                         Claude Code Session                               │
 ├──────────────────────────────────────────────────────────────────────────┤
-│  Sisyphus (Primary Agent - Claude Opus 4.5 via Subscription)             │
+│  Primary Agent (Claude via Subscription)                                  │
 │         │                                                                 │
 │    ┌────┴────┬─────────────────┐                                         │
 │    ▼         ▼                 ▼                                         │
@@ -167,19 +210,19 @@ oh-my-claude uninstall
 │    │           │                │                                        │
 │    ▼           ▼                ▼                                        │
 │  Claude      Multi-Provider  settings.json                               │
-│  Agents      Router          scripts                                     │
-│  (sub.)        │                                                         │
-│                ├── DeepSeek API (oracle, explore)                        │
-│                ├── ZhiPu GLM API (librarian, frontend-ui-ux)             │
-│                ├── MiniMax API (document-writer)                         │
-│                └── OpenRouter (optional)                                 │
+│  Subagents   Router          scripts                                     │
+│                │                                                         │
+│                ├── DeepSeek (Anthropic-compatible)                       │
+│                ├── ZhiPu GLM (Anthropic-compatible)                      │
+│                ├── MiniMax (Anthropic-compatible)                        │
+│                └── OpenRouter (OpenAI-compatible, optional)              │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Execution Modes
 
-- **Task Tool (sync)**: Agents using Claude subscription run via Claude Code's native Task tool
-- **MCP Server (async)**: External API agents run via MCP background server for parallel execution
+- **Task Tool (sync)**: Claude subscription agents run via Claude Code's native Task tool
+- **MCP Server (async)**: External API agents run via MCP for parallel background execution
 
 ## Development
 
@@ -190,50 +233,15 @@ bun install
 # Type checking
 bun run typecheck
 
-# Build main package
-bun run build
-
-# Build MCP server
-bun run build:mcp
-
-# Build hook scripts
-bun run build:hooks
-
 # Build everything
 bun run build:all
 
 # Run tests
 bun test
+
+# Install locally for development
+bun run install-local
 ```
-
-## Project Structure
-
-```
-oh-my-claude/
-├── src/
-│   ├── agents/           # Agent definitions with prompts
-│   ├── config/           # Configuration schema (Zod)
-│   ├── providers/        # Multi-provider API clients
-│   ├── mcp/              # Background Agent MCP server
-│   ├── hooks/            # Claude Code hook scripts
-│   ├── generators/       # Agent .md file generators
-│   ├── installer/        # CLI installer
-│   └── cli.ts            # CLI entry point
-├── bin/oh-my-claude.js   # CLI wrapper
-├── dist/                 # Built files
-└── package.json
-```
-
-## Comparison with oh-my-opencode
-
-| Feature | oh-my-opencode | oh-my-claude |
-|---------|----------------|--------------|
-| Platform | OpenCode | Claude Code |
-| Primary Model | OpenRouter | Claude Subscription |
-| External APIs | OpenRouter only | DeepSeek, ZhiPu, MiniMax, OpenRouter |
-| Agent Sync | Session API | Task tool |
-| Agent Async | Background Agent | MCP Server |
-| License | Sustainable Use | MIT |
 
 ## Troubleshooting
 
@@ -246,14 +254,20 @@ export DEEPSEEK_API_KEY=your-key
 
 ### "Agent uses Claude subscription"
 
-Some agents (Sisyphus, Claude-Reviewer, Claude-Scout) use Claude Code's Task tool, not the MCP server. Use them via `@agent-name` in Claude Code.
+Some agents use Claude Code's Task tool, not the MCP server. These run synchronously within Claude Code.
 
 ### MCP server not responding
 
 Rebuild the MCP server:
 ```bash
 bun run build:mcp
-oh-my-claude install --force
+npx oh-my-claude install --force
+```
+
+### Check detailed status
+
+```bash
+npx oh-my-claude doctor --detail
 ```
 
 ## Contributing
@@ -262,10 +276,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Sustainable Use License - see [LICENSE](LICENSE) for details.
+
+This project contains agent prompts derived from [oh-my-opencode](https://github.com/nicepkg/opencode). Original agent prompts in `src/agents/original/` are available under MIT License.
 
 ## Acknowledgments
 
-- Inspired by [oh-my-opencode](https://github.com/nicepkg/opencode)
 - Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - Uses [Model Context Protocol](https://modelcontextprotocol.io/)
+- Agent workflow concepts from [oh-my-opencode](https://github.com/nicepkg/opencode)
+- Sequential Thinking MCP from [@modelcontextprotocol/server-sequential-thinking](https://www.npmjs.com/package/@modelcontextprotocol/server-sequential-thinking)

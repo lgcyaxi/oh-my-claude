@@ -18,7 +18,7 @@ export interface AgentDefinition {
   /** Whether this agent runs via Claude subscription (Task tool) or MCP (async) */
   executionMode: "task" | "mcp";
   /** Agent category for routing */
-  category: "orchestrator" | "reviewer" | "scout" | "advisor" | "explorer" | "specialist";
+  category: "orchestrator" | "reviewer" | "scout" | "advisor" | "explorer" | "specialist" | "planner";
   /** Tools this agent should NOT use (restrictions) */
   restrictedTools?: string[];
 }

@@ -4,14 +4,20 @@
  * Agents are organized by execution mode:
  * - Task tool agents (Claude subscription): sisyphus, claude-reviewer, claude-scout
  * - MCP background agents (external APIs): oracle, librarian, explore, frontend-ui-ux, document-writer
+ *
+ * Original agents (MIT Licensed) are available in ./original/
  */
 
 export * from "./types";
+
+// Original agents (MIT Licensed - independent implementation)
+export * as original from "./original";
 
 // Claude subscription agents (Task tool - sync)
 export { sisyphusAgent } from "./sisyphus";
 export { claudeReviewerAgent } from "./claude-reviewer";
 export { claudeScoutAgent } from "./claude-scout";
+export { prometheusAgent } from "./prometheus";
 
 // External API agents (MCP - async)
 export { oracleAgent } from "./oracle";
@@ -24,6 +30,7 @@ export { documentWriterAgent } from "./document-writer";
 import { sisyphusAgent } from "./sisyphus";
 import { claudeReviewerAgent } from "./claude-reviewer";
 import { claudeScoutAgent } from "./claude-scout";
+import { prometheusAgent } from "./prometheus";
 import { oracleAgent } from "./oracle";
 import { librarianAgent } from "./librarian";
 import { exploreAgent } from "./explore";
@@ -39,6 +46,7 @@ export const agents: Record<string, AgentDefinition> = {
   sisyphus: sisyphusAgent,
   "claude-reviewer": claudeReviewerAgent,
   "claude-scout": claudeScoutAgent,
+  prometheus: prometheusAgent,
 
   // External API agents
   oracle: oracleAgent,
@@ -51,7 +59,7 @@ export const agents: Record<string, AgentDefinition> = {
 /**
  * Agents that run via Claude Code Task tool (sync, uses Claude subscription)
  */
-export const taskAgents = [sisyphusAgent, claudeReviewerAgent, claudeScoutAgent];
+export const taskAgents = [sisyphusAgent, claudeReviewerAgent, claudeScoutAgent, prometheusAgent];
 
 /**
  * Agents that run via MCP background server (async, uses external APIs)
