@@ -16,6 +16,15 @@ import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { getSessionStatusPath, ensureSessionDir, cleanupStaleSessions } from "../../statusline/session";
 import { detectContextNeeds, gatherContext, formatContextForPrompt } from "../../context";
+import {
+  acquireSlot,
+  releaseSlot,
+  getConcurrencyStatus as getConcurrencyStatusInternal,
+  getConcurrencyStatusString,
+} from "./concurrency";
+
+// Re-export for server.ts
+export { getConcurrencyStatusInternal as getConcurrencyStatus, getConcurrencyStatusString };
 
 // Cleanup stale sessions on server startup
 cleanupStaleSessions(60 * 60 * 1000); // 1 hour
@@ -77,8 +86,16 @@ export function updateStatusFile(): void {
         prompt: t.prompt.slice(0, 100), // Truncate for display
       }));
 
+    // Get concurrency status for display
+    const concurrency = getConcurrencyStatusInternal();
+
     const status = {
       activeTasks,
+      concurrency: {
+        active: concurrency.global.active,
+        limit: concurrency.global.limit,
+        queued: concurrency.global.queued,
+      },
       updatedAt: new Date().toISOString(),
     };
 
@@ -155,9 +172,15 @@ export async function launchTask(options: {
 }
 
 /**
- * Run a task asynchronously
+ * Run a task asynchronously with concurrency control
  */
 async function runTask(task: Task, systemPrompt?: string): Promise<void> {
+  // Get provider for concurrency tracking
+  const provider = task.provider ?? "unknown";
+
+  // Wait for a concurrency slot
+  await acquireSlot(provider);
+
   task.status = "running";
   task.startedAt = Date.now();
   tasks.set(task.id, task);
@@ -231,6 +254,9 @@ async function runTask(task: Task, systemPrompt?: string): Promise<void> {
     task.completedAt = Date.now();
     tasks.set(task.id, task);
     updateStatusFile();
+  } finally {
+    // Always release the concurrency slot
+    releaseSlot(provider);
   }
 }
 

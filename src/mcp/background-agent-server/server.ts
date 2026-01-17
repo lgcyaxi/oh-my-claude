@@ -26,6 +26,7 @@ import {
   cleanupTasks,
   updateStatusFile,
   waitForTaskCompletion,
+  getConcurrencyStatus,
 } from "./task-manager";
 import { getProvidersStatus } from "../../providers/router";
 import { agents } from "../../agents";
@@ -529,6 +530,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "get_status": {
         const providers = getProvidersStatus();
+        const concurrency = getConcurrencyStatus();
 
         // Cleanup old tasks periodically
         cleanupTasks();
@@ -539,6 +541,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               type: "text",
               text: JSON.stringify({
                 providers,
+                concurrency,
                 availableAgents: Object.keys(agents).filter(
                   (name) => agents[name]?.executionMode === "mcp"
                 ),

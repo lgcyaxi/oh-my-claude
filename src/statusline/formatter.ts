@@ -51,8 +51,15 @@ export interface ActiveTask {
   prompt?: string; // Truncated prompt for preview
 }
 
+export interface ConcurrencyInfo {
+  active: number;
+  limit: number;
+  queued: number;
+}
+
 export interface StatusLineData {
   activeTasks: ActiveTask[];
+  concurrency?: ConcurrencyInfo;
   updatedAt: string;
 }
 
@@ -189,11 +196,23 @@ function formatTask(task: ActiveTask): string {
 }
 
 /**
+ * Format concurrency info for display
+ * e.g., "(2/10)" or "(2/10 +3q)" if there are queued tasks
+ */
+function formatConcurrency(concurrency: ConcurrencyInfo): string {
+  if (concurrency.queued > 0) {
+    return `(${concurrency.active}/${concurrency.limit} +${concurrency.queued}q)`;
+  }
+  return `(${concurrency.active}/${concurrency.limit})`;
+}
+
+/**
  * Format the status line data into a compact string
  *
  * Output format examples:
- * - No tasks: "omc ● ready"
- * - With tasks: "omc [⠙ Oracle: 32s DS/R] "Analyze the code...""
+ * - No tasks: "omc ● ready (0/10)"
+ * - With tasks: "omc [⠙ Oracle: 32s DS/R] "Analyze..." (2/10)"
+ * - With queue: "omc [⠙ Oracle: 32s DS/R] (5/5 +2q)"
  */
 export function formatStatusLine(data: StatusLineData): string {
   const parts: string[] = ["omc"];
@@ -210,6 +229,11 @@ export function formatStatusLine(data: StatusLineData): string {
     if (data.activeTasks.length > 3) {
       parts.push(`+${data.activeTasks.length - 3}`);
     }
+  }
+
+  // Add concurrency info if available
+  if (data.concurrency) {
+    parts.push(formatConcurrency(data.concurrency));
   }
 
   return parts.join(" ");

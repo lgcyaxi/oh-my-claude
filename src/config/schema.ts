@@ -38,6 +38,14 @@ export const CategoryConfigSchema = z.object({
   prompt_append: z.string().optional(),
 });
 
+// Concurrency configuration schema
+export const ConcurrencyConfigSchema = z.object({
+  /** Global maximum concurrent tasks across all providers */
+  global: z.number().min(1).max(50).default(10),
+  /** Per-provider limits */
+  per_provider: z.record(z.string(), z.number().min(1).max(20)).optional(),
+});
+
 // Main configuration schema
 export const OhMyClaudeConfigSchema = z.object({
   $schema: z.string().optional(),
@@ -139,6 +147,9 @@ export const OhMyClaudeConfigSchema = z.object({
   disabled_agents: z.array(z.string()).optional(),
   disabled_hooks: z.array(z.string()).optional(),
 
+  // Concurrency limits for background tasks
+  concurrency: ConcurrencyConfigSchema.optional(),
+
   // Debug settings
   debugTaskTracker: z.boolean().optional(),
   debugHooks: z.boolean().optional(),
@@ -148,6 +159,7 @@ export type OhMyClaudeConfig = z.infer<typeof OhMyClaudeConfigSchema>;
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export type CategoryConfig = z.infer<typeof CategoryConfigSchema>;
+export type ConcurrencyConfig = z.infer<typeof ConcurrencyConfigSchema>;
 
 // Default configuration
 export const DEFAULT_CONFIG: OhMyClaudeConfig =

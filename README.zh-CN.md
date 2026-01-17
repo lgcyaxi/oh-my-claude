@@ -9,8 +9,10 @@
 ## 特性
 
 - **多供应商 MCP 服务器** - 支持 DeepSeek、智谱 GLM、MiniMax 的后台任务执行
+- **并发后台任务** - 支持多智能体并行运行，可配置并发限制
 - **专业化智能体工作流** - 预配置的专业智能体（Sisyphus、Oracle、Librarian 等）
 - **斜杠命令** - 快捷操作（`/omcx-commit`、`/omcx-implement`）和智能体激活（`/omc-sisyphus`、`/omc-plan`）
+- **实时状态栏** - 显示活跃智能体、任务进度和并发槽位
 - **规划系统** - 使用 Prometheus 智能体进行战略规划和巨石状态追踪
 - **官方 MCP 一键安装** - 一条命令安装 Sequential Thinking、MiniMax 和 GLM MCP 服务
 - **Hook 集成** - 代码质量检查和待办追踪

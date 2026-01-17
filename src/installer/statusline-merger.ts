@@ -63,6 +63,13 @@ fi
 }
 
 /**
+ * Check if this is our wrapper script (not just any of our statusline)
+ */
+function isOurWrapper(command: string): boolean {
+  return command.includes("statusline-wrapper.sh");
+}
+
+/**
  * Merge statusLine configuration
  *
  * Returns the new config and whether a wrapper was created
@@ -89,7 +96,44 @@ export function mergeStatusLine(
     };
   }
 
-  // If existing is already ours or wrapper
+  // IMPORTANT: Check for wrapper FIRST (before isOurStatusLine)
+  // The wrapper path contains "oh-my-claude" and "statusline" so isOurStatusLine would match it
+  if (isOurWrapper(existing.command)) {
+    if (force) {
+      // Regenerate wrapper with current paths, preserving the original user's statusline
+      let originalCommand = "";
+      if (existsSync(BACKUP_FILE_PATH)) {
+        try {
+          const backup = JSON.parse(readFileSync(BACKUP_FILE_PATH, "utf-8"));
+          originalCommand = backup.command || "";
+        } catch {
+          // If backup is invalid, we can't regenerate properly
+        }
+      }
+
+      if (originalCommand) {
+        // Regenerate wrapper with current omc statusline command
+        const wrapperContent = generateWrapperScript(originalCommand);
+        writeFileSync(WRAPPER_SCRIPT_PATH, wrapperContent);
+        chmodSync(WRAPPER_SCRIPT_PATH, 0o755);
+      }
+
+      return {
+        config: existing,
+        wrapperCreated: false,
+        backupCreated: false,
+        updated: true,
+      };
+    }
+    return {
+      config: existing,
+      wrapperCreated: false,
+      backupCreated: false,
+      updated: false,
+    };
+  }
+
+  // If existing is our direct statusline (not wrapper)
   if (isOurStatusLine(existing.command)) {
     if (force) {
       // Force update - ensure the command path is current
@@ -112,50 +156,13 @@ export function mergeStatusLine(
     };
   }
 
-  // Check if existing is already our wrapper
-  if (existing.command.includes("statusline-wrapper.sh")) {
-    if (force) {
-      // Regenerate wrapper with current paths
-      // Load backup to get original command
-      let originalCommand = "";
-      if (existsSync(BACKUP_FILE_PATH)) {
-        try {
-          const backup = JSON.parse(readFileSync(BACKUP_FILE_PATH, "utf-8"));
-          originalCommand = backup.command || "";
-        } catch {
-          // If backup is invalid, extract from current wrapper
-          // The wrapper has format: existing_output=$(echo "$input" ${existingCommand} ...)
-          // We'll just regenerate with the current OMC statusline command
-        }
-      }
-
-      if (originalCommand) {
-        const wrapperContent = generateWrapperScript(originalCommand);
-        writeFileSync(WRAPPER_SCRIPT_PATH, wrapperContent);
-        chmodSync(WRAPPER_SCRIPT_PATH, 0o755);
-      }
-
-      return {
-        config: existing,
-        wrapperCreated: false,
-        backupCreated: false,
-        updated: true,
-      };
-    }
-    return {
-      config: existing,
-      wrapperCreated: false,
-      backupCreated: false,
-      updated: false,
-    };
-  }
-
-  // Create wrapper script
+  // Existing is a third-party statusline (e.g., CCometixLine)
+  // Create wrapper script that calls both
   const wrapperContent = generateWrapperScript(existing.command);
   writeFileSync(WRAPPER_SCRIPT_PATH, wrapperContent);
   chmodSync(WRAPPER_SCRIPT_PATH, 0o755);
 
-  // Backup existing config
+  // Backup existing config so we can restore it on uninstall
   writeFileSync(BACKUP_FILE_PATH, JSON.stringify(existing, null, 2));
 
   return {

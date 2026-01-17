@@ -9,9 +9,10 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) v
 ## Features
 
 - **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax
+- **Concurrent Background Tasks** - Run multiple agents in parallel with configurable limits
 - **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Librarian, etc.)
 - **Slash Commands** - Quick actions (`/omcx-commit`, `/omcx-implement`) and agent activation (`/omc-sisyphus`, `/omc-plan`)
-- **Real-Time StatusLine** - Live status bar showing active agents and task progress
+- **Real-Time StatusLine** - Live status bar showing active agents, task progress, and concurrency slots
 - **Planning System** - Strategic planning with Prometheus agent and boulder-state tracking
 - **Official MCP Setup** - One-command installation for Sequential Thinking, MiniMax, and GLM MCPs
 - **Hook Integration** - Code quality checks, todo tracking, and agent monitoring
@@ -136,8 +137,10 @@ oh-my-claude provides a real-time status bar that shows active agents directly i
 ### Status Display
 
 ```
-omc ● ready                                        # Idle - system ready
-omc [⠙ Oracle: 32s DS/R] "Analyze the code..."    # Active with details
+omc ● ready (0/10)                                      # Idle - 0 of 10 slots used
+omc [⠙ Oracle: 32s DS/R] "Analyze the code..." (1/10)  # One active task
+omc [⠙ Oracle: 32s] [⠹ Lib: 12s] (2/10)                # Multiple parallel tasks
+omc [⠙ Oracle: 32s] (5/5 +2q)                          # At limit with 2 queued
 ```
 
 ### Legend
@@ -148,6 +151,8 @@ omc [⠙ Oracle: 32s DS/R] "Analyze the code..."    # Active with details
 - **32s** - Elapsed time
 - **DS/R** - Provider (DeepSeek) / Model (Reasoner)
 - **"Analyze the code..."** - Truncated prompt preview (max 30 chars)
+- **(2/10)** - Concurrency slots: 2 active of 10 max
+- **(+2q)** - Tasks waiting in queue
 
 ### CLI Control
 
@@ -273,9 +278,26 @@ Configuration file: `~/.claude/oh-my-claude.json`
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
     "oracle": { "provider": "deepseek", "model": "deepseek-reasoner" },
     "librarian": { "provider": "zhipu", "model": "glm-4.7" }
+  },
+  "concurrency": {
+    "global": 10,
+    "per_provider": {
+      "deepseek": 5,
+      "zhipu": 5,
+      "minimax": 3
+    }
   }
 }
 ```
+
+### Concurrency Settings
+
+Control how many background tasks can run in parallel:
+
+- **global**: Maximum concurrent tasks across all providers (default: 10)
+- **per_provider**: Per-provider limits to prevent rate limiting
+
+When limits are reached, new tasks queue and start automatically when slots free up.
 
 ## Architecture
 

@@ -170,6 +170,7 @@ export async function install(options?: {
     }
 
     // 2. Install slash commands
+    // Always update our command files - they're managed by oh-my-claude
     if (!options?.skipCommands) {
       try {
         const commandsDir = getCommandsDir();
@@ -184,11 +185,13 @@ export async function install(options?: {
           for (const file of commandFiles) {
             const srcPath = join(srcCommandsDir, file);
             const destPath = join(commandsDir, file);
-            if (!existsSync(destPath) || options?.force) {
-              copyFileSync(srcPath, destPath);
-              result.commands.installed.push(file.replace(".md", ""));
+            const wasExisting = existsSync(destPath);
+            // Always copy our command files (they're ours, we should update them)
+            copyFileSync(srcPath, destPath);
+            if (wasExisting) {
+              result.commands.installed.push(`${file.replace(".md", "")} (updated)`);
             } else {
-              result.commands.skipped.push(file.replace(".md", ""));
+              result.commands.installed.push(file.replace(".md", ""));
             }
           }
         } else {
