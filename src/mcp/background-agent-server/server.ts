@@ -75,6 +75,26 @@ Note: Agents using Claude subscription (sisyphus, claude-reviewer, claude-scout)
           description:
             "Optional custom system prompt (overrides agent default)",
         },
+        context_hints: {
+          type: "object",
+          description: "Optional hints for automatic context gathering",
+          properties: {
+            keywords: {
+              type: "array",
+              items: { type: "string" },
+              description: "Keywords to help detect relevant context",
+            },
+            file_patterns: {
+              type: "array",
+              items: { type: "string" },
+              description: "Glob patterns for files to include",
+            },
+            skip_context: {
+              type: "boolean",
+              description: "Set to true to disable automatic context",
+            },
+          },
+        },
       },
       required: ["prompt"],
     },
@@ -124,6 +144,26 @@ For parallel execution of multiple agents, use launch_background_task + poll_tas
         timeout_ms: {
           type: "number",
           description: "Optional timeout in milliseconds (default: 300000 = 5 minutes)",
+        },
+        context_hints: {
+          type: "object",
+          description: "Optional hints for automatic context gathering",
+          properties: {
+            keywords: {
+              type: "array",
+              items: { type: "string" },
+              description: "Keywords to help detect relevant context",
+            },
+            file_patterns: {
+              type: "array",
+              items: { type: "string" },
+              description: "Glob patterns for files to include",
+            },
+            skip_context: {
+              type: "boolean",
+              description: "Set to true to disable automatic context",
+            },
+          },
         },
       },
       required: ["prompt"],
@@ -215,11 +255,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "launch_background_task": {
-        const { agent, category, prompt, system_prompt } = args as {
+        const { agent, category, prompt, system_prompt, context_hints } = args as {
           agent?: string;
           category?: string;
           prompt: string;
           system_prompt?: string;
+          context_hints?: {
+            keywords?: string[];
+            file_patterns?: string[];
+            skip_context?: boolean;
+          };
         };
 
         if (!prompt) {
@@ -261,6 +306,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           categoryName: category,
           prompt,
           systemPrompt: system_prompt,
+          contextHints: context_hints
+            ? {
+                keywords: context_hints.keywords,
+                filePatterns: context_hints.file_patterns,
+                skipContext: context_hints.skip_context,
+              }
+            : undefined,
         });
 
         return {
@@ -278,12 +330,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "execute_agent": {
-        const { agent, category, prompt, system_prompt, timeout_ms } = args as {
+        const { agent, category, prompt, system_prompt, timeout_ms, context_hints } = args as {
           agent?: string;
           category?: string;
           prompt: string;
           system_prompt?: string;
           timeout_ms?: number;
+          context_hints?: {
+            keywords?: string[];
+            file_patterns?: string[];
+            skip_context?: boolean;
+          };
         };
 
         if (!prompt) {
@@ -322,6 +379,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           categoryName: category,
           prompt,
           systemPrompt: system_prompt,
+          contextHints: context_hints
+            ? {
+                keywords: context_hints.keywords,
+                filePatterns: context_hints.file_patterns,
+                skipContext: context_hints.skip_context,
+              }
+            : undefined,
         });
 
         // Wait for completion

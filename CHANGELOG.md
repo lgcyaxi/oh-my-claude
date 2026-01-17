@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Individual version changelogs are available in the [changelog/](./changelog/) directory.
 
+## [1.2.2-beta.0] - 2026-01-17
+
+See [changelog/v1.2.2-beta.0.md](./changelog/v1.2.2-beta.0.md) for details.
+
+### Added
+- Rich context system for MCP background agents
+- Smart keyword-based context detection
+- Per-agent context profiles with token budgets
+- `context_hints` parameter for execute_agent and launch_background_task
+
 ## [1.1.3] - 2026-01-16
 
 See [changelog/v1.1.3.md](./changelog/v1.1.3.md) for details.
