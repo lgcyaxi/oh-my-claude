@@ -11,10 +11,9 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) v
 - **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax
 - **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Librarian, etc.)
 - **Slash Commands** - Quick actions (`/omcx-commit`, `/omcx-implement`) and agent activation (`/omc-sisyphus`, `/omc-plan`)
-- **Real-Time StatusLine** - Live status bar showing active agents, task progress, and provider availability
+- **Real-Time StatusLine** - Live status bar showing active agents and task progress
 - **Planning System** - Strategic planning with Prometheus agent and boulder-state tracking
 - **Official MCP Setup** - One-command installation for Sequential Thinking, MiniMax, and GLM MCPs
-- **Concurrent Execution** - Per-provider rate limiting and parallel task management
 - **Hook Integration** - Code quality checks, todo tracking, and agent monitoring
 
 ## Quick Start
@@ -132,23 +131,23 @@ Ultrawork mode activates **maximum performance execution** with zero-tolerance c
 
 ## Real-Time StatusLine
 
-oh-my-claude provides a real-time status bar that shows active agents and provider availability directly in Claude Code.
+oh-my-claude provides a real-time status bar that shows active agents directly in Claude Code with rich information.
 
 ### Status Display
 
 ```
-omc ready | DS: 10 ZP: 10 MM: 5                    # Idle - showing available slots
-omc [Oracle: 32s] [@Scout: 15s] | DS: 1/10 ...    # Active tasks with elapsed time
+omc ● ready                                        # Idle - system ready
+omc [⠙ Oracle: 32s DS/R] "Analyze the code..."    # Active with details
 ```
 
 ### Legend
 
-- **omc ready** - System is ready, no active tasks
-- **[Oracle: 32s]** - MCP background agent running (via external API)
-- **[@Scout: 15s]** - Task tool agent running (via Claude subscription)
-- **DS: 1/10** - DeepSeek: 1 active / 10 max concurrent slots
-- **ZP: 0/10** - ZhiPu: 0 active / 10 max concurrent
-- **MM: 0/5** - MiniMax: 0 active / 5 max concurrent
+- **omc ● ready** - System is ready, no active tasks
+- **⠙** - Animated spinner (rotates: ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏)
+- **Oracle** - Agent name (cyan for MCP, yellow for Task tool)
+- **32s** - Elapsed time
+- **DS/R** - Provider (DeepSeek) / Model (Reasoner)
+- **"Analyze the code..."** - Truncated prompt preview (max 30 chars)
 
 ### CLI Control
 
@@ -274,14 +273,6 @@ Configuration file: `~/.claude/oh-my-claude.json`
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
     "oracle": { "provider": "deepseek", "model": "deepseek-reasoner" },
     "librarian": { "provider": "zhipu", "model": "glm-4.7" }
-  },
-  "concurrency": {
-    "default": 5,
-    "per_provider": {
-      "deepseek": 10,
-      "zhipu": 10,
-      "minimax": 5
-    }
   }
 }
 ```

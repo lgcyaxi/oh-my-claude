@@ -84,8 +84,8 @@ async function main() {
     if (!statusData) {
       console.log(formatEmptyStatusLine());
     } else if (statusData.activeTasks.length === 0) {
-      // No active tasks - show idle status with provider info
-      console.log(formatIdleStatusLine(statusData.providers));
+      // No active tasks - show idle status
+      console.log(formatIdleStatusLine());
     } else {
       console.log(formatStatusLine(statusData));
     }

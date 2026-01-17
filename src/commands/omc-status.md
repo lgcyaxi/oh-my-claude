@@ -7,16 +7,14 @@ Display status dashboard for oh-my-claude MCP background agents.
 The user wants to see the current status of MCP background agents. Display a formatted ASCII dashboard showing:
 
 1. **Active Tasks** - Currently running background tasks
-2. **Provider Concurrency** - Usage bars for each provider
-3. **Recent Tasks** - Last 5 completed/failed tasks
+2. **Recent Tasks** - Last 5 completed/failed tasks
 
 **Step 1: Get system status**
 
 ```
 Use mcp__oh-my-claude-background__get_status to get:
 - Provider configuration (which have API keys)
-- Concurrency limits per provider
-- Current active task counts
+- Available agents
 ```
 
 **Step 2: Get task list**
@@ -36,24 +34,10 @@ oh-my-claude Status Dashboard
 ==============================
 
 ACTIVE TASKS (count)
-  [agent]     task_id...  Provider  [progress] status duration
-
-PROVIDER CONCURRENCY
-  Provider:   [bar]  active/limit active, queued queued
+  [agent]     task_id...  Provider  status duration
 
 RECENT TASKS (last 5)
   [status] task_id agent  time_ago
-```
-
-**ASCII Progress Bar Helper:**
-
-For concurrency bars, use:
-- Full blocks: active tasks
-- Empty blocks: remaining capacity
-- 10 character width total
-
-```
-Example: 4/10 active -> "4/10 active"
 ```
 
 **Status indicators:**

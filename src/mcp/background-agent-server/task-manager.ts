@@ -4,7 +4,6 @@
  * Manages the lifecycle of background tasks:
  * - Launch tasks with agent/category routing
  * - Track task status and results
- * - Handle concurrency limits per provider
  * - Write status file for statusline display
  */
 
@@ -15,7 +14,6 @@ import { loadConfig, resolveProviderForAgent, resolveProviderForCategory } from 
 import type { ChatMessage } from "../../providers/types";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
-import { getConcurrencyStatus } from "./concurrency";
 import { getSessionStatusPath, ensureSessionDir, cleanupStaleSessions } from "../../statusline/session";
 import { detectContextNeeds, gatherContext, formatContextForPrompt } from "../../context";
 
@@ -40,6 +38,8 @@ export interface Task {
   error?: string;
   /** Provider being used (for statusline display) */
   provider?: string;
+  /** Model being used (for statusline display) */
+  model?: string;
   /** Context hints for enriching prompt */
   contextHints?: ContextHintsInput;
   createdAt: number;
@@ -66,21 +66,19 @@ export function updateStatusFile(): void {
     ensureSessionDir();
     const statusPath = getSessionStatusPath();
 
-    // Get active tasks with provider tracking
+    // Get active tasks with rich info for statusline
     const activeTasks = Array.from(tasks.values())
       .filter((t) => t.status === "running" || t.status === "pending")
       .map((t) => ({
         agent: t.agentName || t.categoryName || "unknown",
         startedAt: t.startedAt || t.createdAt,
         provider: t.provider,
+        model: t.model,
+        prompt: t.prompt.slice(0, 100), // Truncate for display
       }));
-
-    // Get provider concurrency
-    const providers = getConcurrencyStatus();
 
     const status = {
       activeTasks,
-      providers,
       updatedAt: new Date().toISOString(),
     };
 
@@ -118,15 +116,18 @@ export async function launchTask(options: {
     }
   }
 
-  // Look up provider for this agent/category
+  // Look up provider and model for this agent/category
   const config = loadConfig();
   let provider: string | undefined;
+  let model: string | undefined;
   if (agentName) {
     const agentConfig = resolveProviderForAgent(config, agentName);
     provider = agentConfig?.provider;
+    model = agentConfig?.model;
   } else if (categoryName) {
     const categoryConfig = resolveProviderForCategory(config, categoryName);
     provider = categoryConfig?.provider;
+    model = categoryConfig?.model;
   }
 
   const task: Task = {
@@ -136,6 +137,7 @@ export async function launchTask(options: {
     prompt,
     status: "pending",
     provider,
+    model,
     contextHints,
     createdAt: Date.now(),
   };

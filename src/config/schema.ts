@@ -38,13 +38,6 @@ export const CategoryConfigSchema = z.object({
   prompt_append: z.string().optional(),
 });
 
-// Concurrency configuration schema
-export const ConcurrencyConfigSchema = z.object({
-  default: z.number().min(1).max(50).default(5),
-  per_provider: z.record(z.string(), z.number()).optional(),
-  per_model: z.record(z.string(), z.number()).optional(),
-});
-
 // Main configuration schema
 export const OhMyClaudeConfigSchema = z.object({
   $schema: z.string().optional(),
@@ -143,16 +136,6 @@ export const OhMyClaudeConfigSchema = z.object({
     writing: { provider: "minimax", model: "MiniMax-M2.1", temperature: 0.5 },
   }),
 
-  concurrency: ConcurrencyConfigSchema.default({
-    default: 5,
-    per_provider: {
-      deepseek: 10,
-      zhipu: 10,
-      minimax: 5,
-      openrouter: 5,
-    },
-  }),
-
   disabled_agents: z.array(z.string()).optional(),
   disabled_hooks: z.array(z.string()).optional(),
 
@@ -165,7 +148,6 @@ export type OhMyClaudeConfig = z.infer<typeof OhMyClaudeConfigSchema>;
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export type CategoryConfig = z.infer<typeof CategoryConfigSchema>;
-export type ConcurrencyConfig = z.infer<typeof ConcurrencyConfigSchema>;
 
 // Default configuration
 export const DEFAULT_CONFIG: OhMyClaudeConfig =

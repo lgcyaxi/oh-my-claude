@@ -3,7 +3,6 @@
  *
  * Each Claude Code session gets a unique session ID to isolate:
  * - Active task tracking
- * - Provider concurrency counters
  *
  * Session ID is based on Claude Code's parent PID (PPID) so that:
  * - All hooks (task-tracker, statusline) share the same session

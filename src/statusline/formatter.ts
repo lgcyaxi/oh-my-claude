@@ -1,7 +1,7 @@
 /**
  * StatusLine Formatter
  *
- * Formats task and provider data into a compact status line string
+ * Formats task data into a compact status line string
  * for display in Claude Code's statusLine feature.
  *
  * Features:
@@ -20,10 +20,6 @@ const colors = {
   // Status
   ready: "\x1b[32m", // Green for ready
   active: "\x1b[33m", // Yellow for active
-  // Provider capacity
-  full: "\x1b[32m", // Green (available)
-  partial: "\x1b[33m", // Yellow (some used)
-  busy: "\x1b[31m", // Red (near limit)
 };
 
 /**
@@ -50,18 +46,13 @@ export interface ActiveTask {
   agent: string;
   startedAt: number;
   mode?: "mcp" | "fallback"; // Track execution mode
-  model?: string; // Model being used (sonnet, opus, haiku) for Task agents
-  provider?: string; // Provider name (deepseek, zhipu, minimax) for MCP agents
-}
-
-export interface ProviderStatus {
-  active: number;
-  limit: number;
+  model?: string; // Model being used
+  provider?: string; // Provider name (deepseek, zhipu, minimax)
+  prompt?: string; // Truncated prompt for preview
 }
 
 export interface StatusLineData {
   activeTasks: ActiveTask[];
-  providers: Record<string, ProviderStatus>;
   updatedAt: string;
 }
 
@@ -131,17 +122,37 @@ const MODEL_ABBREV: Record<string, string> = {
   "claude-sonnet-4.5": "S",
   "claude-opus-4.5": "O",
   "claude-haiku-4.5": "H",
+  // DeepSeek models
+  "deepseek-reasoner": "R",
+  "deepseek-chat": "C",
+  // ZhiPu models
+  "glm-4.7": "G4",
+  "glm-4v-flash": "V",
+  // MiniMax models
+  "minimax-m2.1": "M2",
 };
 
 /**
  * Get abbreviated model name
  */
 function getModelAbbrev(model: string): string {
-  return MODEL_ABBREV[model.toLowerCase()] || model.slice(0, 1).toUpperCase();
+  const lower = model.toLowerCase();
+  return MODEL_ABBREV[lower] || model.slice(0, 2).toUpperCase();
 }
 
 /**
- * Format a single task with spinner and colors
+ * Truncate prompt for display (max 30 chars)
+ */
+function truncatePrompt(prompt: string, maxLen: number = 30): string {
+  if (!prompt) return "";
+  // Clean up whitespace and newlines
+  const clean = prompt.replace(/\s+/g, " ").trim();
+  if (clean.length <= maxLen) return clean;
+  return clean.slice(0, maxLen - 3) + "...";
+}
+
+/**
+ * Format a single task with spinner, colors, and rich info
  */
 function formatTask(task: ActiveTask): string {
   const spinner = getSpinnerFrame(task.startedAt);
@@ -161,45 +172,28 @@ function formatTask(task: ActiveTask): string {
     color = colors.mcp;
   }
 
-  // Include model info for Task tool agents, or provider info for MCP agents
+  // Build info suffix: provider/model
   let infoSuffix = "";
-  if (task.model) {
-    // Task tool agents show model (S/O/H)
-    infoSuffix = ` (${getModelAbbrev(task.model)})`;
+  if (task.provider && task.model) {
+    infoSuffix = ` ${getProviderAbbrev(task.provider)}/${getModelAbbrev(task.model)}`;
   } else if (task.provider) {
-    // MCP agents show provider (DS/ZP/MM)
-    infoSuffix = ` (${getProviderAbbrev(task.provider)})`;
+    infoSuffix = ` ${getProviderAbbrev(task.provider)}`;
+  } else if (task.model) {
+    infoSuffix = ` ${getModelAbbrev(task.model)}`;
   }
 
-  return `[${spinner} ${colorize(agentName, color)}: ${duration}${infoSuffix}]`;
-}
+  // Build prompt preview
+  const promptPreview = task.prompt ? ` "${truncatePrompt(task.prompt)}"` : "";
 
-/**
- * Format provider capacity with color based on availability
- */
-function formatProviderCapacity(abbrev: string, status: ProviderStatus): string {
-  const available = status.limit - status.active;
-  const ratio = status.limit > 0 ? available / status.limit : 0;
-
-  let color: string;
-  if (ratio >= 0.7) {
-    color = colors.full; // 70%+ available = green
-  } else if (ratio >= 0.3) {
-    color = colors.partial; // 30-70% = yellow
-  } else {
-    color = colors.busy; // <30% = red
-  }
-
-  return `${abbrev}: ${colorize(String(available), color)}`;
+  return `[${spinner} ${colorize(agentName, color)}: ${duration}${infoSuffix}]${promptPreview}`;
 }
 
 /**
  * Format the status line data into a compact string
  *
  * Output format examples:
- * - No tasks: "omc"
- * - With tasks: "omc [⠙ Oracle: 32s] [⠹ Lib: 12s] | DS: 9 ZP: 10"
- * - Tasks only: "omc [⠙ Oracle: 32s]"
+ * - No tasks: "omc ● ready"
+ * - With tasks: "omc [⠙ Oracle: 32s DS/R] "Analyze the code...""
  */
 export function formatStatusLine(data: StatusLineData): string {
   const parts: string[] = ["omc"];
@@ -218,23 +212,6 @@ export function formatStatusLine(data: StatusLineData): string {
     }
   }
 
-  // Format provider concurrency with colors (show available capacity)
-  const providerParts: string[] = [];
-  const providersToShow = ["deepseek", "zhipu", "minimax"];
-
-  for (const provider of providersToShow) {
-    const status = data.providers[provider];
-    if (status && (status.active > 0 || data.activeTasks.length > 0)) {
-      const abbrev = getProviderAbbrev(provider);
-      providerParts.push(formatProviderCapacity(abbrev, status));
-    }
-  }
-
-  if (providerParts.length > 0) {
-    parts.push("|");
-    parts.push(...providerParts);
-  }
-
   return parts.join(" ");
 }
 
@@ -248,31 +225,9 @@ export function formatEmptyStatusLine(): string {
 }
 
 /**
- * Format idle status line with provider info
- * Shows availability even when no tasks are running
- * Output: "omc ● ready | DS: 10 ZP: 10 MM: 5" (with colors)
+ * Format idle status line
+ * Shows "omc ● ready" with green indicator
  */
-export function formatIdleStatusLine(providers: Record<string, ProviderStatus>): string {
-  const readyIndicator = colorize("●", colors.ready);
-  const parts: string[] = [`omc ${readyIndicator} ready`];
-
-  // Show provider availability with colors
-  const providerParts: string[] = [];
-  const providersToShow = ["deepseek", "zhipu", "minimax"];
-
-  for (const provider of providersToShow) {
-    const status = providers[provider];
-    if (status && status.limit > 0) {
-      const abbrev = getProviderAbbrev(provider);
-      // For idle state, show full capacity in green
-      providerParts.push(`${abbrev}: ${colorize(String(status.limit), colors.full)}`);
-    }
-  }
-
-  if (providerParts.length > 0) {
-    parts.push("|");
-    parts.push(...providerParts);
-  }
-
-  return parts.join(" ");
+export function formatIdleStatusLine(): string {
+  return formatEmptyStatusLine();
 }

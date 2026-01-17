@@ -13,7 +13,6 @@
 - **斜杠命令** - 快捷操作（`/omcx-commit`、`/omcx-implement`）和智能体激活（`/omc-sisyphus`、`/omc-plan`）
 - **规划系统** - 使用 Prometheus 智能体进行战略规划和巨石状态追踪
 - **官方 MCP 一键安装** - 一条命令安装 Sequential Thinking、MiniMax 和 GLM MCP 服务
-- **并发执行** - 按供应商限速和并行任务管理
 - **Hook 集成** - 代码质量检查和待办追踪
 
 ## 快速开始
@@ -236,14 +235,6 @@ npx @lgcyaxi/oh-my-claude uninstall --keep-config  # 保留配置文件
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
     "oracle": { "provider": "deepseek", "model": "deepseek-reasoner" },
     "librarian": { "provider": "zhipu", "model": "glm-4.7" }
-  },
-  "concurrency": {
-    "default": 5,
-    "per_provider": {
-      "deepseek": 10,
-      "zhipu": 10,
-      "minimax": 5
-    }
   }
 }
 ```

@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.2.2-beta.0");
+  .version("1.2.2-beta.1");
 
 // Install command
 program
@@ -394,7 +394,6 @@ program
       console.log(`  ${ok("Configuration loaded")}`);
       console.log(`  ${dimText("-")} ${Object.keys(config.agents).length} agents configured`);
       console.log(`  ${dimText("-")} ${Object.keys(config.categories).length} categories configured`);
-      console.log(`  ${dimText("-")} Default concurrency: ${config.concurrency.default}`);
 
       if (detail) {
         // Separate Task tool agents (Claude subscription) from MCP agents (external APIs)
