@@ -93,7 +93,7 @@ export const sentinelAgent: OriginalAgentDefinition = {
   name: "Sentinel",
   description: "Code review specialist for quality, security, and correctness",
   provider: "claude",
-  model: "claude-sonnet-4-5",
+  model: "claude-sonnet-4.5",
   executionMode: "task",
   prompt: SENTINEL_PROMPT,
   temperature: 0.1,

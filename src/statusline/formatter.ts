@@ -128,9 +128,9 @@ const MODEL_ABBREV: Record<string, string> = {
   sonnet: "S",
   opus: "O",
   haiku: "H",
-  "claude-sonnet-4-5": "S",
-  "claude-opus-4-5": "O",
-  "claude-haiku-4-5": "H",
+  "claude-sonnet-4.5": "S",
+  "claude-opus-4.5": "O",
+  "claude-haiku-4.5": "H",
 };
 
 /**

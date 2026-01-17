@@ -82,7 +82,7 @@ export const claudeReviewerAgent: AgentDefinition = {
     "Meticulous code reviewer and QA specialist. Reviews code changes, verifies tests, and ensures quality standards are met.",
   prompt: CLAUDE_REVIEWER_PROMPT,
   defaultProvider: "claude",
-  defaultModel: "claude-sonnet-4-5",
+  defaultModel: "claude-sonnet-4.5",
   defaultTemperature: 0.1,
   executionMode: "task",
   restrictedTools: ["Edit", "Write"],

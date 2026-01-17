@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.2.0");
+  .version("1.2.1");
 
 // Install command
 program
@@ -397,9 +397,32 @@ program
       console.log(`  ${dimText("-")} Default concurrency: ${config.concurrency.default}`);
 
       if (detail) {
-        console.log(`\n  ${subheader("Agents configured:")}`);
+        // Separate Task tool agents (Claude subscription) from MCP agents (external APIs)
+        const taskToolAgents: [string, any][] = [];
+        const mcpAgents: [string, any][] = [];
+
         for (const [name, agentConfig] of Object.entries(config.agents)) {
-          console.log(`    ${dimText("-")} ${c.bold}${name}${c.reset}: ${c.cyan}${(agentConfig as any).provider}${c.reset}/${c.blue}${(agentConfig as any).model}${c.reset}`);
+          const provider = (agentConfig as any).provider;
+          const providerConfig = config.providers[provider];
+          if (providerConfig?.type === "claude-subscription") {
+            taskToolAgents.push([name, agentConfig]);
+          } else {
+            mcpAgents.push([name, agentConfig]);
+          }
+        }
+
+        if (taskToolAgents.length > 0) {
+          console.log(`\n  ${subheader("Task tool agents:")} ${c.dim}(model managed by Claude Code)${c.reset}`);
+          for (const [name] of taskToolAgents) {
+            console.log(`    ${dimText("-")} ${c.bold}${name}${c.reset}`);
+          }
+        }
+
+        if (mcpAgents.length > 0) {
+          console.log(`\n  ${subheader("MCP background agents:")}`);
+          for (const [name, agentConfig] of mcpAgents) {
+            console.log(`    ${dimText("-")} ${c.bold}${name}${c.reset}: ${c.cyan}${(agentConfig as any).provider}${c.reset}/${c.blue}${(agentConfig as any).model}${c.reset}`);
+          }
         }
       }
     } catch (error) {

@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 
 /**
  * Get the package root directory
@@ -302,7 +303,56 @@ process.exit(1);
       }
     }
 
-    // 5. Create default config if not exists
+    // 5. Copy package.json for version detection
+    try {
+      const srcPkgPath = join(sourceDir, "package.json");
+      const destPkgPath = join(installDir, "package.json");
+      if (existsSync(srcPkgPath)) {
+        copyFileSync(srcPkgPath, destPkgPath);
+      }
+    } catch (error) {
+      // Non-critical error, just log
+      if (debug) console.log(`[DEBUG] Failed to copy package.json: ${error}`);
+    }
+
+    // 5b. Check if installing from git dev branch and create beta marker
+    try {
+      const gitDir = join(sourceDir, ".git");
+      if (existsSync(gitDir)) {
+        // Get current branch
+        const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+          cwd: sourceDir,
+          encoding: "utf-8",
+          stdio: ["pipe", "pipe", "pipe"],
+        }).trim();
+
+        // If on dev branch, create beta channel marker
+        if (branch === "dev") {
+          const ref = execSync("git rev-parse --short HEAD", {
+            cwd: sourceDir,
+            encoding: "utf-8",
+            stdio: ["pipe", "pipe", "pipe"],
+          }).trim();
+
+          const { setBetaChannelInfo } = require("./beta-channel");
+          setBetaChannelInfo({
+            ref,
+            branch: "dev",
+            installedAt: new Date().toISOString(),
+          });
+          if (debug) console.log(`[DEBUG] Created beta channel marker: dev @ ${ref}`);
+        } else {
+          // Not on dev branch, clear any existing beta marker
+          const { clearBetaChannel } = require("./beta-channel");
+          clearBetaChannel();
+        }
+      }
+    } catch (error) {
+      // Not in a git repo or git not available, ignore
+      if (debug) console.log(`[DEBUG] Git check failed: ${error}`);
+    }
+
+    // 6. Create default config if not exists
     const configPath = getConfigPath();
     if (!existsSync(configPath) || options?.force) {
       try {

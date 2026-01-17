@@ -77,16 +77,16 @@ export const OhMyClaudeConfigSchema = z.object({
   }),
 
   agents: z.record(z.string(), AgentConfigSchema).default({
-    // Claude subscription agents (no fallback needed)
-    Sisyphus: { provider: "claude", model: "claude-opus-4-5" },
+    // Claude subscription agents
+    Sisyphus: { provider: "claude", model: "claude-opus-4.5" },
     "claude-reviewer": {
       provider: "claude",
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4.5",
       temperature: 0.1,
     },
     "claude-scout": {
       provider: "claude",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-4.5",
       temperature: 0.3,
     },
     // External API agents
@@ -120,13 +120,13 @@ export const OhMyClaudeConfigSchema = z.object({
   categories: z.record(z.string(), CategoryConfigSchema).default({
     "quick-scout": {
       provider: "claude",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-4.5",
       temperature: 0.3,
     },
-    review: { provider: "claude", model: "claude-sonnet-4-5", temperature: 0.1 },
+    review: { provider: "claude", model: "claude-sonnet-4.5", temperature: 0.1 },
     "most-capable": {
       provider: "claude",
-      model: "claude-opus-4-5",
+      model: "claude-opus-4.5",
       temperature: 0.1,
     },
     "visual-engineering": {
