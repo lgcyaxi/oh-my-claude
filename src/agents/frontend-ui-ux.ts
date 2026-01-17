@@ -100,12 +100,6 @@ export const frontendUiUxAgent: AgentDefinition = {
   defaultModel: "glm-4v-flash",
   defaultTemperature: 0.7,
   executionMode: "mcp",
-  category: "specialist",
-  fallback: {
-    provider: "claude",
-    model: "claude-sonnet-4-5",
-    executionMode: "task",
-  },
 };
 
 export default frontendUiUxAgent;

@@ -209,13 +209,7 @@ export const librarianAgent: AgentDefinition = {
   defaultModel: "glm-4.7",
   defaultTemperature: 0.3,
   executionMode: "mcp",
-  category: "explorer",
   restrictedTools: ["Edit", "Write"],
-  fallback: {
-    provider: "claude",
-    model: "claude-sonnet-4-5",
-    executionMode: "task",
-  },
 };
 
 export default librarianAgent;

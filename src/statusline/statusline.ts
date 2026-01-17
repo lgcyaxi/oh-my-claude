@@ -15,27 +15,24 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
 
 import { formatStatusLine, formatEmptyStatusLine, formatIdleStatusLine, type StatusLineData } from "./formatter";
-
-// Status file path - MCP server writes to this
-const STATUS_FILE_PATH = join(homedir(), ".claude", "oh-my-claude", "status.json");
+import { getSessionStatusPath } from "./session";
 
 // Timeout for the entire script (prevent blocking terminal)
 const TIMEOUT_MS = 100;
 
 /**
- * Read status from the shared status file
+ * Read status from the session-specific status file
  */
 function readStatusFile(): StatusLineData | null {
   try {
-    if (!existsSync(STATUS_FILE_PATH)) {
+    const statusPath = getSessionStatusPath();
+    if (!existsSync(statusPath)) {
       return null;
     }
 
-    const content = readFileSync(STATUS_FILE_PATH, "utf-8");
+    const content = readFileSync(statusPath, "utf-8");
     const data = JSON.parse(content) as StatusLineData;
 
     // Validate the data structure

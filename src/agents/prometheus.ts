@@ -104,7 +104,7 @@ Your default behavior is to INTERVIEW the user.
 
 ### Step 2: Gather Context (Parallel)
 
-Use the Task tool to launch explore agents:
+Use the Task tool to launch explore agents (model selection is handled by Claude Code):
 \`\`\`
 Task(subagent_type="Explore", prompt="Find [specific aspect] in codebase...")
 \`\`\`
@@ -301,7 +301,6 @@ export const prometheusAgent: AgentDefinition = {
   defaultProvider: "claude",
   defaultModel: "claude-sonnet-4-5",
   executionMode: "task",
-  category: "planner",
 };
 
 export default prometheusAgent;

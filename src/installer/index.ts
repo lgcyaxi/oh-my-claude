@@ -101,9 +101,9 @@ export interface InstallResult {
   success: boolean;
   agents: { generated: string[]; skipped: string[] };
   commands: { installed: string[]; skipped: string[] };
-  hooks: { installed: string[]; skipped: string[] };
-  mcp: { installed: boolean };
-  statusLine: { installed: boolean; wrapperCreated: boolean };
+  hooks: { installed: string[]; updated: string[]; skipped: string[] };
+  mcp: { installed: boolean; updated: boolean };
+  statusLine: { installed: boolean; wrapperCreated: boolean; updated: boolean };
   config: { created: boolean };
   errors: string[];
 }
@@ -131,9 +131,9 @@ export async function install(options?: {
     success: true,
     agents: { generated: [], skipped: [] },
     commands: { installed: [], skipped: [] },
-    hooks: { installed: [], skipped: [] },
-    mcp: { installed: false },
-    statusLine: { installed: false, wrapperCreated: false },
+    hooks: { installed: [], updated: [], skipped: [] },
+    mcp: { installed: false, updated: false },
+    statusLine: { installed: false, wrapperCreated: false, updated: false },
     config: { created: false },
     errors: [],
   };
@@ -234,7 +234,7 @@ console.log(JSON.stringify({ decision: "approve" }));
         }
 
         // Install hooks into settings.json
-        result.hooks = installHooks(hooksDir);
+        result.hooks = installHooks(hooksDir, options?.force);
       } catch (error) {
         result.errors.push(`Failed to install hooks: ${error}`);
       }
@@ -269,7 +269,10 @@ process.exit(1);
         }
 
         // Install MCP server into settings.json
-        result.mcp.installed = installMcpServer(mcpServerPath);
+        const mcpResult = installMcpServer(mcpServerPath, options?.force);
+        result.mcp.installed = mcpResult ?? false;
+        // Track if it was an update (already existed but force was used)
+        result.mcp.updated = mcpResult && options?.force ? true : false;
       } catch (error) {
         result.errors.push(`Failed to install MCP server: ${error}`);
       }
@@ -290,9 +293,10 @@ process.exit(1);
         }
 
         // Install statusline into settings.json
-        const statusLineResult = installStatusLine(getStatusLineScriptPath());
+        const statusLineResult = installStatusLine(getStatusLineScriptPath(), options?.force);
         result.statusLine.installed = statusLineResult.installed;
         result.statusLine.wrapperCreated = statusLineResult.wrapperCreated;
+        result.statusLine.updated = statusLineResult.updated;
       } catch (error) {
         result.errors.push(`Failed to install statusline: ${error}`);
       }

@@ -40,7 +40,7 @@ bun run install-local
 ### 设置 API 密钥
 
 ```bash
-# DeepSeek（用于 Oracle、Explore 智能体）
+# DeepSeek（用于 Oracle、Analyst 智能体）
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 
 # 智谱 GLM（用于 Librarian、Frontend-UI-UX 智能体）
@@ -131,29 +131,35 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 
 ## 智能体工作流
 
-| 智能体 | 供应商 | 模型 | 角色 | 降级模型 |
-|--------|--------|------|------|----------|
-| **Sisyphus** | Claude（Task 工具）| claude-opus-4-5 | 主编排器 | - |
-| **Claude-Reviewer** | Claude（Task 工具）| claude-sonnet-4-5 | 代码审查、质量保证 | - |
-| **Claude-Scout** | Claude（Task 工具）| claude-haiku-4-5 | 快速探索 | - |
-| **Prometheus** | Claude（Task 工具）| claude-opus-4-5 | 战略规划 | - |
-| **Oracle** | DeepSeek（MCP）| deepseek-reasoner | 深度推理 | claude-opus-4-5 |
-| **Librarian** | 智谱（MCP）| glm-4.7 | 外部研究 | claude-sonnet-4-5 |
-| **Explore** | DeepSeek（MCP）| deepseek-chat | 代码库搜索 | claude-haiku-4-5 |
-| **Frontend-UI-UX** | 智谱（MCP）| glm-4v-flash | 视觉/UI 设计 | claude-sonnet-4-5 |
-| **Document-Writer** | MiniMax（MCP）| MiniMax-M2.1 | 文档编写 | claude-sonnet-4-5 |
+oh-my-claude 提供两种类型的智能体：
 
-### 自动降级
+### Claude Code 内置智能体（Task 工具）
 
-当供应商的 API 密钥未配置时，MCP 智能体会自动降级到 Claude 模型：
+这些智能体通过 Claude Code 的原生 Task 工具运行。**模型选择由 Claude Code 内部控制** - 我们无法更改使用的模型。
 
-- **Oracle** → `claude-opus-4-5`（保持深度推理能力）
-- **Librarian** → `claude-sonnet-4-5`（平衡的研究能力）
-- **Explore** → `claude-haiku-4-5`（快速搜索操作）
-- **Frontend-UI-UX** → `claude-sonnet-4-5`（优质视觉设计）
-- **Document-Writer** → `claude-sonnet-4-5`（优质文档编写）
+| 智能体 | 角色 | 调用方式 |
+|--------|------|----------|
+| **Sisyphus** | 主编排器 | `/omc-sisyphus` |
+| **Claude-Reviewer** | 代码审查、质量保证 | `/omc-reviewer` |
+| **Claude-Scout** | 快速探索 | `/omc-scout` |
+| **Prometheus** | 战略规划 | `/omc-plan` |
+| **Explore** | 代码库搜索 | `Task(subagent_type="Explore")` |
 
-这使得 oh-my-claude 即使没有外部 API 密钥也能通过 Claude Code 订阅正常工作。
+### MCP 后台智能体（外部 API）
+
+这些智能体通过 oh-my-claude 的 MCP 服务器运行，使用外部 API 供应商。**我们可以通过配置控制模型选择**。
+
+| 智能体 | 供应商 | 模型 | 角色 |
+|--------|--------|------|------|
+| **Oracle** | DeepSeek | deepseek-reasoner | 深度推理 |
+| **Analyst** | DeepSeek | deepseek-chat | 快速代码分析 |
+| **Librarian** | 智谱 | glm-4.7 | 外部研究 |
+| **Frontend-UI-UX** | 智谱 | glm-4v-flash | 视觉/UI 设计 |
+| **Document-Writer** | MiniMax | MiniMax-M2.1 | 文档编写 |
+
+**调用方式：** `launch_background_task(agent="oracle", prompt="...")` 或 `execute_agent(agent="oracle", prompt="...")`
+
+> **注意：** 如果供应商的 API 密钥未配置，使用该供应商的任务将失败。在使用依赖特定供应商的智能体前，请先设置所需的环境变量（如 `DEEPSEEK_API_KEY`）。
 
 ## 官方 MCP 服务
 

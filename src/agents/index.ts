@@ -3,7 +3,7 @@
  *
  * Agents are organized by execution mode:
  * - Task tool agents (Claude subscription): sisyphus, claude-reviewer, claude-scout
- * - MCP background agents (external APIs): oracle, librarian, explore, frontend-ui-ux, document-writer
+ * - MCP background agents (external APIs): oracle, analyst, librarian, frontend-ui-ux, document-writer
  *
  * Original agents (MIT Licensed) are available in ./original/
  */
@@ -22,7 +22,7 @@ export { prometheusAgent } from "./prometheus";
 // External API agents (MCP - async)
 export { oracleAgent } from "./oracle";
 export { librarianAgent } from "./librarian";
-export { exploreAgent } from "./explore";
+export { analystAgent } from "./analyst";
 export { frontendUiUxAgent } from "./frontend-ui-ux";
 export { documentWriterAgent } from "./document-writer";
 
@@ -33,7 +33,7 @@ import { claudeScoutAgent } from "./claude-scout";
 import { prometheusAgent } from "./prometheus";
 import { oracleAgent } from "./oracle";
 import { librarianAgent } from "./librarian";
-import { exploreAgent } from "./explore";
+import { analystAgent } from "./analyst";
 import { frontendUiUxAgent } from "./frontend-ui-ux";
 import { documentWriterAgent } from "./document-writer";
 import type { AgentDefinition } from "./types";
@@ -50,8 +50,8 @@ export const agents: Record<string, AgentDefinition> = {
 
   // External API agents
   oracle: oracleAgent,
+  analyst: analystAgent,
   librarian: librarianAgent,
-  explore: exploreAgent,
   "frontend-ui-ux": frontendUiUxAgent,
   "document-writer": documentWriterAgent,
 };
@@ -66,8 +66,8 @@ export const taskAgents = [sisyphusAgent, claudeReviewerAgent, claudeScoutAgent,
  */
 export const mcpAgents = [
   oracleAgent,
+  analystAgent,
   librarianAgent,
-  exploreAgent,
   frontendUiUxAgent,
   documentWriterAgent,
 ];

@@ -9,16 +9,18 @@ The user wants deep analysis using the **Oracle** agent (DeepSeek Reasoner).
 **To use Oracle, call the MCP tool:**
 
 ```
-Use mcp__oh-my-claude-background__launch_background_task with:
+Use mcp__oh-my-claude-background__execute_agent with:
 - agent: "oracle"
 - prompt: [user's question or analysis request]
 ```
 
-Then poll for results:
-```
-Use mcp__oh-my-claude-background__poll_task with:
-- task_id: [returned task_id]
-```
+This will block until Oracle responds with the analysis.
+
+**If you receive a "fallback_required" response:**
+Use Claude Code's Task tool with model "opus" instead.
+
+**If you receive a "timeout" response:**
+Use the returned task_id with poll_task to check for results later.
 
 **Oracle excels at:**
 - Architecture decisions
@@ -27,4 +29,4 @@ Use mcp__oh-my-claude-background__poll_task with:
 - Identifying edge cases
 - Long-term consequence evaluation
 
-Now launch the Oracle background task with the user's request.
+Now execute the Oracle agent with the user's request.

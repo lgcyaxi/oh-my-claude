@@ -68,11 +68,13 @@ fi
  * Returns the new config and whether a wrapper was created
  */
 export function mergeStatusLine(
-  existing: StatusLineConfig | undefined
+  existing: StatusLineConfig | undefined,
+  force = false
 ): {
   config: StatusLineConfig;
   wrapperCreated: boolean;
   backupCreated: boolean;
+  updated: boolean;
 } {
   // If no existing statusline, just use ours
   if (!existing) {
@@ -83,24 +85,68 @@ export function mergeStatusLine(
       },
       wrapperCreated: false,
       backupCreated: false,
+      updated: false,
     };
   }
 
-  // If existing is already ours or wrapper, don't change anything
+  // If existing is already ours or wrapper
   if (isOurStatusLine(existing.command)) {
+    if (force) {
+      // Force update - ensure the command path is current
+      return {
+        config: {
+          type: "command",
+          command: OMC_STATUSLINE_COMMAND,
+          padding: existing.padding,
+        },
+        wrapperCreated: false,
+        backupCreated: false,
+        updated: true,
+      };
+    }
     return {
       config: existing,
       wrapperCreated: false,
       backupCreated: false,
+      updated: false,
     };
   }
 
   // Check if existing is already our wrapper
   if (existing.command.includes("statusline-wrapper.sh")) {
+    if (force) {
+      // Regenerate wrapper with current paths
+      // Load backup to get original command
+      let originalCommand = "";
+      if (existsSync(BACKUP_FILE_PATH)) {
+        try {
+          const backup = JSON.parse(readFileSync(BACKUP_FILE_PATH, "utf-8"));
+          originalCommand = backup.command || "";
+        } catch {
+          // If backup is invalid, extract from current wrapper
+          // The wrapper has format: existing_output=$(echo "$input" ${existingCommand} ...)
+          // We'll just regenerate with the current OMC statusline command
+        }
+      }
+
+      if (originalCommand) {
+        const wrapperContent = generateWrapperScript(originalCommand);
+        writeFileSync(WRAPPER_SCRIPT_PATH, wrapperContent);
+        chmodSync(WRAPPER_SCRIPT_PATH, 0o755);
+      }
+
+      return {
+        config: existing,
+        wrapperCreated: false,
+        backupCreated: false,
+        updated: true,
+      };
+    }
     return {
       config: existing,
       wrapperCreated: false,
       backupCreated: false,
+      updated: false,
     };
   }
 
@@ -120,6 +166,7 @@ export function mergeStatusLine(
     },
     wrapperCreated: true,
     backupCreated: true,
+    updated: false,
   };
 }
 

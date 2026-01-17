@@ -97,13 +97,7 @@ export const oracleAgent: AgentDefinition = {
   defaultModel: "deepseek-reasoner",
   defaultTemperature: 0.1,
   executionMode: "mcp",
-  category: "advisor",
   restrictedTools: ["Edit", "Write", "Task"],
-  fallback: {
-    provider: "claude",
-    model: "claude-opus-4-5",
-    executionMode: "task",
-  },
 };
 
 export default oracleAgent;

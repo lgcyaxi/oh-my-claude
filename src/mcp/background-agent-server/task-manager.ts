@@ -8,18 +8,19 @@
  * - Write status file for statusline display
  */
 
-import { routeByAgent, routeByCategory, FallbackRequiredError } from "../../providers/router";
+import { routeByAgent, routeByCategory } from "../../providers/router";
 import { getAgent } from "../../agents";
+import { loadConfig, resolveProviderForAgent, resolveProviderForCategory } from "../../config";
 import type { ChatMessage } from "../../providers/types";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { homedir } from "node:os";
+import { dirname } from "node:path";
 import { getConcurrencyStatus } from "./concurrency";
+import { getSessionStatusPath, ensureSessionDir, cleanupStaleSessions } from "../../statusline/session";
 
-// Status file path for statusline integration
-const STATUS_FILE_PATH = join(homedir(), ".claude", "oh-my-claude", "status.json");
+// Cleanup stale sessions on server startup
+cleanupStaleSessions(60 * 60 * 1000); // 1 hour
 
-export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "fallback_required";
+export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
 export interface Task {
   id: string;
@@ -29,13 +30,8 @@ export interface Task {
   status: TaskStatus;
   result?: string;
   error?: string;
-  /** Fallback info when primary provider is not configured */
-  fallback?: {
-    provider: string;
-    model: string;
-    executionMode?: string;
-    reason: string;
-  };
+  /** Provider being used (for statusline display) */
+  provider?: string;
   createdAt: number;
   startedAt?: number;
   completedAt?: number;
@@ -52,21 +48,21 @@ function generateTaskId(): string {
 /**
  * Write current status to file for statusline integration
  * Called on every task state change and on server startup
+ * Uses session-specific path for per-session tracking
  */
 export function updateStatusFile(): void {
   try {
-    // Ensure directory exists
-    const dir = dirname(STATUS_FILE_PATH);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
+    // Ensure session directory exists
+    ensureSessionDir();
+    const statusPath = getSessionStatusPath();
 
-    // Get active tasks
+    // Get active tasks with provider tracking
     const activeTasks = Array.from(tasks.values())
       .filter((t) => t.status === "running" || t.status === "pending")
       .map((t) => ({
         agent: t.agentName || t.categoryName || "unknown",
         startedAt: t.startedAt || t.createdAt,
+        provider: t.provider,
       }));
 
     // Get provider concurrency
@@ -78,7 +74,7 @@ export function updateStatusFile(): void {
       updatedAt: new Date().toISOString(),
     };
 
-    writeFileSync(STATUS_FILE_PATH, JSON.stringify(status, null, 2));
+    writeFileSync(statusPath, JSON.stringify(status, null, 2));
   } catch (error) {
     // Silently fail - statusline is non-critical
     console.error("Failed to update status file:", error);
@@ -111,12 +107,24 @@ export async function launchTask(options: {
     }
   }
 
+  // Look up provider for this agent/category
+  const config = loadConfig();
+  let provider: string | undefined;
+  if (agentName) {
+    const agentConfig = resolveProviderForAgent(config, agentName);
+    provider = agentConfig?.provider;
+  } else if (categoryName) {
+    const categoryConfig = resolveProviderForCategory(config, categoryName);
+    provider = categoryConfig?.provider;
+  }
+
   const task: Task = {
     id: taskId,
     agentName,
     categoryName,
     prompt,
     status: "pending",
+    provider,
     createdAt: Date.now(),
   };
 
@@ -177,20 +185,8 @@ async function runTask(task: Task, systemPrompt?: string): Promise<void> {
     tasks.set(task.id, task);
     updateStatusFile();
   } catch (error) {
-    // Handle fallback required error specially
-    if (error instanceof FallbackRequiredError) {
-      task.status = "fallback_required";
-      task.error = error.message;
-      task.fallback = {
-        provider: error.fallback.provider,
-        model: error.fallback.model,
-        executionMode: error.fallback.executionMode,
-        reason: error.reason,
-      };
-    } else {
-      task.status = "failed";
-      task.error = error instanceof Error ? error.message : String(error);
-    }
+    task.status = "failed";
+    task.error = error instanceof Error ? error.message : String(error);
     task.completedAt = Date.now();
     tasks.set(task.id, task);
     updateStatusFile();
@@ -211,12 +207,6 @@ export function pollTask(taskId: string): {
   status: TaskStatus;
   result?: string;
   error?: string;
-  fallback?: {
-    provider: string;
-    model: string;
-    executionMode?: string;
-    reason: string;
-  };
 } {
   const task = tasks.get(taskId);
 
@@ -228,7 +218,53 @@ export function pollTask(taskId: string): {
     status: task.status,
     result: task.result,
     error: task.error,
-    fallback: task.fallback,
+  };
+}
+
+/**
+ * Wait for a task to complete (blocking)
+ */
+export async function waitForTaskCompletion(
+  taskId: string,
+  timeoutMs: number = 5 * 60 * 1000,
+  pollIntervalMs: number = 200
+): Promise<{
+  status: TaskStatus;
+  result?: string;
+  error?: string;
+}> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    const task = tasks.get(taskId);
+
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+
+    // Check for terminal states
+    if (
+      task.status === "completed" ||
+      task.status === "failed" ||
+      task.status === "cancelled"
+    ) {
+      return {
+        status: task.status,
+        result: task.result,
+        error: task.error,
+      };
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  // Timeout reached
+  const task = tasks.get(taskId);
+  return {
+    status: task?.status ?? "failed",
+    error: `Timeout after ${timeoutMs}ms. Task ID: ${taskId} - use poll_task to check later.`,
+    result: undefined,
   };
 }
 

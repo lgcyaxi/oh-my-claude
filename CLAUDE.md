@@ -57,18 +57,6 @@ When adding new commands:
 2. Add to appropriate array in `src/commands/index.ts`
 3. Update README documentation
 
-## Fallback System
-
-MCP agents automatically fall back to Claude models when provider API keys are not configured:
-
-- Oracle → claude-opus-4-5
-- Librarian → claude-sonnet-4-5
-- Explore → claude-haiku-4-5
-- Frontend-UI-UX → claude-sonnet-4-5
-- Document-Writer → claude-sonnet-4-5
-
-Configuration in `src/config/schema.ts` with `fallback` field on agents.
-
 ## Release Process
 
 ```bash
@@ -93,7 +81,7 @@ npm publish --access public
 
 ## Key Files
 
-- `src/config/loader.ts` - Config loading with fallback helpers
-- `src/providers/router.ts` - Routes requests to providers, handles FallbackRequiredError
+- `src/config/loader.ts` - Config loading and provider resolution
+- `src/providers/router.ts` - Routes requests to providers
 - `src/mcp/background-agent-server/server.ts` - MCP server implementation
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)

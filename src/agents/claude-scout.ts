@@ -90,7 +90,6 @@ export const claudeScoutAgent: AgentDefinition = {
   defaultModel: "claude-haiku-4-5",
   defaultTemperature: 0.3,
   executionMode: "task",
-  category: "scout",
   restrictedTools: ["Edit", "Write"],
 };
 

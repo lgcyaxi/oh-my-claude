@@ -35,7 +35,7 @@ export function generateAgentMarkdown(agent: AgentDefinition): string {
   lines.push(`> ${agent.description}`);
   lines.push("");
 
-  // Execution mode note with fallback info
+  // Execution mode note
   if (agent.executionMode === "task") {
     lines.push(
       `<!-- Execution: Claude Code Task tool (sync) - Uses Claude subscription -->`
@@ -44,27 +44,11 @@ export function generateAgentMarkdown(agent: AgentDefinition): string {
     lines.push(
       `<!-- Execution: oh-my-claude MCP server (async) - Uses ${agent.defaultProvider} API -->`
     );
-    // Add fallback info for MCP agents
-    if (agent.fallback) {
-      lines.push(
-        `<!-- Fallback: ${agent.fallback.provider}/${agent.fallback.model} via Task tool (when ${agent.defaultProvider.toUpperCase()}_API_KEY is not set) -->`
-      );
-    }
   }
   lines.push("");
 
   // The actual prompt
   lines.push(agent.prompt);
-
-  // Add fallback usage note for MCP agents
-  if (agent.executionMode === "mcp" && agent.fallback) {
-    lines.push("");
-    lines.push("## Fallback Mode");
-    lines.push("");
-    lines.push(`If \`${agent.defaultProvider.toUpperCase()}_API_KEY\` is not configured, this agent will automatically fall back to using **${agent.fallback.model}** via Claude's Task tool.`);
-    lines.push("");
-    lines.push("The fallback provides similar capabilities using your Claude subscription, though the primary provider may offer specialized features.");
-  }
 
   return lines.join("\n");
 }

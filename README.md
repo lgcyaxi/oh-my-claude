@@ -41,7 +41,7 @@ bun run install-local
 ### Set API Keys
 
 ```bash
-# DeepSeek (for Oracle, Explore agents)
+# DeepSeek (for Oracle, Analyst agents)
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 
 # ZhiPu GLM (for Librarian, Frontend-UI-UX agents)
@@ -164,29 +164,35 @@ When you have an existing statusline (like CCometixLine), oh-my-claude automatic
 
 ## Agent Workflows
 
-| Agent | Provider | Model | Role | Fallback |
-|-------|----------|-------|------|----------|
-| **Sisyphus** | Claude (Task tool) | claude-opus-4-5 | Primary orchestrator | - |
-| **Claude-Reviewer** | Claude (Task tool) | claude-sonnet-4-5 | Code review, QA | - |
-| **Claude-Scout** | Claude (Task tool) | claude-haiku-4-5 | Fast exploration | - |
-| **Prometheus** | Claude (Task tool) | claude-opus-4-5 | Strategic planning | - |
-| **Oracle** | DeepSeek (MCP) | deepseek-reasoner | Deep reasoning | claude-opus-4-5 |
-| **Librarian** | ZhiPu (MCP) | glm-4.7 | External research | claude-sonnet-4-5 |
-| **Explore** | DeepSeek (MCP) | deepseek-chat | Codebase search | claude-haiku-4-5 |
-| **Frontend-UI-UX** | ZhiPu (MCP) | glm-4v-flash | Visual/UI design | claude-sonnet-4-5 |
-| **Document-Writer** | MiniMax (MCP) | MiniMax-M2.1 | Documentation | claude-sonnet-4-5 |
+oh-my-claude provides two types of agents:
 
-### Automatic Fallback
+### Claude Code Built-in Agents (Task Tool)
 
-MCP agents automatically fall back to Claude models when the provider's API key is not configured:
+These agents run via Claude Code's native Task tool. **Model selection is controlled by Claude Code internally** - we cannot change which model is used.
 
-- **Oracle** → `claude-opus-4-5` (preserves deep reasoning capability)
-- **Librarian** → `claude-sonnet-4-5` (balanced research capability)
-- **Explore** → `claude-haiku-4-5` (fast search operations)
-- **Frontend-UI-UX** → `claude-sonnet-4-5` (quality visual design)
-- **Document-Writer** → `claude-sonnet-4-5` (quality documentation)
+| Agent | Role | Invocation |
+|-------|------|------------|
+| **Sisyphus** | Primary orchestrator | `/omc-sisyphus` |
+| **Claude-Reviewer** | Code review, QA | `/omc-reviewer` |
+| **Claude-Scout** | Fast exploration | `/omc-scout` |
+| **Prometheus** | Strategic planning | `/omc-plan` |
+| **Explore** | Codebase search | `Task(subagent_type="Explore")` |
 
-This allows oh-my-claude to work with Claude Code's subscription even without external API keys.
+### MCP Background Agents (External APIs)
+
+These agents run via oh-my-claude's MCP server using external API providers. **We control model selection** via configuration.
+
+| Agent | Provider | Model | Role |
+|-------|----------|-------|------|
+| **Oracle** | DeepSeek | deepseek-reasoner | Deep reasoning |
+| **Analyst** | DeepSeek | deepseek-chat | Quick code analysis |
+| **Librarian** | ZhiPu | glm-4.7 | External research |
+| **Frontend-UI-UX** | ZhiPu | glm-4v-flash | Visual/UI design |
+| **Document-Writer** | MiniMax | MiniMax-M2.1 | Documentation |
+
+**Invocation:** `launch_background_task(agent="oracle", prompt="...")` or `execute_agent(agent="oracle", prompt="...")`
+
+> **Note:** If a provider's API key is not configured, tasks using that provider will fail. Set the required environment variable (e.g., `DEEPSEEK_API_KEY`) before using agents that depend on it.
 
 ## Official MCP Servers
 

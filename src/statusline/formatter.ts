@@ -3,11 +3,55 @@
  *
  * Formats task and provider data into a compact status line string
  * for display in Claude Code's statusLine feature.
+ *
+ * Features:
+ * - ANSI color support for visual distinction
+ * - Spinner animation for active tasks
+ * - Mode tracking (MCP vs fallback)
  */
+
+// ANSI Color codes
+const colors = {
+  reset: "\x1b[0m",
+  // Agent types
+  mcp: "\x1b[36m", // Cyan for MCP agents
+  task: "\x1b[33m", // Yellow for Task agents
+  fallback: "\x1b[31m", // Red for fallback
+  // Status
+  ready: "\x1b[32m", // Green for ready
+  active: "\x1b[33m", // Yellow for active
+  // Provider capacity
+  full: "\x1b[32m", // Green (available)
+  partial: "\x1b[33m", // Yellow (some used)
+  busy: "\x1b[31m", // Red (near limit)
+};
+
+/**
+ * Apply ANSI color to text
+ */
+function colorize(text: string, color: string): string {
+  return `${color}${text}${colors.reset}`;
+}
+
+// Spinner animation frames
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_INTERVAL = 80; // ms per frame
+
+/**
+ * Get current spinner frame based on elapsed time
+ */
+function getSpinnerFrame(startedAt: number): string {
+  const elapsed = Date.now() - startedAt;
+  const frameIndex = Math.floor(elapsed / SPINNER_INTERVAL) % SPINNER_FRAMES.length;
+  return SPINNER_FRAMES[frameIndex] ?? "⠋";
+}
 
 export interface ActiveTask {
   agent: string;
   startedAt: number;
+  mode?: "mcp" | "fallback"; // Track execution mode
+  model?: string; // Model being used (sonnet, opus, haiku) for Task agents
+  provider?: string; // Provider name (deepseek, zhipu, minimax) for MCP agents
 }
 
 export interface ProviderStatus {
@@ -79,28 +123,94 @@ function getProviderAbbrev(provider: string): string {
   return PROVIDER_ABBREV[provider.toLowerCase()] || provider.slice(0, 2).toUpperCase();
 }
 
+// Model name abbreviations for compact display
+const MODEL_ABBREV: Record<string, string> = {
+  sonnet: "S",
+  opus: "O",
+  haiku: "H",
+  "claude-sonnet-4-5": "S",
+  "claude-opus-4-5": "O",
+  "claude-haiku-4-5": "H",
+};
+
+/**
+ * Get abbreviated model name
+ */
+function getModelAbbrev(model: string): string {
+  return MODEL_ABBREV[model.toLowerCase()] || model.slice(0, 1).toUpperCase();
+}
+
+/**
+ * Format a single task with spinner and colors
+ */
+function formatTask(task: ActiveTask): string {
+  const spinner = getSpinnerFrame(task.startedAt);
+  const durationSec = Math.floor((Date.now() - task.startedAt) / 1000);
+  const duration = formatDuration(durationSec);
+  const agentName = getAgentAbbrev(task.agent);
+
+  // Determine color based on agent type and mode
+  let color: string;
+  if (task.mode === "fallback") {
+    color = colors.fallback;
+  } else if (task.agent.startsWith("@")) {
+    // Task tool agents (Claude subscription)
+    color = colors.task;
+  } else {
+    // MCP agents (external providers)
+    color = colors.mcp;
+  }
+
+  // Include model info for Task tool agents, or provider info for MCP agents
+  let infoSuffix = "";
+  if (task.model) {
+    // Task tool agents show model (S/O/H)
+    infoSuffix = ` (${getModelAbbrev(task.model)})`;
+  } else if (task.provider) {
+    // MCP agents show provider (DS/ZP/MM)
+    infoSuffix = ` (${getProviderAbbrev(task.provider)})`;
+  }
+
+  return `[${spinner} ${colorize(agentName, color)}: ${duration}${infoSuffix}]`;
+}
+
+/**
+ * Format provider capacity with color based on availability
+ */
+function formatProviderCapacity(abbrev: string, status: ProviderStatus): string {
+  const available = status.limit - status.active;
+  const ratio = status.limit > 0 ? available / status.limit : 0;
+
+  let color: string;
+  if (ratio >= 0.7) {
+    color = colors.full; // 70%+ available = green
+  } else if (ratio >= 0.3) {
+    color = colors.partial; // 30-70% = yellow
+  } else {
+    color = colors.busy; // <30% = red
+  }
+
+  return `${abbrev}: ${colorize(String(available), color)}`;
+}
+
 /**
  * Format the status line data into a compact string
  *
  * Output format examples:
  * - No tasks: "omc"
- * - With tasks: "omc [Oracle: 32s] [Lib: 12s] | DS: 2/10 ZP: 1/10"
- * - Tasks only: "omc [Oracle: 32s]"
+ * - With tasks: "omc [⠙ Oracle: 32s] [⠹ Lib: 12s] | DS: 9 ZP: 10"
+ * - Tasks only: "omc [⠙ Oracle: 32s]"
  */
 export function formatStatusLine(data: StatusLineData): string {
   const parts: string[] = ["omc"];
-  const now = Date.now();
 
-  // Format active tasks
+  // Format active tasks with spinners and colors
   if (data.activeTasks.length > 0) {
     // Limit to 3 tasks max for readability
     const tasksToShow = data.activeTasks.slice(0, 3);
 
     for (const task of tasksToShow) {
-      const durationSec = Math.floor((now - task.startedAt) / 1000);
-      const agentName = getAgentAbbrev(task.agent);
-      const duration = formatDuration(durationSec);
-      parts.push(`[${agentName}: ${duration}]`);
+      parts.push(formatTask(task));
     }
 
     if (data.activeTasks.length > 3) {
@@ -108,7 +218,7 @@ export function formatStatusLine(data: StatusLineData): string {
     }
   }
 
-  // Format provider concurrency (only show non-zero or if there are active tasks)
+  // Format provider concurrency with colors (show available capacity)
   const providerParts: string[] = [];
   const providersToShow = ["deepseek", "zhipu", "minimax"];
 
@@ -116,7 +226,7 @@ export function formatStatusLine(data: StatusLineData): string {
     const status = data.providers[provider];
     if (status && (status.active > 0 || data.activeTasks.length > 0)) {
       const abbrev = getProviderAbbrev(provider);
-      providerParts.push(`${abbrev}: ${status.active}/${status.limit}`);
+      providerParts.push(formatProviderCapacity(abbrev, status));
     }
   }
 
@@ -130,20 +240,23 @@ export function formatStatusLine(data: StatusLineData): string {
 
 /**
  * Format a minimal status line when no data is available
- * Shows "omc ready" to indicate the system is available
+ * Shows "omc ● ready" with green indicator
  */
 export function formatEmptyStatusLine(): string {
-  return "omc ready";
+  const readyIndicator = colorize("●", colors.ready);
+  return `omc ${readyIndicator} ready`;
 }
 
 /**
  * Format idle status line with provider info
  * Shows availability even when no tasks are running
+ * Output: "omc ● ready | DS: 10 ZP: 10 MM: 5" (with colors)
  */
 export function formatIdleStatusLine(providers: Record<string, ProviderStatus>): string {
-  const parts: string[] = ["omc ready"];
+  const readyIndicator = colorize("●", colors.ready);
+  const parts: string[] = [`omc ${readyIndicator} ready`];
 
-  // Show provider availability
+  // Show provider availability with colors
   const providerParts: string[] = [];
   const providersToShow = ["deepseek", "zhipu", "minimax"];
 
@@ -151,7 +264,8 @@ export function formatIdleStatusLine(providers: Record<string, ProviderStatus>):
     const status = providers[provider];
     if (status && status.limit > 0) {
       const abbrev = getProviderAbbrev(provider);
-      providerParts.push(`${abbrev}: ${status.limit}`);
+      // For idle state, show full capacity in green
+      providerParts.push(`${abbrev}: ${colorize(String(status.limit), colors.full)}`);
     }
   }
 

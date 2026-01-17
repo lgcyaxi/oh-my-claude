@@ -82,12 +82,14 @@ export function saveSettings(settings: ClaudeSettings): void {
 
 /**
  * Add hook to settings (if not already present)
+ * When force is true, replaces existing hook with new command
  */
 function addHook(
   settings: ClaudeSettings,
   hookType: "PreToolUse" | "PostToolUse" | "Stop",
   matcher: string,
-  command: string
+  command: string,
+  force = false
 ): boolean {
   if (!settings.hooks) {
     settings.hooks = {};
@@ -98,14 +100,19 @@ function addHook(
   }
 
   // Check if hook already exists
-  const existing = settings.hooks[hookType]!.find(
+  const existingIndex = settings.hooks[hookType]!.findIndex(
     (h) =>
       h.matcher === matcher &&
       h.hooks.some((hook) => hook.command.includes("oh-my-claude"))
   );
 
-  if (existing) {
-    return false; // Already installed
+  if (existingIndex !== -1) {
+    if (force) {
+      // Remove existing hook so we can replace it with updated command
+      settings.hooks[hookType]!.splice(existingIndex, 1);
+    } else {
+      return false; // Already installed
+    }
   }
 
   settings.hooks[hookType]!.push({
@@ -171,75 +178,106 @@ function removeMcpServer(settings: ClaudeSettings, name: string): boolean {
 /**
  * Install oh-my-claude hooks into settings
  */
-export function installHooks(hooksDir: string): { installed: string[]; skipped: string[] } {
+export function installHooks(hooksDir: string, force = false): {
+  installed: string[];
+  updated: string[];
+  skipped: string[];
+} {
   const settings = loadSettings();
   const installed: string[] = [];
+  const updated: string[] = [];
   const skipped: string[] = [];
 
   // Comment checker hook
-  if (
-    addHook(
-      settings,
-      "PreToolUse",
-      "Edit|Write",
-      `node ${hooksDir}/comment-checker.js`
-    )
-  ) {
-    installed.push("comment-checker (PreToolUse)");
+  const commentCheckerResult = addHook(
+    settings,
+    "PreToolUse",
+    "Edit|Write",
+    `node ${hooksDir}/comment-checker.js`,
+    force
+  );
+  if (commentCheckerResult) {
+    if (force) {
+      // Check if this was an update or fresh install
+      const wasExisting = settings.hooks?.PreToolUse?.some(
+        (h) => h.matcher === "Edit|Write" && h.hooks.some((hook) => hook.command.includes("comment-checker"))
+      );
+      if (wasExisting && settings.hooks?.PreToolUse) {
+        // After addHook with force, there's now a new entry plus the old one was removed
+        // So we count this as an update
+        updated.push("comment-checker (PreToolUse)");
+      } else {
+        installed.push("comment-checker (PreToolUse)");
+      }
+    } else {
+      installed.push("comment-checker (PreToolUse)");
+    }
   } else {
     skipped.push("comment-checker (already installed)");
   }
 
   // Todo continuation hook
-  if (
-    addHook(
-      settings,
-      "Stop",
-      ".*",
-      `node ${hooksDir}/todo-continuation.js`
-    )
-  ) {
-    installed.push("todo-continuation (Stop)");
+  const todoResult = addHook(
+    settings,
+    "Stop",
+    ".*",
+    `node ${hooksDir}/todo-continuation.js`,
+    force
+  );
+  if (todoResult) {
+    if (force) {
+      updated.push("todo-continuation (Stop)");
+    } else {
+      installed.push("todo-continuation (Stop)");
+    }
   } else {
     skipped.push("todo-continuation (already installed)");
   }
 
   // Task tracker hook (PreToolUse for Task tool)
-  if (
-    addHook(
-      settings,
-      "PreToolUse",
-      "Task",
-      `node ${hooksDir}/task-tracker.js`
-    )
-  ) {
-    installed.push("task-tracker (PreToolUse:Task)");
+  const taskPreResult = addHook(
+    settings,
+    "PreToolUse",
+    "Task",
+    `node ${hooksDir}/task-tracker.js`,
+    force
+  );
+  if (taskPreResult) {
+    if (force) {
+      updated.push("task-tracker (PreToolUse:Task)");
+    } else {
+      installed.push("task-tracker (PreToolUse:Task)");
+    }
   } else {
     skipped.push("task-tracker (already installed)");
   }
 
   // Task tracker hook (PostToolUse for Task tool completion)
-  if (
-    addHook(
-      settings,
-      "PostToolUse",
-      "Task",
-      `node ${hooksDir}/task-tracker.js`
-    )
-  ) {
-    installed.push("task-tracker (PostToolUse:Task)");
+  const taskPostResult = addHook(
+    settings,
+    "PostToolUse",
+    "Task",
+    `node ${hooksDir}/task-tracker.js`,
+    force
+  );
+  if (taskPostResult) {
+    if (force) {
+      updated.push("task-tracker (PostToolUse:Task)");
+    } else {
+      installed.push("task-tracker (PostToolUse:Task)");
+    }
   } else {
     skipped.push("task-tracker (already installed)");
   }
 
   saveSettings(settings);
-  return { installed, skipped };
+  return { installed, updated, skipped };
 }
 
 /**
  * Install oh-my-claude MCP server using claude mcp add CLI
  */
-export function installMcpServer(serverPath: string): boolean {
+export function installMcpServer(serverPath: string, force = false): boolean {
   const { execSync } = require("node:child_process");
 
   try {
@@ -253,9 +291,17 @@ export function installMcpServer(serverPath: string): boolean {
     }
 
     if (alreadyInstalled) {
-      // Already installed - just return success
-      // Note: To update the path, user needs to run `claude mcp remove oh-my-claude-background` first
-      return true;
+      if (force) {
+        // Remove and re-add to update the path
+        try {
+          execSync("claude mcp remove --scope user oh-my-claude-background", { stdio: ["pipe", "pipe", "pipe"] });
+        } catch {
+          // Ignore remove errors
+        }
+      } else {
+        // Already installed - just return success
+        return true;
+      }
     }
 
     // Add MCP server globally (--scope user)
@@ -331,19 +377,21 @@ export function uninstallFromSettings(): {
  * Install oh-my-claude statusLine
  * If user has existing statusLine, creates a wrapper that calls both
  */
-export function installStatusLine(statusLineScriptPath: string): {
+export function installStatusLine(statusLineScriptPath: string, force = false): {
   installed: boolean;
   wrapperCreated: boolean;
   existingBackedUp: boolean;
+  updated: boolean;
 } {
   const { mergeStatusLine } = require("./statusline-merger");
 
   const settings = loadSettings();
   const existing = settings.statusLine;
 
-  const result = mergeStatusLine(existing);
+  const result = mergeStatusLine(existing, force);
 
-  if (result.config.command !== existing?.command) {
+  // Update settings if config changed or force mode triggered an update
+  if (result.config.command !== existing?.command || result.updated) {
     settings.statusLine = result.config;
     saveSettings(settings);
   }
@@ -352,6 +400,7 @@ export function installStatusLine(statusLineScriptPath: string): {
     installed: true,
     wrapperCreated: result.wrapperCreated,
     existingBackedUp: result.backupCreated,
+    updated: result.updated || false,
   };
 }
 

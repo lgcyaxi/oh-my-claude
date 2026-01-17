@@ -85,7 +85,6 @@ export const claudeReviewerAgent: AgentDefinition = {
   defaultModel: "claude-sonnet-4-5",
   defaultTemperature: 0.1,
   executionMode: "task",
-  category: "reviewer",
   restrictedTools: ["Edit", "Write"],
 };
 

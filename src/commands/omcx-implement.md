@@ -24,7 +24,7 @@ Implement a small feature or change directly without full planning workflow.
    - Where does it go? (file, location)
    - Are there existing patterns to follow?
 
-2. **Quick Context Gather**
+2. **Quick Context Gather** (model selection is handled by Claude Code)
    ```
    Task(subagent_type="Explore", prompt="Find similar implementations for [feature]")
    ```

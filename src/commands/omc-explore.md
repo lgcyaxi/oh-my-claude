@@ -1,24 +1,21 @@
 # /omc-explore
 
-Fast codebase exploration via DeepSeek Chat (oh-my-claude).
+Fast codebase exploration using Claude Code's built-in Explore agent.
 
 ## Instructions
 
-The user wants fast codebase exploration using the **Explore** agent (DeepSeek Chat).
+The user wants fast codebase exploration using the **Explore** subagent (Claude Code's built-in).
 
-**To use Explore, call the MCP tool:**
+**To use Explore, call the Task tool:**
 
 ```
-Use mcp__oh-my-claude-background__launch_background_task with:
-- agent: "explore"
-- prompt: [what to find/explore in the codebase]
+Task(
+  subagent_type="Explore",
+  prompt="[what to find/explore in the codebase]"
+)
 ```
 
-Then poll for results:
-```
-Use mcp__oh-my-claude-background__poll_task with:
-- task_id: [returned task_id]
-```
+> Note: Model selection is handled by Claude Code internally.
 
 **Explore excels at:**
 - Finding specific files/functions
@@ -27,4 +24,11 @@ Use mcp__oh-my-claude-background__poll_task with:
 - Mapping dependencies
 - Quick codebase navigation
 
-Now launch the Explore background task with the user's exploration request.
+**For parallel exploration**, launch multiple Task calls simultaneously:
+
+```
+Task(subagent_type="Explore", prompt="Find auth implementations...")
+Task(subagent_type="Explore", prompt="Find error handling patterns...")
+```
+
+Now execute the Explore agent with the user's exploration request.

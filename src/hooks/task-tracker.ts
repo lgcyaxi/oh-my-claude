@@ -15,15 +15,73 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
+import { getSessionStatusPath, getSessionTaskAgentsPath, ensureSessionDir, getActiveSessions, writeCurrentPPID } from "../statusline/session";
+
+// Config file paths
+const CONFIG_FILES = [
+  join(homedir(), ".claude", "oh-my-claude.json"),
+  join(homedir(), ".claude", "oh-my-claude", "config.json"),
+];
+
+// Load debug setting from config file
+function loadDebugSetting(): boolean {
+  // First check environment variable (for backward compatibility)
+  if (process.env.DEBUG_TASK_TRACKER === "1") {
+    return true;
+  }
+
+  // Then check config files
+  for (const configPath of CONFIG_FILES) {
+    try {
+      if (existsSync(configPath)) {
+        const config = JSON.parse(readFileSync(configPath, "utf-8"));
+        if (config.debugTaskTracker === true) {
+          return true;
+        }
+      }
+    } catch {
+      // Ignore errors, continue to next config file
+    }
+  }
+
+  return false;
+}
+
+// Debug logging - enable via config file or DEBUG_TASK_TRACKER=1
+const debug = loadDebugSetting();
+const debugLog = (...args: unknown[]) => {
+  if (debug) {
+    const timestamp = new Date().toISOString();
+    // Write to debug log file
+    try {
+      const debugPath = join(homedir(), ".claude", "oh-my-claude", "task-tracker-debug.log");
+      writeFileSync(debugPath, `[${timestamp}] ${args.join(" ")}\n`, { flag: "a" });
+    } catch {
+      // Ignore debug logging errors
+    }
+  }
+};
 
 interface ToolUseInput {
-  tool: string;
+  tool?: string;
+  tool_name?: string; // Official field name from docs
   tool_input?: {
     subagent_type?: string;
     description?: string;
     prompt?: string;
+    model?: string; // sonnet, opus, haiku
+  };
+  // Also support 'input' field (what Claude Code actually sends)
+  input?: {
+    subagent_type?: string;
+    description?: string;
+    prompt?: string;
+    model?: string;
   };
   tool_output?: string;
+  tool_response?: string; // Official field name from docs
+  output?: string; // Alternative field name
+  hook_event_name?: string; // PreToolUse or PostToolUse
 }
 
 interface HookResponse {
@@ -34,16 +92,14 @@ interface HookResponse {
   };
 }
 
-// Status file path (shared with MCP server)
-const STATUS_FILE_PATH = join(homedir(), ".claude", "oh-my-claude", "status.json");
-
-// Task agents file (tracks active Task tool agents)
-const TASK_AGENTS_FILE = join(homedir(), ".claude", "oh-my-claude", "task-agents.json");
+// Note: Status and task agents files are now session-specific
+// Paths are obtained via getSessionStatusPath() and getSessionTaskAgentsPath()
 
 interface TaskAgent {
   id: string;
   type: string;
   description: string;
+  model?: string; // sonnet, opus, haiku
   startedAt: number;
 }
 
@@ -52,40 +108,49 @@ interface TaskAgentsData {
 }
 
 /**
- * Load current task agents
+ * Load current task agents from session-specific file
  */
 function loadTaskAgents(): TaskAgentsData {
   try {
-    if (!existsSync(TASK_AGENTS_FILE)) {
+    const taskAgentsPath = getSessionTaskAgentsPath();
+    if (!existsSync(taskAgentsPath)) {
       return { agents: [] };
     }
-    const content = readFileSync(TASK_AGENTS_FILE, "utf-8");
-    return JSON.parse(content);
+    const content = readFileSync(taskAgentsPath, "utf-8");
+    const data = JSON.parse(content);
+    // Validate data structure - ensure agents array exists
+    if (!data || !Array.isArray(data.agents)) {
+      return { agents: [] };
+    }
+    return data as TaskAgentsData;
   } catch {
     return { agents: [] };
   }
 }
 
 /**
- * Save task agents
+ * Save task agents to session-specific file
  */
 function saveTaskAgents(data: TaskAgentsData): void {
   try {
-    const dir = dirname(TASK_AGENTS_FILE);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-    writeFileSync(TASK_AGENTS_FILE, JSON.stringify(data, null, 2));
-  } catch {
+    ensureSessionDir();
+    const taskAgentsPath = getSessionTaskAgentsPath();
+    writeFileSync(taskAgentsPath, JSON.stringify(data, null, 2));
+    debugLog("Saved task agents:", JSON.stringify(data));
+  } catch (error) {
+    debugLog("Failed to save task agents:", error);
     // Silently fail
   }
 }
 
 /**
- * Update the shared status file to include Task agents
+ * Update the session-specific status file to include Task agents
  */
 function updateStatusFile(): void {
   try {
+    ensureSessionDir();
+    const statusPath = getSessionStatusPath();
+
     // Read current status
     let status: any = {
       activeTasks: [],
@@ -93,9 +158,9 @@ function updateStatusFile(): void {
       updatedAt: new Date().toISOString(),
     };
 
-    if (existsSync(STATUS_FILE_PATH)) {
+    if (existsSync(statusPath)) {
       try {
-        status = JSON.parse(readFileSync(STATUS_FILE_PATH, "utf-8"));
+        status = JSON.parse(readFileSync(statusPath, "utf-8"));
       } catch {
         // Use default
       }
@@ -108,6 +173,7 @@ function updateStatusFile(): void {
     const taskAgentTasks = taskAgents.agents.map((agent) => ({
       agent: `@${agent.type}`, // @ prefix indicates Claude-subscription agent
       startedAt: agent.startedAt,
+      model: agent.model, // Include model info (sonnet, opus, haiku)
       isTaskTool: true,
     }));
 
@@ -123,11 +189,7 @@ function updateStatusFile(): void {
     status.updatedAt = new Date().toISOString();
 
     // Write back
-    const dir = dirname(STATUS_FILE_PATH);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-    writeFileSync(STATUS_FILE_PATH, JSON.stringify(status, null, 2));
+    writeFileSync(statusPath, JSON.stringify(status, null, 2));
   } catch {
     // Silently fail
   }
@@ -154,17 +216,42 @@ function getAgentDisplayName(subagentType: string): string {
   return mapping[subagentType] || subagentType;
 }
 
+/**
+ * Infer default model for subagent_type when not explicitly specified
+ * Returns "?" for unknown types to help with debugging
+ */
+function inferDefaultModel(subagentType: string): string {
+  const defaultModels: Record<string, string> = {
+    Plan: "sonnet",           // Planning needs good reasoning
+    Explore: "haiku",         // Fast codebase exploration
+    Bash: "haiku",            // Simple command execution
+    "general-purpose": "sonnet", // General tasks need balance
+    "claude-code-guide": "haiku", // Quick doc lookup
+  };
+  // Return "?" for unknown types - helps identify missing mappings or bugs
+  return defaultModels[subagentType] ?? "?";
+}
+
 async function main() {
+  debugLog("task-tracker hook invoked");
+
+  // Write current PPID so MCP server can discover our Claude Code session
+  writeCurrentPPID();
+
   // Read input from stdin
   let inputData = "";
   try {
     inputData = readFileSync(0, "utf-8");
-  } catch {
+  } catch (error) {
+    debugLog("Failed to read stdin:", error);
     console.log(JSON.stringify({ decision: "approve" }));
     return;
   }
 
+  debugLog("Raw input:", inputData);
+
   if (!inputData.trim()) {
+    debugLog("Empty input, approving");
     console.log(JSON.stringify({ decision: "approve" }));
     return;
   }
@@ -172,37 +259,72 @@ async function main() {
   let toolInput: ToolUseInput;
   try {
     toolInput = JSON.parse(inputData);
-  } catch {
+  } catch (error) {
+    debugLog("Failed to parse JSON:", error);
     console.log(JSON.stringify({ decision: "approve" }));
     return;
   }
+
+  debugLog("Parsed toolInput:", JSON.stringify(toolInput));
+
+  // Get tool name from either field
+  const toolName = toolInput.tool || toolInput.tool_name || "";
 
   // Only process Task tool
-  if (toolInput.tool !== "Task") {
+  if (toolName !== "Task") {
+    debugLog("Not a Task tool, approving:", toolName);
     console.log(JSON.stringify({ decision: "approve" }));
     return;
   }
 
-  const subagentType = toolInput.tool_input?.subagent_type || "unknown";
-  const description = toolInput.tool_input?.description || "";
+  // Support both 'tool_input' and 'input' field names
+  const inputDataFields = toolInput.tool_input || toolInput.input || {};
+  const subagentType = inputDataFields.subagent_type || "unknown";
+  const description = inputDataFields.description || "";
+  // Use explicit model if provided, otherwise infer from subagent_type
+  const model = inputDataFields.model || inferDefaultModel(subagentType);
 
-  // Check if this is PreToolUse (no tool_output) or PostToolUse (has tool_output)
-  const isPreToolUse = !toolInput.tool_output;
+  debugLog("Task tool detected - subagent:", subagentType, "model:", model, "(inferred:", !inputDataFields.model, ")");
+
+  // Check if this is PreToolUse or PostToolUse
+  // Method 1: Check hook_event_name field (official way)
+  // Method 2: Check for presence of tool_response/tool_output (PostToolUse has response)
+  const hookEventName = toolInput.hook_event_name;
+  const hasResponse = toolInput.tool_response || toolInput.tool_output || toolInput.output;
+
+  // If hook_event_name is explicitly set, use it
+  // Otherwise, infer from presence of response field
+  const isPreToolUse = hookEventName === "PreToolUse" ||
+                       (hookEventName === undefined && !hasResponse);
+
+  debugLog("Hook event:", hookEventName, "hasResponse:", hasResponse, "isPreToolUse:", isPreToolUse);
 
   if (isPreToolUse) {
     // Task is about to launch - add to tracking
     const taskAgents = loadTaskAgents();
+    debugLog("Current task agents:", taskAgents.agents.length);
 
     const newAgent: TaskAgent = {
       id: generateId(),
       type: getAgentDisplayName(subagentType),
       description: description,
+      model: model,
       startedAt: Date.now(),
     };
 
+    debugLog("Adding new agent:", JSON.stringify(newAgent));
     taskAgents.agents.push(newAgent);
     saveTaskAgents(taskAgents);
     updateStatusFile();
+
+    // Verify file was written
+    if (debug) {
+      const taskAgentsPath = getSessionTaskAgentsPath();
+      if (existsSync(taskAgentsPath)) {
+        const verifyData = readFileSync(taskAgentsPath, "utf-8");
+        debugLog("Verified task-agents.json:", verifyData);
+      }
+    }
 
     // Provide context about the launch
     const response: HookResponse = {
@@ -212,10 +334,13 @@ async function main() {
   } else {
     // Task completed - remove from tracking
     const taskAgents = loadTaskAgents();
+    debugLog("Task completion - current agents:", taskAgents.agents.length);
 
     // Remove the most recent agent of this type (LIFO)
     const displayName = getAgentDisplayName(subagentType);
     const index = taskAgents.agents.findIndex((a) => a.type === displayName);
+
+    debugLog("Looking for agent type:", displayName, "index:", index);
 
     if (index !== -1) {
       const removedArr = taskAgents.agents.splice(index, 1);
@@ -225,6 +350,7 @@ async function main() {
         return;
       }
       const duration = Math.floor((Date.now() - removed.startedAt) / 1000);
+      debugLog("Agent completed, duration:", duration, "seconds");
 
       saveTaskAgents(taskAgents);
       updateStatusFile();
@@ -243,6 +369,7 @@ async function main() {
       return;
     }
 
+    debugLog("Agent not found for removal:", displayName);
     console.log(JSON.stringify({ decision: "approve" }));
   }
 }

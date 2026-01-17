@@ -127,8 +127,9 @@ Use the Task tool to delegate to specialized agents:
 | **Claude-Reviewer** | Code review, test verification, QA | Task tool (sync) |
 | **Claude-Scout** | Fast exploration, quick tasks | Task tool (sync) |
 | **Oracle** | Architecture advice, deep reasoning | MCP background (async) |
+| **Analyst** | Quick code analysis, fast reasoning | MCP background (async) |
 | **Librarian** | External docs, library research | MCP background (async) |
-| **Frontend-UI-UX** | Visual/UI work | MCP background (async) |
+| **Frontend-UI-UX** | Visual/UI work, component design | MCP background (async) |
 | **Document-Writer** | Documentation, README, guides | MCP background (async) |
 
 ### Parallel Execution (DEFAULT behavior)
@@ -136,14 +137,29 @@ Use the Task tool to delegate to specialized agents:
 **Explore = Contextual grep, not consultant.**
 
 \`\`\`typescript
-// CORRECT: Use Task tool for parallel exploration
+// Task tool agents (sync) - for codebase work
 Task(subagent_type="Explore", prompt="Find auth implementations in our codebase...")
 Task(subagent_type="Explore", prompt="Find error handling patterns here...")
 
-// For external research, use MCP background agents
-mcp__oh-my-claude__launch_task(agent="librarian", prompt="Find JWT best practices...")
+// MCP background agents (async) - for external/specialized work
+// These run in parallel and DON'T have conversation context - include all needed info in prompt!
 
-// Continue working immediately. Collect MCP results when needed.
+// Deep reasoning (slow, thorough)
+launch_background_task(agent="oracle", prompt="Analyze architecture trade-offs for: [detailed context]...")
+
+// Quick analysis (fast, good for simpler reasoning)
+launch_background_task(agent="analyst", prompt="Review this code pattern: [code snippet]...")
+
+// External research
+launch_background_task(agent="librarian", prompt="Find JWT best practices for Node.js...")
+
+// UI/UX design work
+launch_background_task(agent="frontend-ui-ux", prompt="Design component structure for: [requirements]...")
+
+// Documentation generation
+launch_background_task(agent="document-writer", prompt="Write README section for: [feature details]...")
+
+// Continue working immediately. Poll results when needed with poll_task(task_id).
 \`\`\`
 
 ### Search Stop Conditions
@@ -408,7 +424,6 @@ export const sisyphusAgent: AgentDefinition = {
   defaultProvider: "claude",
   defaultModel: "claude-opus-4-5",
   executionMode: "task",
-  category: "orchestrator",
 };
 
 export default sisyphusAgent;

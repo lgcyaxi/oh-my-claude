@@ -25,6 +25,7 @@ import {
   listTasks,
   cleanupTasks,
   updateStatusFile,
+  waitForTaskCompletion,
 } from "./task-manager";
 import { getConcurrencyStatus } from "./concurrency";
 import { getProvidersStatus } from "../../providers/router";
@@ -51,9 +52,6 @@ Use this for async operations that should run in parallel without blocking.
 - visual-engineering: UI/UX work
 - writing: Documentation and text
 
-**Fallback Behavior**:
-If the provider's API key is not configured, the task will return with status "fallback_required" and include fallback info. When this happens, use Claude Code's Task tool with the specified fallback model instead.
-
 Note: Agents using Claude subscription (sisyphus, claude-reviewer, claude-scout) should use Claude Code's Task tool instead.`,
     inputSchema: {
       type: "object",
@@ -76,6 +74,56 @@ Note: Agents using Claude subscription (sisyphus, claude-reviewer, claude-scout)
           type: "string",
           description:
             "Optional custom system prompt (overrides agent default)",
+        },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
+    name: "execute_agent",
+    description: `Execute an agent and wait for the result (blocking).
+
+Use this for synchronous agent execution when you need the result immediately.
+
+**Available Agents** (use 'agent' parameter):
+- oracle: Deep reasoning, architecture advice (DeepSeek reasoner)
+- librarian: External docs, library research (ZhiPu GLM)
+- explore: Codebase search (DeepSeek chat)
+- frontend-ui-ux: Visual/UI work (ZhiPu GLM-4v)
+- document-writer: Documentation (MiniMax)
+
+**Available Categories** (use 'category' parameter):
+- ultrabrain: High-IQ reasoning tasks
+- quick: Fast general tasks
+- visual-engineering: UI/UX work
+- writing: Documentation and text
+
+**Timeout Behavior**:
+If the task takes longer than the timeout (default: 5 minutes), returns the task_id so you can poll manually with poll_task.
+
+For parallel execution of multiple agents, use launch_background_task + poll_task instead.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent: {
+          type: "string",
+          description: "Agent name (oracle, librarian, explore, frontend-ui-ux, document-writer)",
+        },
+        category: {
+          type: "string",
+          description: "Category (ultrabrain, quick, visual-engineering, writing)",
+        },
+        prompt: {
+          type: "string",
+          description: "The prompt/task for the agent to execute",
+        },
+        system_prompt: {
+          type: "string",
+          description: "Optional custom system prompt (overrides agent default)",
+        },
+        timeout_ms: {
+          type: "number",
+          description: "Optional timeout in milliseconds (default: 300000 = 5 minutes)",
         },
       },
       required: ["prompt"],
@@ -121,8 +169,8 @@ Note: Agents using Claude subscription (sisyphus, claude-reviewer, claude-scout)
       properties: {
         status: {
           type: "string",
-          enum: ["pending", "running", "completed", "failed", "cancelled", "fallback_required"],
-          description: "Filter by status. 'fallback_required' means the provider API key is not configured and Claude Task tool should be used instead.",
+          enum: ["pending", "running", "completed", "failed", "cancelled"],
+          description: "Filter by status.",
         },
         limit: {
           type: "number",
@@ -229,6 +277,91 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "execute_agent": {
+        const { agent, category, prompt, system_prompt, timeout_ms } = args as {
+          agent?: string;
+          category?: string;
+          prompt: string;
+          system_prompt?: string;
+          timeout_ms?: number;
+        };
+
+        if (!prompt) {
+          return {
+            content: [{ type: "text", text: "Error: prompt is required" }],
+            isError: true,
+          };
+        }
+
+        // Validate agent if provided
+        if (agent) {
+          const agentDef = agents[agent.toLowerCase()];
+          if (!agentDef) {
+            return {
+              content: [{
+                type: "text",
+                text: `Error: Unknown agent "${agent}". Available: ${Object.keys(agents).join(", ")}`,
+              }],
+              isError: true,
+            };
+          }
+          if (agentDef.executionMode === "task") {
+            return {
+              content: [{
+                type: "text",
+                text: `Error: Agent "${agent}" uses Claude subscription. Use Claude Code's Task tool instead.`,
+              }],
+              isError: true,
+            };
+          }
+        }
+
+        // Launch the task
+        const taskId = await launchTask({
+          agentName: agent,
+          categoryName: category,
+          prompt,
+          systemPrompt: system_prompt,
+        });
+
+        // Wait for completion
+        const timeout = timeout_ms ?? 5 * 60 * 1000;
+        const result = await waitForTaskCompletion(taskId, timeout);
+
+        // Handle timeout
+        if (result.error?.includes("Timeout")) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                status: "timeout",
+                task_id: taskId,
+                message: result.error,
+              }),
+            }],
+          };
+        }
+
+        // Handle failure
+        if (result.status === "failed") {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ status: "failed", error: result.error }),
+            }],
+            isError: true,
+          };
+        }
+
+        // Success
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ status: result.status, result: result.result }),
+          }],
+        };
+      }
+
       case "poll_task": {
         const { task_id } = args as { task_id: string };
 
@@ -324,7 +457,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     completed: new Date(t.completedAt).toISOString(),
                   }),
                   ...(t.error && { error: t.error }),
-                  ...(t.fallback && { fallback: t.fallback }),
                 })),
               }),
             },
