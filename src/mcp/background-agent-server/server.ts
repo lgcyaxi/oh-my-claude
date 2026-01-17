@@ -42,7 +42,7 @@ Use this for async operations that should run in parallel without blocking.
 **Available Agents** (use 'agent' parameter):
 - oracle: Deep reasoning, architecture advice (DeepSeek reasoner)
 - librarian: External docs, library research (ZhiPu GLM)
-- explore: Codebase search (DeepSeek chat)
+- analyst: Code analysis, patterns (DeepSeek chat)
 - frontend-ui-ux: Visual/UI work (ZhiPu GLM-4v)
 - document-writer: Documentation (MiniMax)
 
@@ -59,7 +59,7 @@ Note: Agents using Claude subscription (sisyphus, claude-reviewer, claude-scout)
         agent: {
           type: "string",
           description:
-            "Agent name to use (oracle, librarian, explore, frontend-ui-ux, document-writer)",
+            "Agent name to use (oracle, analyst, librarian, frontend-ui-ux, document-writer)",
         },
         category: {
           type: "string",
@@ -108,7 +108,7 @@ Use this for synchronous agent execution when you need the result immediately.
 **Available Agents** (use 'agent' parameter):
 - oracle: Deep reasoning, architecture advice (DeepSeek reasoner)
 - librarian: External docs, library research (ZhiPu GLM)
-- explore: Codebase search (DeepSeek chat)
+- analyst: Code analysis, patterns (DeepSeek chat)
 - frontend-ui-ux: Visual/UI work (ZhiPu GLM-4v)
 - document-writer: Documentation (MiniMax)
 
@@ -127,7 +127,7 @@ For parallel execution of multiple agents, use launch_background_task + poll_tas
       properties: {
         agent: {
           type: "string",
-          description: "Agent name (oracle, librarian, explore, frontend-ui-ux, document-writer)",
+          description: "Agent name (oracle, analyst, librarian, frontend-ui-ux, document-writer)",
         },
         category: {
           type: "string",
@@ -179,6 +179,10 @@ For parallel execution of multiple agents, use launch_background_task + poll_tas
         task_id: {
           type: "string",
           description: "The task ID returned by launch_background_task",
+        },
+        wait_seconds: {
+          type: "number",
+          description: "Wait up to this many seconds for completion before returning (default: 0 = instant). Use 10-30 seconds to reduce polling frequency while allowing statusline updates.",
         },
       },
       required: ["task_id"],
@@ -427,7 +431,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "poll_task": {
-        const { task_id } = args as { task_id: string };
+        const { task_id, wait_seconds } = args as { task_id: string; wait_seconds?: number };
 
         if (!task_id) {
           return {
@@ -436,6 +440,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        // If wait_seconds provided, wait for completion with timeout
+        if (wait_seconds && wait_seconds > 0) {
+          const timeoutMs = Math.min(wait_seconds * 1000, 60000); // Cap at 60 seconds
+          const result = await waitForTaskCompletion(task_id, timeoutMs, 500);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result),
+              },
+            ],
+          };
+        }
+
+        // Instant poll (no waiting)
         const result = pollTask(task_id);
 
         return {

@@ -6,21 +6,28 @@ Consult Librarian for research via ZhiPu GLM (oh-my-claude).
 
 The user wants research using the **Librarian** agent (ZhiPu GLM).
 
-**To use Librarian, call the MCP tool:**
+**Step 1: Launch the task (non-blocking)**
 
 ```
-Use mcp__oh-my-claude-background__execute_agent with:
+Use mcp__oh-my-claude-background__launch_background_task with:
 - agent: "librarian"
 - prompt: [user's research question]
 ```
 
-This will block until Librarian responds with the research.
+This returns a task_id immediately. The statusline will show progress.
+
+**Step 2: Poll for results (with wait)**
+
+```
+Use mcp__oh-my-claude-background__poll_task with:
+- task_id: [the task_id from step 1]
+- wait_seconds: 30
+```
+
+This waits up to 30 seconds per call. Repeat until status is "completed" or "failed".
 
 **If you receive a "fallback_required" response:**
 Use Claude Code's Task tool with model "sonnet" instead.
-
-**If you receive a "timeout" response:**
-Use the returned task_id with poll_task to check for results later.
 
 **Librarian excels at:**
 - External documentation research
@@ -29,4 +36,4 @@ Use the returned task_id with poll_task to check for results later.
 - Multi-source synthesis
 - Technical reference gathering
 
-Now execute the Librarian agent with the user's research request.
+Now launch the Librarian agent with the user's research request, then poll for results.

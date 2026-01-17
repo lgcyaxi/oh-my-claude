@@ -66,10 +66,11 @@ export interface StatusLineData {
 // Agent name abbreviations for compact display (MCP agents)
 const AGENT_ABBREV: Record<string, string> = {
   oracle: "Oracle",
+  analyst: "Analyst",
   librarian: "Lib",
-  explore: "Exp",
   "frontend-ui-ux": "UI",
   "document-writer": "Doc",
+  prometheus: "Prom",
 };
 
 // Task tool agent abbreviations (Claude-subscription agents)
