@@ -176,6 +176,26 @@ function removeMcpServer(settings: ClaudeSettings, name: string): boolean {
 }
 
 /**
+ * Get the node executable path for hook commands
+ * On Windows, this helps avoid file association issues
+ */
+function getNodeCommand(): string {
+  const { platform } = require("node:os");
+  if (platform() === "win32") {
+    try {
+      const { execSync } = require("node:child_process");
+      // Get the full path to node executable and quote it
+      const nodePath = execSync('node -e "console.log(process.execPath)"', { encoding: "utf-8" }).trim();
+      return `"${nodePath}"`;
+    } catch {
+      // Fallback to 'node' if we can't get the path
+      return "node";
+    }
+  }
+  return "node";
+}
+
+/**
  * Install oh-my-claude hooks into settings
  */
 export function installHooks(hooksDir: string, force = false): {
@@ -188,12 +208,14 @@ export function installHooks(hooksDir: string, force = false): {
   const updated: string[] = [];
   const skipped: string[] = [];
 
+  const nodeCmd = getNodeCommand();
+
   // Comment checker hook
   const commentCheckerResult = addHook(
     settings,
     "PreToolUse",
     "Edit|Write",
-    `node ${hooksDir}/comment-checker.js`,
+    `${nodeCmd} ${hooksDir}/comment-checker.js`,
     force
   );
   if (commentCheckerResult) {
@@ -221,7 +243,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "Stop",
     ".*",
-    `node ${hooksDir}/todo-continuation.js`,
+    `${nodeCmd} ${hooksDir}/todo-continuation.js`,
     force
   );
   if (todoResult) {
@@ -239,7 +261,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PreToolUse",
     "Task",
-    `node ${hooksDir}/task-tracker.js`,
+    `${nodeCmd} ${hooksDir}/task-tracker.js`,
     force
   );
   if (taskPreResult) {
@@ -257,7 +279,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PostToolUse",
     "Task",
-    `node ${hooksDir}/task-tracker.js`,
+    `${nodeCmd} ${hooksDir}/task-tracker.js`,
     force
   );
   if (taskPostResult) {
@@ -275,10 +297,26 @@ export function installHooks(hooksDir: string, force = false): {
 }
 
 /**
+ * Get the node executable path
+ * On Windows, this helps avoid file association issues
+ */
+function getNodeExecutable(): string {
+  const { execSync } = require("node:child_process");
+  try {
+    // Get the path to node executable
+    return execSync("node -e \"console.log(process.execPath)\"", { encoding: "utf-8" }).trim();
+  } catch {
+    // Fallback to 'node' if we can't get the path
+    return "node";
+  }
+}
+
+/**
  * Install oh-my-claude MCP server using claude mcp add CLI
  */
 export function installMcpServer(serverPath: string, force = false): boolean {
   const { execSync } = require("node:child_process");
+  const { platform } = require("node:os");
 
   try {
     // Check if already installed
@@ -304,9 +342,12 @@ export function installMcpServer(serverPath: string, force = false): boolean {
       }
     }
 
+    // On Windows, use the full path to node.exe to avoid file association issues
+    const nodePath = platform() === "win32" ? `"${getNodeExecutable()}"` : "node";
+
     // Add MCP server globally (--scope user)
     execSync(
-      `claude mcp add --scope user oh-my-claude-background -- node "${serverPath}"`,
+      `claude mcp add --scope user oh-my-claude-background -- ${nodePath} "${serverPath}"`,
       { encoding: "utf-8" }
     );
     return true;
@@ -321,8 +362,9 @@ export function installMcpServer(serverPath: string, force = false): boolean {
 
     // Fallback to settings.json method
     const settings = loadSettings();
+    const nodePath = platform() === "win32" ? getNodeExecutable() : "node";
     const result = addMcpServer(settings, "oh-my-claude-background", {
-      command: "node",
+      command: nodePath,
       args: [serverPath],
     });
     if (result) {

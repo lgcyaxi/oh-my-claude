@@ -1209,30 +1209,67 @@ program
         // Step 3: Create wrapper that combines ccline and oh-my-claude statusline
         console.log("Creating statusline wrapper...");
         try {
-          const wrapperPath = join(homedir(), ".claude", "oh-my-claude", "statusline-wrapper.sh");
-          const omcStatusline = "node ~/.claude/oh-my-claude/dist/statusline/statusline.js";
-          const wrapperContent = `#!/bin/bash
-# oh-my-claude + CCometixLine StatusLine Wrapper
-# Auto-generated - combines ccline and oh-my-claude statuslines
+          const wrapperPath = join(homedir(), ".claude", "oh-my-claude", "statusline-wrapper.js");
+          const omcStatusline = join(homedir(), ".claude", "oh-my-claude", "dist", "statusline", "statusline.js");
+          const wrapperContent = `#!/usr/bin/env node
+/**
+ * oh-my-claude + CCometixLine StatusLine Wrapper
+ * Auto-generated - combines ccline and oh-my-claude statuslines
+ */
 
-input=$(cat)
+const { execSync } = require("node:child_process");
+const { join } = require("node:path");
+const { homedir } = require("node:os");
 
-# Call ccline (CCometixLine)
-ccline_output=$(echo "$input" | ccline 2>/dev/null || echo "")
+const omcStatusline = ${JSON.stringify(omcStatusline)};
 
-# Call oh-my-claude statusline
-omc_output=$(echo "$input" | ${omcStatusline} 2>/dev/null || echo "omc")
+try {
+  // Read input from stdin
+  let input = "";
+  process.stdin.setEncoding("utf-8");
+  for await (const chunk of process.stdin) {
+    input += chunk;
+  }
 
-# Combine outputs - ccline first, omc second
-if [ -n "$ccline_output" ] && [ -n "$omc_output" ]; then
-  printf "%s\\n%s\\n" "$ccline_output" "$omc_output"
-elif [ -n "$ccline_output" ]; then
-  printf "%s\\n" "$ccline_output"
-elif [ -n "$omc_output" ]; then
-  printf "%s\\n" "$omc_output"
-else
-  echo ""
-fi
+  // Call ccline (CCometixLine)
+  let cclineOutput = "";
+  try {
+    cclineOutput = execSync("ccline", {
+      input,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: true,
+    }).trim();
+  } catch {
+    // Ignore errors
+  }
+
+  // Call oh-my-claude statusline
+  let omcOutput = "";
+  try {
+    omcOutput = execSync(\`node "\${omcStatusline}"\`, {
+      input,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: true,
+    }).trim();
+  } catch {
+    omcOutput = "omc";
+  }
+
+  // Combine outputs - ccline first, omc second
+  if (cclineOutput && omcOutput) {
+    console.log(cclineOutput);
+    console.log(omcOutput);
+  } else if (cclineOutput) {
+    console.log(cclineOutput);
+  } else if (omcOutput) {
+    console.log(omcOutput);
+  }
+} catch (error) {
+  // Silently fail
+  console.error(error);
+}
 `;
           writeFileSync(wrapperPath, wrapperContent);
           chmodSync(wrapperPath, 0o755);

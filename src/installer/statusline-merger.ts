@@ -7,7 +7,9 @@
 
 import { writeFileSync, chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
+import { chmod } from "node:fs/promises";
+import { execSync } from "node:child_process";
 
 export interface StatusLineConfig {
   type: "command";
@@ -15,11 +17,28 @@ export interface StatusLineConfig {
   padding?: number;
 }
 
-// Our statusline command
-const OMC_STATUSLINE_COMMAND = "node ~/.claude/oh-my-claude/dist/statusline/statusline.js";
+// Our statusline command - expanded for cross-platform compatibility
+const OMC_STATUSLINE_COMMAND = join(homedir(), ".claude", "oh-my-claude", "dist", "statusline", "statusline.js");
 
-// Wrapper script path
-const WRAPPER_SCRIPT_PATH = join(homedir(), ".claude", "oh-my-claude", "statusline-wrapper.sh");
+// Wrapper script path - use .mjs for ES modules (supports top-level await)
+const WRAPPER_SCRIPT_PATH = join(homedir(), ".claude", "oh-my-claude", "statusline-wrapper.mjs");
+
+/**
+ * Get the full node command for executing the wrapper script
+ * On Windows, uses full path to node.exe to avoid file association issues
+ */
+function getWrapperCommand(): string {
+  if (platform() === "win32") {
+    try {
+      const nodePath = execSync('node -e "console.log(process.execPath)"', { encoding: "utf-8" }).trim();
+      return `"${nodePath}" "${WRAPPER_SCRIPT_PATH}"`;
+    } catch {
+      // Fallback
+      return `node "${WRAPPER_SCRIPT_PATH}"`;
+    }
+  }
+  return WRAPPER_SCRIPT_PATH;
+}
 
 // Backup file for original statusline config
 const BACKUP_FILE_PATH = join(homedir(), ".claude", "oh-my-claude", "statusline-backup.json");
@@ -33,32 +52,74 @@ function isOurStatusLine(command: string): boolean {
 
 /**
  * Generate a wrapper script that calls both statuslines
+ * Uses ES modules for cross-platform compatibility with top-level await
  * Puts omc status on second line for better visibility
  */
 function generateWrapperScript(existingCommand: string): string {
-  return `#!/bin/bash
-# oh-my-claude StatusLine Wrapper
-# Calls both the original statusLine and oh-my-claude's statusline
-# Auto-generated - do not edit manually
+  return `#!/usr/bin/env node
+/**
+ * oh-my-claude StatusLine Wrapper
+ * Calls both the original statusLine and oh-my-claude's statusline
+ * Auto-generated - do not edit manually
+ */
 
-input=$(cat)
+import { execSync } from "node:child_process";
+import { platform } from "node:os";
 
-# Call existing statusline
-existing_output=$(echo "$input" | ${existingCommand} 2>/dev/null || echo "")
+const existingCommand = ${JSON.stringify(existingCommand)};
+const omcStatusline = ${JSON.stringify(OMC_STATUSLINE_COMMAND)};
 
-# Call oh-my-claude statusline
-omc_output=$(echo "$input" | ${OMC_STATUSLINE_COMMAND} 2>/dev/null || echo "omc")
+try {
+  // Read input from stdin
+  let input = "";
+  process.stdin.setEncoding("utf-8");
+  for await (const chunk of process.stdin) {
+    input += chunk;
+  }
 
-# Combine outputs - put omc on second line for better visibility
-if [ -n "$existing_output" ] && [ -n "$omc_output" ]; then
-  printf "%s\\n%s\\n" "$existing_output" "$omc_output"
-elif [ -n "$existing_output" ]; then
-  printf "%s\\n" "$existing_output"
-elif [ -n "$omc_output" ]; then
-  printf "%s\\n" "$omc_output"
-else
-  echo ""
-fi
+  // Call existing statusline
+  let existingOutput = "";
+  try {
+    existingOutput = execSync(existingCommand, {
+      input,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: true,
+    }).trim();
+  } catch {
+    // Ignore errors
+  }
+
+  // Call oh-my-claude statusline
+  let omcOutput = "";
+  try {
+    // On Windows, use the full path to node.exe to avoid file association issues
+    const nodeCmd = platform() === "win32"
+      ? \`"\${process.execPath}"\`
+      : "node";
+    omcOutput = execSync(\`\${nodeCmd} "\${omcStatusline}"\`, {
+      input,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: true,
+    }).trim();
+  } catch {
+    omcOutput = "omc";
+  }
+
+  // Combine outputs - put omc on second line for better visibility
+  if (existingOutput && omcOutput) {
+    console.log(existingOutput);
+    console.log(omcOutput);
+  } else if (existingOutput) {
+    console.log(existingOutput);
+  } else if (omcOutput) {
+    console.log(omcOutput);
+  }
+} catch (error) {
+  // Silently fail
+  console.error(error);
+}
 `;
 }
 
@@ -66,7 +127,7 @@ fi
  * Check if this is our wrapper script (not just any of our statusline)
  */
 function isOurWrapper(command: string): boolean {
-  return command.includes("statusline-wrapper.sh");
+  return command.includes("statusline-wrapper.mjs") || command.includes("statusline-wrapper.cjs") || command.includes("statusline-wrapper.js") || command.includes("statusline-wrapper.sh");
 }
 
 /**
@@ -88,7 +149,7 @@ export function mergeStatusLine(
     return {
       config: {
         type: "command",
-        command: OMC_STATUSLINE_COMMAND,
+        command: platform() === "win32" ? `"${execSync('node -e "console.log(process.execPath)"', { encoding: "utf-8" }).trim()}" "${OMC_STATUSLINE_COMMAND}"` : OMC_STATUSLINE_COMMAND,
       },
       wrapperCreated: false,
       backupCreated: false,
@@ -119,7 +180,11 @@ export function mergeStatusLine(
       }
 
       return {
-        config: existing,
+        config: {
+          type: "command",
+          command: getWrapperCommand(),
+          padding: existing.padding,
+        },
         wrapperCreated: false,
         backupCreated: false,
         updated: true,
@@ -137,10 +202,13 @@ export function mergeStatusLine(
   if (isOurStatusLine(existing.command)) {
     if (force) {
       // Force update - ensure the command path is current
+      const nodeCmd = platform() === "win32"
+        ? `"${execSync('node -e "console.log(process.execPath)"', { encoding: "utf-8" }).trim()}" "${OMC_STATUSLINE_COMMAND}"`
+        : OMC_STATUSLINE_COMMAND;
       return {
         config: {
           type: "command",
-          command: OMC_STATUSLINE_COMMAND,
+          command: nodeCmd,
           padding: existing.padding,
         },
         wrapperCreated: false,
@@ -168,7 +236,7 @@ export function mergeStatusLine(
   return {
     config: {
       type: "command",
-      command: WRAPPER_SCRIPT_PATH,
+      command: getWrapperCommand(),
       padding: existing.padding,
     },
     wrapperCreated: true,
@@ -209,7 +277,11 @@ export function isStatusLineConfigured(): boolean {
     }
 
     const command = settings.statusLine.command || "";
-    return isOurStatusLine(command) || command.includes("statusline-wrapper.sh");
+    return isOurStatusLine(command) ||
+           command.includes("statusline-wrapper.mjs") ||
+           command.includes("statusline-wrapper.cjs") ||
+           command.includes("statusline-wrapper.js") ||
+           command.includes("statusline-wrapper.sh");
   } catch {
     return false;
   }

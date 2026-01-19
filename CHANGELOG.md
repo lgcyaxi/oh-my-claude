@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Individual version changelogs are available in the [changelog/](./changelog/) directory.
 
+## [1.2.2-beta.4] - 2026-01-18
+
+See [changelog/v1.2.2-beta.4.md](./changelog/v1.2.2-beta.4.md) for details.
+
+### Fixed
+- Windows "Open with" popup dialogs for MCP server, hooks, and statusline
+- All Node.js scripts now use full path to node.exe on Windows
+- Statusline wrapper changed to .mjs (ES modules) for proper execution
+
 ## [1.2.2-beta.0] - 2026-01-17
 
 See [changelog/v1.2.2-beta.0.md](./changelog/v1.2.2-beta.0.md) for details.
