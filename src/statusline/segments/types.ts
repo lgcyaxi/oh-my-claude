@@ -43,6 +43,23 @@ export interface ClaudeCodeInput {
   };
   // Transcript path for context/token parsing
   transcript_path?: string;
+  // Cost/usage data from Claude Code
+  cost?: {
+    total_cost_usd?: number;
+    total_duration_ms?: number;
+    total_api_duration_ms?: number;
+    total_lines_added?: number;
+    total_lines_removed?: number;
+  };
+  // Workspace info
+  workspace?: {
+    current_dir?: string;
+  };
+  // OAuth config for API calls (if available)
+  oauth?: {
+    api_base_url?: string;
+    access_token?: string;
+  };
 }
 
 // Per-segment configuration
