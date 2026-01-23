@@ -55,6 +55,7 @@ function getPackageRoot(): string {
 import { generateAllAgentFiles, removeAgentFiles } from "../generators/agent-generator";
 import { installHooks, installMcpServer, installStatusLine, uninstallFromSettings, uninstallStatusLine } from "./settings-merger";
 import { DEFAULT_CONFIG } from "../config/schema";
+import { ensureConfigExists as ensureStatusLineConfigExists } from "../statusline/config";
 
 /**
  * Get commands directory
@@ -301,6 +302,9 @@ process.exit(1);
         result.statusLine.installed = statusLineResult.installed;
         result.statusLine.wrapperCreated = statusLineResult.wrapperCreated;
         result.statusLine.updated = statusLineResult.updated;
+
+        // Create default statusline segment config (standard preset, enabled by default)
+        ensureStatusLineConfigExists("standard");
       } catch (error) {
         result.errors.push(`Failed to install statusline: ${error}`);
       }
