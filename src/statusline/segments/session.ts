@@ -1,15 +1,18 @@
 /**
  * Session/Usage segment - shows API quota usage
  *
- * Displays the session cost and API usage from Claude Code's cost data.
- * When cost data is unavailable, shows session duration as fallback.
+ * Displays the API quota utilization from Claude's OAuth usage endpoint.
+ * Reads OAuth credentials from Claude Code's credential storage:
+ * - macOS: Keychain via `security` command
+ * - Other OS: ~/.claude/.credentials.json
  *
- * Data source: Claude Code stdin JSON (cost field)
+ * Data source: Claude OAuth API (/api/oauth/usage)
  */
 
 import { existsSync, readFileSync, writeFileSync, statSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
+import { execSync } from "node:child_process";
 import type { Segment, SegmentData, SegmentContext, SegmentConfig, StyleConfig } from "./types";
 import { wrapBrackets, applyColor } from "./index";
 
@@ -29,37 +32,72 @@ interface ApiUsageResponse {
   seven_day?: { utilization: number; resets_at?: string };
 }
 
-/**
- * Format cost in USD
- */
-function formatCost(cost: number): string {
-  if (cost === 0) return "$0";
-  if (cost < 0.01) return "<$0.01";
-  return `$${cost.toFixed(2)}`;
+interface OAuthCredentials {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  scopes?: string[];
+  subscriptionType?: string;
+}
+
+interface CredentialsFile {
+  claudeAiOauth?: OAuthCredentials;
 }
 
 /**
- * Format duration in milliseconds to human readable
+ * Get OAuth token from macOS Keychain
  */
-function formatDuration(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
+function getOAuthTokenMacOS(): string | null {
+  try {
+    const user = process.env.USER || "user";
+    const result = execSync(
+      `security find-generic-password -a "${user}" -w -s "Claude Code-credentials"`,
+      { encoding: "utf-8", timeout: 2000, stdio: ["pipe", "pipe", "pipe"] }
+    ).trim();
 
-  if (hours > 0) {
-    const remainingMinutes = minutes % 60;
-    return `${hours}h${remainingMinutes > 0 ? `${remainingMinutes}m` : ""}`;
+    if (result) {
+      const creds = JSON.parse(result) as CredentialsFile;
+      return creds.claudeAiOauth?.accessToken ?? null;
+    }
+    return null;
+  } catch {
+    return null;
   }
-
-  if (minutes > 0) {
-    return `${minutes}m`;
-  }
-
-  return `${seconds}s`;
 }
 
 /**
- * Format utilization percentage with visual indicator
+ * Get OAuth token from credentials file
+ */
+function getOAuthTokenFromFile(): string | null {
+  try {
+    const credentialsPath = join(homedir(), ".claude", ".credentials.json");
+    if (!existsSync(credentialsPath)) {
+      return null;
+    }
+    const content = readFileSync(credentialsPath, "utf-8");
+    const creds = JSON.parse(content) as CredentialsFile;
+    return creds.claudeAiOauth?.accessToken ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get OAuth token from Claude Code's credential storage
+ * - macOS: Keychain
+ * - Other OS: File-based
+ */
+function getOAuthToken(): string | null {
+  if (platform() === "darwin") {
+    const token = getOAuthTokenMacOS();
+    if (token) return token;
+  }
+  // Fallback to file-based credentials
+  return getOAuthTokenFromFile();
+}
+
+/**
+ * Format utilization percentage
  */
 function formatUtilization(utilization: number): string {
   const percent = Math.round(utilization * 100);
@@ -132,56 +170,24 @@ async function fetchApiUsage(apiBaseUrl: string, accessToken: string): Promise<A
 
 /**
  * Collect session/usage information
+ *
+ * Shows API quota usage (5-hour and 7-day utilization) from Claude's OAuth API.
+ * For non-Claude APIs (custom base URL), shows "0%" as fallback.
  */
 async function collectSessionData(context: SegmentContext): Promise<SegmentData | null> {
   const { claudeCodeInput } = context;
 
-  // Priority 1: Show cost data if available (from Claude Code stdin)
-  if (claudeCodeInput?.cost?.total_cost_usd !== undefined) {
-    const cost = claudeCodeInput.cost.total_cost_usd;
-    const duration = claudeCodeInput.cost.total_duration_ms || 0;
-    const linesAdded = claudeCodeInput.cost.total_lines_added || 0;
-    const linesRemoved = claudeCodeInput.cost.total_lines_removed || 0;
+  // Priority 1: Try to fetch API quota usage from Claude OAuth API
+  const accessToken = getOAuthToken();
 
-    // Determine color based on cost
-    let color: SegmentData["color"] = "good";
-    if (cost > 1) color = "warning";
-    if (cost > 5) color = "critical";
-
-    // Primary: cost, Secondary: duration or lines changed
-    const primary = formatCost(cost);
-    let secondary = "";
-    if (duration > 0) {
-      secondary = formatDuration(duration);
-    }
-    if (linesAdded > 0 || linesRemoved > 0) {
-      const lineInfo = `+${linesAdded} -${linesRemoved}`;
-      secondary = secondary ? `${secondary} ${lineInfo}` : lineInfo;
-    }
-
-    return {
-      primary,
-      secondary,
-      metadata: {
-        cost: String(cost),
-        duration: String(duration),
-        linesAdded: String(linesAdded),
-        linesRemoved: String(linesRemoved),
-      },
-      color,
-    };
-  }
-
-  // Priority 2: Try to fetch API usage (if OAuth available)
-  if (claudeCodeInput?.oauth?.api_base_url && claudeCodeInput?.oauth?.access_token) {
+  if (accessToken) {
     // Check cache first
     let usageData = readUsageCache();
 
     if (!usageData) {
-      const apiResponse = await fetchApiUsage(
-        claudeCodeInput.oauth.api_base_url,
-        claudeCodeInput.oauth.access_token
-      );
+      // Use custom API base if provided via stdin, otherwise default to Anthropic
+      const apiBaseUrl = claudeCodeInput?.oauth?.api_base_url || "https://api.anthropic.com";
+      const apiResponse = await fetchApiUsage(apiBaseUrl, accessToken);
 
       if (apiResponse) {
         usageData = {
@@ -193,25 +199,36 @@ async function collectSessionData(context: SegmentContext): Promise<SegmentData 
       }
     }
 
-    if (usageData?.seven_day) {
-      const utilization = usageData.seven_day.utilization;
-      const fiveHour = usageData.five_hour?.utilization || 0;
+    if (usageData?.five_hour) {
+      // Display 5-hour utilization as primary (like CCometixLine)
+      const fiveHour = usageData.five_hour.utilization;
+      const sevenDay = usageData.seven_day?.utilization || 0;
 
-      // Determine color based on utilization
+      // Determine color based on utilization (values are 0-100)
       let color: SegmentData["color"] = "good";
-      if (utilization > 0.5 || fiveHour > 0.5) color = "warning";
-      if (utilization > 0.8 || fiveHour > 0.8) color = "critical";
+      if (fiveHour > 50 || sevenDay > 50) color = "warning";
+      if (fiveHour > 80 || sevenDay > 80) color = "critical";
 
       return {
-        primary: formatUtilization(utilization),
-        secondary: `5h:${formatUtilization(fiveHour)}`,
+        primary: formatUtilization(fiveHour / 100),
+        secondary: `7d:${formatUtilization(sevenDay / 100)}`,
         metadata: {
-          sevenDay: String(utilization),
           fiveHour: String(fiveHour),
+          sevenDay: String(sevenDay),
         },
         color,
       };
     }
+  }
+
+  // Priority 2: For non-Claude models (API overrides), show "0%"
+  if (claudeCodeInput?.oauth?.api_base_url &&
+      !claudeCodeInput.oauth.api_base_url.includes("anthropic.com")) {
+    return {
+      primary: "0%",
+      metadata: { note: "custom-api" },
+      color: "good",
+    };
   }
 
   // Priority 3: Fallback - show "?" for graceful degradation

@@ -130,6 +130,86 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 - 每个步骤验证后才标记完成
 - 巨石状态持久化以支持会话延续
 
+## 实时状态栏
+
+oh-my-claude 提供基于分段的状态栏，在 Claude Code 中直接显示丰富的信息。
+
+### 示例输出
+
+```
+omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [⠙ Oracle: 32s]
+     │          │        │              │              │           │          │
+     │          │        │              │              │           │          └─ MCP 任务
+     │          │        │              │              │           └─ 输出样式
+     │          │        │              │              └─ API 配额（5小时/7天）
+     │          │        │              └─ 上下文令牌（已用/限制）
+     │          │        └─ 项目名称
+     │          └─ Git 分支（* = 有修改，↑2 = 领先2次提交）
+     └─ 模型名称
+```
+
+### 分段说明
+
+| 分段 | 描述 | 示例 |
+|------|------|------|
+| **Model** | 当前 Claude 模型 | `[opus-4.5]` |
+| **Git** | 分支 + 状态 | `[dev*↑2]`（有修改，领先2次提交） |
+| **Directory** | 项目名称 | `[oh-my-claude]` |
+| **Context** | 令牌使用率 | `[45% 89k/200k]` |
+| **Session** | API 配额使用率 | `[79% 7d:4%]`（5小时/7天） |
+| **Output Style** | 当前输出样式 | `[eng-pro]` |
+| **MCP** | 后台任务 | `[⠙ Oracle: 32s]` |
+
+### 预设配置
+
+在 `~/.config/oh-my-claude/statusline.json` 中配置：
+
+| 预设 | 包含分段 |
+|------|----------|
+| **minimal** | Git、Directory |
+| **standard** | Git、Directory、Session、MCP |
+| **full** | 所有分段 |
+
+```json
+{
+  "enabled": true,
+  "preset": "standard",
+  "segments": {
+    "model": { "enabled": false, "position": 1 },
+    "git": { "enabled": true, "position": 2 },
+    "directory": { "enabled": true, "position": 3 },
+    "context": { "enabled": false, "position": 4 },
+    "session": { "enabled": true, "position": 5 },
+    "output-style": { "enabled": false, "position": 6 },
+    "mcp": { "enabled": true, "position": 7 }
+  },
+  "style": {
+    "separator": " ",
+    "brackets": true,
+    "colors": true
+  }
+}
+```
+
+### 语义颜色
+
+- 🟢 **绿色** - 良好（干净的 git 状态、低使用率）
+- 🟡 **黄色** - 警告（有未提交修改、50-80% 使用率）
+- 🔴 **红色** - 危险（>80% 使用率）
+- 🔵 **青色** - 中性（目录、一般信息）
+
+### CLI 控制
+
+```bash
+npx @lgcyaxi/oh-my-claude statusline --status    # 检查状态栏状态
+npx @lgcyaxi/oh-my-claude statusline --enable    # 启用状态栏
+npx @lgcyaxi/oh-my-claude statusline --disable   # 禁用状态栏
+```
+
+### 多行支持
+
+当您已有状态栏（如 CCometixLine）时，oh-my-claude 会自动创建一个包装器，将两者显示在不同行。
+
 ## 智能体工作流
 
 oh-my-claude 提供两种类型的智能体：

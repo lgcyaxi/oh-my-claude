@@ -32,7 +32,8 @@ import { getSessionId, ensureSessionDir } from "./session";
 import { formatStatusLine, formatEmptyStatusLine, type StatusLineData } from "./formatter";
 
 // Timeout for the entire script (prevent blocking terminal)
-const TIMEOUT_MS = 100;
+// 5 seconds allows for keychain access and API calls (cached results are much faster)
+const TIMEOUT_MS = 5000;
 
 // ANSI color codes
 const colors = {
@@ -53,6 +54,9 @@ function parseClaudeCodeInput(input: string): ClaudeCodeInput | undefined {
       model: parsed.model,
       output_style: parsed.output_style,
       transcript_path: parsed.transcript_path,
+      cost: parsed.cost,
+      workspace: parsed.workspace,
+      oauth: parsed.oauth,
     };
   } catch {
     return undefined;

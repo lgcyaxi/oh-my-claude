@@ -132,27 +132,71 @@ Ultrawork mode activates **maximum performance execution** with zero-tolerance c
 
 ## Real-Time StatusLine
 
-oh-my-claude provides a real-time status bar that shows active agents directly in Claude Code with rich information.
+oh-my-claude provides a segment-based statusline that shows rich information directly in Claude Code.
 
-### Status Display
+### Example Output
 
 ```
-omc ● ready (0/10)                                      # Idle - 0 of 10 slots used
-omc [⠙ Oracle: 32s DS/R] "Analyze the code..." (1/10)  # One active task
-omc [⠙ Oracle: 32s] [⠹ Lib: 12s] (2/10)                # Multiple parallel tasks
-omc [⠙ Oracle: 32s] (5/5 +2q)                          # At limit with 2 queued
+omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [⠙ Oracle: 32s]
+     │          │        │              │              │           │          │
+     │          │        │              │              │           │          └─ MCP tasks
+     │          │        │              │              │           └─ Output style
+     │          │        │              │              └─ API quota (5h/7d)
+     │          │        │              └─ Context tokens (used/limit)
+     │          │        └─ Project name
+     │          └─ Git branch (* = dirty, ↑2 = ahead)
+     └─ Model name
 ```
 
-### Legend
+### Segments
 
-- **omc ● ready** - System is ready, no active tasks
-- **⠙** - Animated spinner (rotates: ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏)
-- **Oracle** - Agent name (cyan for MCP, yellow for Task tool)
-- **32s** - Elapsed time
-- **DS/R** - Provider (DeepSeek) / Model (Reasoner)
-- **"Analyze the code..."** - Truncated prompt preview (max 30 chars)
-- **(2/10)** - Concurrency slots: 2 active of 10 max
-- **(+2q)** - Tasks waiting in queue
+| Segment | Description | Example |
+|---------|-------------|---------|
+| **Model** | Current Claude model | `[opus-4.5]` |
+| **Git** | Branch + status | `[dev*↑2]` (dirty, 2 ahead) |
+| **Directory** | Project name | `[oh-my-claude]` |
+| **Context** | Token usage % | `[45% 89k/200k]` |
+| **Session** | API quota usage | `[79% 7d:4%]` (5-hour/7-day) |
+| **Output Style** | Current style | `[eng-pro]` |
+| **MCP** | Background tasks | `[⠙ Oracle: 32s]` |
+
+### Presets
+
+Configure in `~/.config/oh-my-claude/statusline.json`:
+
+| Preset | Segments |
+|--------|----------|
+| **minimal** | Git, Directory |
+| **standard** | Git, Directory, Session, MCP |
+| **full** | All segments |
+
+```json
+{
+  "enabled": true,
+  "preset": "standard",
+  "segments": {
+    "model": { "enabled": false, "position": 1 },
+    "git": { "enabled": true, "position": 2 },
+    "directory": { "enabled": true, "position": 3 },
+    "context": { "enabled": false, "position": 4 },
+    "session": { "enabled": true, "position": 5 },
+    "output-style": { "enabled": false, "position": 6 },
+    "mcp": { "enabled": true, "position": 7 }
+  },
+  "style": {
+    "separator": " ",
+    "brackets": true,
+    "colors": true
+  }
+}
+```
+
+### Semantic Colors
+
+- 🟢 **Green** - Good (clean git, low usage)
+- 🟡 **Yellow** - Warning (dirty git, 50-80% usage)
+- 🔴 **Red** - Critical (>80% usage)
+- 🔵 **Cyan** - Neutral (directory, info)
 
 ### CLI Control
 
