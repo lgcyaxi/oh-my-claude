@@ -26,7 +26,7 @@ async function collectGitData(cwd: string): Promise<SegmentData | null> {
     const branch = execSync("git branch --show-current", {
       cwd,
       encoding: "utf-8",
-      timeout: 50,
+      timeout: 500,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
 
@@ -41,7 +41,7 @@ async function collectGitData(cwd: string): Promise<SegmentData | null> {
       status = execSync("git status --porcelain", {
         cwd,
         encoding: "utf-8",
-        timeout: 50,
+        timeout: 500,
         stdio: ["pipe", "pipe", "pipe"],
       });
     } catch {
@@ -51,11 +51,11 @@ async function collectGitData(cwd: string): Promise<SegmentData | null> {
     // Check for ahead/behind
     let aheadBehind = "";
     try {
-      const tracking = execSync("git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null", {
+      const tracking = execSync("git rev-list --left-right --count HEAD...@{upstream}", {
         cwd,
         encoding: "utf-8",
-        timeout: 50,
-        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 500,
+        stdio: ["pipe", "pipe", "ignore"], // Suppress stderr cross-platform (Windows compatible)
       }).trim();
 
       const [aheadStr, behindStr] = tracking.split(/\s+/);

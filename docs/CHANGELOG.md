@@ -4,16 +4,17 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.2.x](changelog/v1.2.x.md) - Current Development
 
-**Latest: v1.2.2-beta.7** (2026-01-23)
+**Latest: v1.2.2-beta.8** (2026-01-23)
 
 ### Highlights
 
 - **Segment-based statusline** with configurable widgets (Model, Git, Directory, Context, Session, Output Style, MCP)
+- **Statusline CLI commands** - `preset` and `toggle` commands for runtime configuration
 - **API quota display** - Shows 5-hour and 7-day utilization from Claude OAuth API
 - **Token usage tracking** - Context segment parses transcript for real-time token usage
 - **Rich context system** - Automatic context gathering for MCP background agents
 - **Concurrent execution** - Semaphore-based concurrency with global and per-provider limits
-- **Windows fixes** - Full path to `node.exe` for all scripts
+- **Windows fixes** - Cross-platform git commands, proper timeout handling
 
 ### Breaking Changes (v1.2.0)
 
@@ -55,6 +56,7 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v1.2.2-beta.8 | 2026-01-23 | Beta | Statusline preset/toggle CLI, Windows git fix, full preset default |
 | v1.2.2-beta.7 | 2026-01-23 | Beta | Session shows quota only, OAuth credential reading |
 | v1.2.2-beta.6 | 2026-01-23 | Beta | Session/Context segment improvements |
 | v1.2.2-beta.5 | 2026-01-23 | Beta | Segment-based statusline |

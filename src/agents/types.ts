@@ -31,7 +31,22 @@ export interface AgentMarkdownOptions {
 }
 
 /**
+ * Escape YAML string values that may contain special characters
+ */
+function escapeYamlString(str: string): string {
+  if (/[:\{\}\[\],&*#?|\-<>=!%@`]/.test(str) || str.includes("\n")) {
+    return `"${str.replace(/"/g, '\\"').replace(/\n/g, " ")}"`;
+  }
+  return str;
+}
+
+/**
  * Generate Claude Code agent .md file content
+ *
+ * Claude Code agent files require YAML frontmatter with:
+ * - name: agent identifier
+ * - description: what the agent does
+ * - tools: (optional) allowed tools for the agent
  */
 export function generateAgentMarkdown(
   agent: AgentDefinition,
@@ -39,13 +54,19 @@ export function generateAgentMarkdown(
 ): string {
   const lines: string[] = [];
 
-  // Note: Claude Code agent files don't have YAML frontmatter
-  // They're just markdown files with the prompt content
-  // The filename becomes the agent name (e.g., sisyphus.md -> @sisyphus)
+  // YAML frontmatter (required by Claude Code)
+  lines.push("---");
+  lines.push(`name: ${agent.name.toLowerCase()}`);
+  lines.push(`description: ${escapeYamlString(agent.description)}`);
 
-  lines.push(`# ${agent.name}`);
-  lines.push("");
-  lines.push(`> ${agent.description}`);
+  // Add tools based on execution mode
+  if (agent.executionMode === "task") {
+    lines.push("tools: Read, Glob, Grep, Bash, Edit, Write, Task, WebFetch, WebSearch");
+  } else {
+    lines.push("tools: Read, Glob, Grep, Bash, Edit, Write");
+  }
+
+  lines.push("---");
   lines.push("");
   lines.push(agent.prompt);
 

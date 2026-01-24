@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.2.2-beta.7");
+  .version("1.2.2-beta.8");
 
 // Install command
 program
@@ -736,8 +736,8 @@ program
     }
   });
 
-// StatusLine command
-program
+// StatusLine command with subcommands
+const statuslineCmd = program
   .command("statusline")
   .description("Manage statusline integration")
   .option("--enable", "Enable statusline")
@@ -760,11 +760,12 @@ program
       cyan: useColor ? "\x1b[36m" : "",
     };
 
-    const ok = (text: string) => `${c.green}+${c.reset} ${text}`;
-    const fail = (text: string) => `${c.red}x${c.reset} ${text}`;
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
     const warn = (text: string) => `${c.yellow}!${c.reset} ${text}`;
 
     const settingsPath = join(homedir(), ".claude", "settings.json");
+    const configPath = join(homedir(), ".config", "oh-my-claude", "statusline.json");
 
     if (options.status || (!options.enable && !options.disable)) {
       // Show status
@@ -795,6 +796,28 @@ program
             console.log(`  Mode: ${c.green}Direct${c.reset}`);
           } else {
             console.log(`  Mode: ${c.cyan}External${c.reset}`);
+          }
+        }
+
+        // Show config details
+        if (existsSync(configPath)) {
+          const config = JSON.parse(readFileSync(configPath, "utf-8"));
+          console.log(`\n${c.bold}Configuration${c.reset}`);
+          console.log(`  Preset: ${c.cyan}${config.preset || "standard"}${c.reset}`);
+          console.log(`  Enabled segments:`);
+          const segments = config.segments || {};
+          for (const [id, seg] of Object.entries(segments)) {
+            const s = seg as { enabled: boolean; position: number };
+            if (s.enabled) {
+              console.log(`    ${c.green}●${c.reset} ${id}`);
+            }
+          }
+          console.log(`  Disabled segments:`);
+          for (const [id, seg] of Object.entries(segments)) {
+            const s = seg as { enabled: boolean; position: number };
+            if (!s.enabled) {
+              console.log(`    ${c.dim}○${c.reset} ${id}`);
+            }
           }
         }
       } catch (error) {
@@ -833,6 +856,78 @@ program
         console.log(fail(`Failed to disable statusline: ${error}`));
         process.exit(1);
       }
+    }
+  });
+
+// Statusline preset subcommand
+statuslineCmd
+  .command("preset <name>")
+  .description("Set statusline preset (minimal, standard, full)")
+  .action((name: string) => {
+    const validPresets = ["minimal", "standard", "full"];
+    if (!validPresets.includes(name)) {
+      console.log(`Invalid preset: ${name}`);
+      console.log(`Valid presets: ${validPresets.join(", ")}`);
+      process.exit(1);
+    }
+
+    const { setPreset } = require("./statusline/config");
+
+    try {
+      const config = setPreset(name as "minimal" | "standard" | "full");
+      console.log(`✓ Preset changed to: ${name}`);
+      console.log(`\nEnabled segments:`);
+
+      const segments = config.segments || {};
+      for (const [id, seg] of Object.entries(segments)) {
+        const s = seg as { enabled: boolean };
+        if (s.enabled) {
+          console.log(`  ● ${id}`);
+        }
+      }
+    } catch (error) {
+      console.log(`✗ Failed to set preset: ${error}`);
+      process.exit(1);
+    }
+  });
+
+// Statusline toggle subcommand
+statuslineCmd
+  .command("toggle <segment> [state]")
+  .description("Toggle a segment on/off (model, git, directory, context, session, output-style, mcp)")
+  .action((segment: string, state?: string) => {
+    const validSegments = ["model", "git", "directory", "context", "session", "output-style", "mcp"];
+    if (!validSegments.includes(segment)) {
+      console.log(`Invalid segment: ${segment}`);
+      console.log(`Valid segments: ${validSegments.join(", ")}`);
+      process.exit(1);
+    }
+
+    const { toggleSegment, loadConfig } = require("./statusline/config");
+
+    try {
+      // Determine new state
+      let enabled: boolean;
+      if (state === "on" || state === "true" || state === "1") {
+        enabled = true;
+      } else if (state === "off" || state === "false" || state === "0") {
+        enabled = false;
+      } else if (state === undefined) {
+        // Toggle current state
+        const currentConfig = loadConfig();
+        enabled = !currentConfig.segments[segment]?.enabled;
+      } else {
+        console.log(`Invalid state: ${state}`);
+        console.log(`Valid states: on, off (or omit to toggle)`);
+        process.exit(1);
+      }
+
+      const config = toggleSegment(segment, enabled);
+      const newState = config.segments[segment]?.enabled ? "enabled" : "disabled";
+      console.log(`✓ Segment "${segment}" ${newState}`);
+    } catch (error) {
+      console.log(`✗ Failed to toggle segment: ${error}`);
+      process.exit(1);
     }
   });
 

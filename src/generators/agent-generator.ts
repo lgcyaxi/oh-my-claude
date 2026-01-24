@@ -20,34 +20,47 @@ export function getAgentsDirectory(): string {
 }
 
 /**
+ * Escape YAML string values that may contain special characters
+ */
+function escapeYamlString(str: string): string {
+  // If string contains special YAML characters, wrap in quotes
+  if (/[:\{\}\[\],&*#?|\-<>=!%@`]/.test(str) || str.includes("\n")) {
+    // Escape double quotes and wrap
+    return `"${str.replace(/"/g, '\\"').replace(/\n/g, " ")}"`;
+  }
+  return str;
+}
+
+/**
  * Generate agent markdown content for Claude Code
  *
- * Note: Claude Code agent files are simple markdown files.
- * The filename (without .md) becomes the agent name.
+ * Claude Code agent files require YAML frontmatter with:
+ * - name: agent identifier
+ * - description: what the agent does
+ * - tools: (optional) allowed tools for the agent
+ *
+ * The filename (without .md) is used for @agent-name invocation.
  * Task tool can reference these agents via subagent_type parameter.
  */
 export function generateAgentMarkdown(agent: AgentDefinition): string {
   const lines: string[] = [];
 
-  // Header with agent name and description
-  lines.push(`# ${agent.name}`);
-  lines.push("");
-  lines.push(`> ${agent.description}`);
-  lines.push("");
+  // YAML frontmatter (required by Claude Code)
+  lines.push("---");
+  lines.push(`name: ${agent.name.toLowerCase()}`);
+  lines.push(`description: ${escapeYamlString(agent.description)}`);
 
-  // Execution mode note
+  // Add tools - Task agents get full tool access, MCP agents get read-only tools
   if (agent.executionMode === "task") {
-    lines.push(
-      `<!-- Execution: Claude Code Task tool (sync) - Uses Claude subscription -->`
-    );
+    lines.push("tools: Read, Glob, Grep, Bash, Edit, Write, Task, WebFetch, WebSearch");
   } else {
-    lines.push(
-      `<!-- Execution: oh-my-claude MCP server (async) - Uses ${agent.defaultProvider} API -->`
-    );
+    lines.push("tools: Read, Glob, Grep, Bash, Edit, Write");
   }
+
+  lines.push("---");
   lines.push("");
 
-  // The actual prompt
+  // The actual prompt content
   lines.push(agent.prompt);
 
   return lines.join("\n");

@@ -22,8 +22,30 @@
  * }
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { platform, homedir } from "node:os";
+
+// Debug mode: set DEBUG_STATUSLINE=1 to enable
+const DEBUG_STATUSLINE = process.env.DEBUG_STATUSLINE === "1";
+
+/**
+ * Log debug messages when DEBUG_STATUSLINE=1
+ */
+function debugLog(message: string): void {
+  if (!DEBUG_STATUSLINE) return;
+  try {
+    const logDir = join(homedir(), ".config", "oh-my-claude", "logs");
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true });
+    }
+    const logPath = join(logDir, "statusline-debug.log");
+    const timestamp = new Date().toISOString();
+    appendFileSync(logPath, `[${timestamp}] ${message}\n`);
+  } catch {
+    // Silently fail
+  }
+}
 
 import { loadConfig } from "./config";
 import { renderSegments } from "./segments";
@@ -115,12 +137,27 @@ async function main() {
   }, TIMEOUT_MS);
 
   try {
-    // Read Claude Code's input from stdin
+    // Read Claude Code's input from stdin (cross-platform)
     let stdinInput = "";
     try {
-      stdinInput = readFileSync(0, "utf-8");
-    } catch {
+      // On Windows, we need to handle stdin differently
+      // Use process.stdin.fd for better cross-platform support
+      const fd = process.stdin.fd;
+      debugLog(`Reading stdin from fd=${fd}, platform=${platform()}`);
+
+      // Check if stdin is a TTY (no piped input)
+      if (process.stdin.isTTY) {
+        debugLog("stdin is TTY - no piped input available");
+      } else {
+        stdinInput = readFileSync(fd, "utf-8");
+        debugLog(`Read ${stdinInput.length} chars from stdin`);
+        if (stdinInput.length > 0) {
+          debugLog(`stdin preview: ${stdinInput.slice(0, 200)}...`);
+        }
+      }
+    } catch (error) {
       // stdin may be empty or unavailable
+      debugLog(`Failed to read stdin: ${error}`);
     }
 
     // Load configuration
@@ -134,6 +171,7 @@ async function main() {
 
     // Parse Claude Code input for advanced segments
     const claudeCodeInput = parseClaudeCodeInput(stdinInput);
+    debugLog(`claudeCodeInput parsed: model=${claudeCodeInput?.model?.id ?? "none"}, style=${claudeCodeInput?.output_style?.name ?? "none"}, transcript=${claudeCodeInput?.transcript_path ?? "none"}`);
 
     // Get session info
     const sessionId = getSessionId();

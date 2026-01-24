@@ -93,7 +93,7 @@ export interface Segment {
 // Preset definitions
 export const PRESETS: Record<StatusLineConfig["preset"], SegmentId[]> = {
   minimal: ["git", "directory"],
-  standard: ["git", "directory", "session", "mcp"],
+  standard: ["model", "git", "directory", "context", "session", "mcp"],
   full: ["model", "git", "directory", "context", "session", "output-style", "mcp"],
 };
 

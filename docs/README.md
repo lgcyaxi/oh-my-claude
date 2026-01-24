@@ -167,8 +167,8 @@ Configure in `~/.config/oh-my-claude/statusline.json`:
 | Preset | Segments |
 |--------|----------|
 | **minimal** | Git, Directory |
-| **standard** | Git, Directory, Session, MCP |
-| **full** | All segments |
+| **standard** | Model, Git, Directory, Context, Session, MCP |
+| **full** | All segments (including Output Style) |
 
 ```json
 {
@@ -201,10 +201,25 @@ Configure in `~/.config/oh-my-claude/statusline.json`:
 ### CLI Control
 
 ```bash
+# Check status
 npx @lgcyaxi/oh-my-claude statusline --status    # Check statusline status
+
+# Enable/Disable
 npx @lgcyaxi/oh-my-claude statusline --enable    # Enable statusline
 npx @lgcyaxi/oh-my-claude statusline --disable   # Disable statusline
+
+# Change preset
+npx @lgcyaxi/oh-my-claude statusline preset minimal   # Set minimal preset
+npx @lgcyaxi/oh-my-claude statusline preset standard  # Set standard preset
+npx @lgcyaxi/oh-my-claude statusline preset full      # Set full preset (default)
+
+# Toggle individual segments
+npx @lgcyaxi/oh-my-claude statusline toggle model on      # Enable model segment
+npx @lgcyaxi/oh-my-claude statusline toggle output-style  # Toggle output-style
+npx @lgcyaxi/oh-my-claude statusline toggle context off   # Disable context segment
 ```
+
+**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mcp`
 
 ### Multi-Line Support
 
@@ -286,9 +301,11 @@ npx @lgcyaxi/oh-my-claude uninstall            # Remove oh-my-claude
 npx @lgcyaxi/oh-my-claude uninstall --keep-config  # Keep config file
 
 # StatusLine
-npx @lgcyaxi/oh-my-claude statusline --status  # Check statusline status
-npx @lgcyaxi/oh-my-claude statusline --enable  # Enable statusline
-npx @lgcyaxi/oh-my-claude statusline --disable # Disable statusline
+npx @lgcyaxi/oh-my-claude statusline --status   # Check statusline status
+npx @lgcyaxi/oh-my-claude statusline --enable   # Enable statusline
+npx @lgcyaxi/oh-my-claude statusline --disable  # Disable statusline
+npx @lgcyaxi/oh-my-claude statusline preset <name>     # Set preset (minimal/standard/full)
+npx @lgcyaxi/oh-my-claude statusline toggle <segment>  # Toggle segment on/off
 ```
 
 ## Configuration

@@ -315,9 +315,9 @@ process.exit(1);
         result.statusLine.wrapperCreated = statusLineResult.wrapperCreated;
         result.statusLine.updated = statusLineResult.updated;
 
-        // Create default statusline segment config (standard preset, enabled by default)
+        // Create default statusline segment config (full preset for maximum visibility)
         // This now returns a boolean indicating success
-        result.statusLine.configCreated = ensureStatusLineConfigExists("standard");
+        result.statusLine.configCreated = ensureStatusLineConfigExists("full");
         if (!result.statusLine.configCreated) {
           result.warnings.push("Failed to create statusline config file. Statusline may not work correctly.");
         }

@@ -4,8 +4,33 @@
 
 export * from "./types";
 
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { Segment, SegmentId, SegmentContext, StatusLineConfig, StyleConfig } from "./types";
 import { PRESETS, DEFAULT_SEGMENT_POSITIONS } from "./types";
+
+// Debug mode: set DEBUG_STATUSLINE=1 to enable error logging
+const DEBUG_STATUSLINE = process.env.DEBUG_STATUSLINE === "1";
+
+/**
+ * Log segment errors to debug file when DEBUG_STATUSLINE=1
+ */
+function logSegmentError(segmentId: string, error: unknown): void {
+  try {
+    const logDir = join(homedir(), ".config", "oh-my-claude", "logs");
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true });
+    }
+    const logPath = join(logDir, "statusline-debug.log");
+    const timestamp = new Date().toISOString();
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const logLine = `[${timestamp}] Segment "${segmentId}" failed: ${errorMsg}\n`;
+    appendFileSync(logPath, logLine);
+  } catch {
+    // Silently fail if we can't write to log
+  }
+}
 
 // Import segment implementations
 import { gitSegment } from "./git";
@@ -106,8 +131,11 @@ export async function renderSegments(
           parts.push(formatted);
         }
       }
-    } catch {
-      // Silently skip failed segments - graceful degradation
+    } catch (error) {
+      // Log errors in debug mode, otherwise graceful degradation
+      if (DEBUG_STATUSLINE) {
+        logSegmentError(segment.id, error);
+      }
     }
   }
 

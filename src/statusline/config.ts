@@ -33,7 +33,7 @@ export const StatusLineConfigSchema = z.object({
       model: SegmentConfigSchema.default({ enabled: true, position: 1 }),
       git: SegmentConfigSchema.default({ enabled: true, position: 2 }),
       directory: SegmentConfigSchema.default({ enabled: true, position: 3 }),
-      context: SegmentConfigSchema.default({ enabled: false, position: 4 }),
+      context: SegmentConfigSchema.default({ enabled: true, position: 4 }),
       session: SegmentConfigSchema.default({ enabled: true, position: 5 }),
       "output-style": SegmentConfigSchema.default({ enabled: false, position: 6 }),
       mcp: SegmentConfigSchema.default({ enabled: true, position: 7 }),
@@ -179,7 +179,7 @@ export function saveConfig(config: StatusLineConfig): void {
  * Called during installation
  * Returns true if config exists or was created successfully
  */
-export function ensureConfigExists(preset: StatusLineConfig["preset"] = "standard"): boolean {
+export function ensureConfigExists(preset: StatusLineConfig["preset"] = "full"): boolean {
   // First ensure directory exists
   if (!ensureConfigDir()) {
     return false;

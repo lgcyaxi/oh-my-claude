@@ -170,17 +170,66 @@ function generateWrapperScript(existingCommand: string): string {
  */
 
 import { execSync } from "node:child_process";
-import { platform } from "node:os";
+import { platform, homedir } from "node:os";
+import { existsSync, appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const existingCommand = ${JSON.stringify(existingCommand)};
 const omcStatusline = ${JSON.stringify(OMC_STATUSLINE_COMMAND)};
 
+// Debug logging when DEBUG_STATUSLINE=1
+const DEBUG = process.env.DEBUG_STATUSLINE === "1";
+function debugLog(msg) {
+  if (!DEBUG) return;
+  try {
+    const logDir = join(homedir(), ".config", "oh-my-claude", "logs");
+    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+    const logPath = join(logDir, "statusline-wrapper.log");
+    appendFileSync(logPath, \`[\${new Date().toISOString()}] \${msg}\\n\`);
+  } catch {}
+}
+
 try {
-  // Read input from stdin
+  // Read input from stdin - handle both piped and empty stdin
   let input = "";
-  process.stdin.setEncoding("utf-8");
-  for await (const chunk of process.stdin) {
-    input += chunk;
+
+  // On Windows with Bun, we need to be more careful about stdin
+  // Check if stdin has data before trying to read
+  const isWindows = platform() === "win32";
+  debugLog(\`Platform: \${platform()}, isTTY: \${process.stdin.isTTY}\`);
+
+  if (!process.stdin.isTTY) {
+    // Stdin is piped - read it
+    try {
+      process.stdin.setEncoding("utf-8");
+
+      // Use a timeout to avoid blocking forever
+      const chunks = [];
+      const readPromise = new Promise((resolve) => {
+        process.stdin.on("data", (chunk) => {
+          chunks.push(chunk);
+        });
+        process.stdin.on("end", () => {
+          resolve(chunks.join(""));
+        });
+        process.stdin.on("error", () => {
+          resolve("");
+        });
+      });
+
+      // Race against a timeout
+      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(""), 1000));
+      input = await Promise.race([readPromise, timeoutPromise]);
+
+      debugLog(\`Read \${input.length} chars from stdin\`);
+      if (input.length > 0 && input.length < 500) {
+        debugLog(\`stdin content: \${input}\`);
+      }
+    } catch (e) {
+      debugLog(\`Stdin read error: \${e}\`);
+    }
+  } else {
+    debugLog("stdin is TTY - no piped input");
   }
 
   // Call existing statusline
@@ -191,25 +240,33 @@ try {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       shell: true,
+      timeout: 3000,
     }).trim();
-  } catch {
-    // Ignore errors
+    debugLog(\`Existing statusline output: \${existingOutput}\`);
+  } catch (e) {
+    debugLog(\`Existing statusline error: \${e}\`);
   }
 
   // Call oh-my-claude statusline
   let omcOutput = "";
   try {
-    // On Windows, use the full path to node.exe to avoid file association issues
-    const nodeCmd = platform() === "win32"
+    // On Windows, use the full path to the runtime to avoid file association issues
+    const runtimeCmd = isWindows
       ? \`"\${process.execPath}"\`
       : "node";
-    omcOutput = execSync(\`\${nodeCmd} "\${omcStatusline}"\`, {
+    const cmd = \`\${runtimeCmd} "\${omcStatusline}"\`;
+    debugLog(\`Running omc statusline: \${cmd}\`);
+
+    omcOutput = execSync(cmd, {
       input,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       shell: true,
+      timeout: 3000,
     }).trim();
-  } catch {
+    debugLog(\`omc statusline output: \${omcOutput}\`);
+  } catch (e) {
+    debugLog(\`omc statusline error: \${e}\`);
     omcOutput = "omc";
   }
 
@@ -223,8 +280,8 @@ try {
     console.log(omcOutput);
   }
 } catch (error) {
-  // Silently fail
-  console.error(error);
+  debugLog(\`Wrapper error: \${error}\`);
+  console.log("omc");
 }
 `;
 }
