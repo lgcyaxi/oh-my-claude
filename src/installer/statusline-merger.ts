@@ -23,21 +23,127 @@ const OMC_STATUSLINE_COMMAND = join(homedir(), ".claude", "oh-my-claude", "dist"
 // Wrapper script path - use .mjs for ES modules (supports top-level await)
 const WRAPPER_SCRIPT_PATH = join(homedir(), ".claude", "oh-my-claude", "statusline-wrapper.mjs");
 
+// Cache the node path to avoid repeated execSync calls
+let _cachedNodePath: string | null = null;
+
+/**
+ * Get the full path to the Node.js executable
+ * On Windows, this is critical for proper execution
+ * Returns null if detection fails
+ */
+function getNodePath(): string | null {
+  if (_cachedNodePath !== null) {
+    return _cachedNodePath;
+  }
+
+  if (platform() !== "win32") {
+    _cachedNodePath = "node";
+    return _cachedNodePath;
+  }
+
+  // Try multiple methods to find node.exe on Windows
+  const methods = [
+    // Method 1: Use process.execPath directly if we're running in Node
+    () => {
+      if (typeof process !== "undefined" && process.execPath) {
+        // Verify the path exists
+        if (existsSync(process.execPath)) {
+          return process.execPath;
+        }
+      }
+      return null;
+    },
+    // Method 2: Use execSync to query node
+    () => {
+      try {
+        const result = execSync('node -e "console.log(process.execPath)"', {
+          encoding: "utf-8",
+          timeout: 5000,
+          windowsHide: true,
+        }).trim();
+        if (result && existsSync(result)) {
+          return result;
+        }
+      } catch {
+        // Ignore
+      }
+      return null;
+    },
+    // Method 3: Use 'where' command on Windows
+    () => {
+      try {
+        const whereResult = execSync("where node", {
+          encoding: "utf-8",
+          timeout: 5000,
+          windowsHide: true,
+        }).trim().split("\n");
+        const firstResult = whereResult[0]?.trim();
+        if (firstResult && existsSync(firstResult)) {
+          return firstResult;
+        }
+      } catch {
+        // Ignore
+      }
+      return null;
+    },
+    // Method 4: Check common Windows locations
+    () => {
+      const commonPaths = [
+        join(process.env.ProgramFiles || "C:\\Program Files", "nodejs", "node.exe"),
+        join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "nodejs", "node.exe"),
+        join(homedir(), "AppData", "Roaming", "nvm", "current", "node.exe"),
+        join(homedir(), ".nvm", "current", "node.exe"),
+      ];
+      for (const p of commonPaths) {
+        if (existsSync(p)) {
+          return p;
+        }
+      }
+      return null;
+    },
+  ];
+
+  for (const method of methods) {
+    const result = method();
+    if (result) {
+      _cachedNodePath = result;
+      return _cachedNodePath;
+    }
+  }
+
+  // Last resort fallback - just use 'node' and hope it's in PATH
+  console.warn("[statusline] Warning: Could not detect Node.js path. Using 'node' from PATH.");
+  _cachedNodePath = "node";
+  return _cachedNodePath;
+}
+
+/**
+ * Build a command string for running a Node.js script
+ * Handles Windows path quoting correctly
+ */
+function buildNodeCommand(scriptPath: string): string {
+  const isWindows = platform() === "win32";
+
+  if (!isWindows) {
+    return scriptPath;
+  }
+
+  const nodePath = getNodePath();
+  if (!nodePath || nodePath === "node") {
+    // Fallback: use node from PATH with proper quoting
+    return `node "${scriptPath}"`;
+  }
+
+  // Use full path with proper quoting
+  return `"${nodePath}" "${scriptPath}"`;
+}
+
 /**
  * Get the full node command for executing the wrapper script
  * On Windows, uses full path to node.exe to avoid file association issues
  */
 function getWrapperCommand(): string {
-  if (platform() === "win32") {
-    try {
-      const nodePath = execSync('node -e "console.log(process.execPath)"', { encoding: "utf-8" }).trim();
-      return `"${nodePath}" "${WRAPPER_SCRIPT_PATH}"`;
-    } catch {
-      // Fallback
-      return `node "${WRAPPER_SCRIPT_PATH}"`;
-    }
-  }
-  return WRAPPER_SCRIPT_PATH;
+  return buildNodeCommand(WRAPPER_SCRIPT_PATH);
 }
 
 // Backup file for original statusline config
@@ -149,7 +255,7 @@ export function mergeStatusLine(
     return {
       config: {
         type: "command",
-        command: platform() === "win32" ? `"${execSync('node -e "console.log(process.execPath)"', { encoding: "utf-8" }).trim()}" "${OMC_STATUSLINE_COMMAND}"` : OMC_STATUSLINE_COMMAND,
+        command: buildNodeCommand(OMC_STATUSLINE_COMMAND),
       },
       wrapperCreated: false,
       backupCreated: false,
@@ -202,13 +308,10 @@ export function mergeStatusLine(
   if (isOurStatusLine(existing.command)) {
     if (force) {
       // Force update - ensure the command path is current
-      const nodeCmd = platform() === "win32"
-        ? `"${execSync('node -e "console.log(process.execPath)"', { encoding: "utf-8" }).trim()}" "${OMC_STATUSLINE_COMMAND}"`
-        : OMC_STATUSLINE_COMMAND;
       return {
         config: {
           type: "command",
-          command: nodeCmd,
+          command: buildNodeCommand(OMC_STATUSLINE_COMMAND),
           padding: existing.padding,
         },
         wrapperCreated: false,
@@ -292,4 +395,114 @@ export function isStatusLineConfigured(): boolean {
  */
 export function getOmcStatusLineCommand(): string {
   return OMC_STATUSLINE_COMMAND;
+}
+
+/**
+ * Get the full command string for running our statusline
+ * Exported for use in validation
+ */
+export function getStatusLineFullCommand(): string {
+  return buildNodeCommand(OMC_STATUSLINE_COMMAND);
+}
+
+/**
+ * Validate that the statusline setup is working
+ * Returns an object with validation results and any error messages
+ */
+export function validateStatusLineSetup(): {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  details: {
+    scriptExists: boolean;
+    nodePathValid: boolean;
+    settingsConfigured: boolean;
+    commandWorks: boolean;
+  };
+} {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const details = {
+    scriptExists: false,
+    nodePathValid: false,
+    settingsConfigured: false,
+    commandWorks: false,
+  };
+
+  // 1. Check if statusline script exists
+  if (existsSync(OMC_STATUSLINE_COMMAND)) {
+    details.scriptExists = true;
+  } else {
+    errors.push(`Statusline script not found at: ${OMC_STATUSLINE_COMMAND}`);
+  }
+
+  // 2. Check if Node.js path is valid (Windows-specific concern)
+  if (platform() === "win32") {
+    const nodePath = getNodePath();
+    if (nodePath && nodePath !== "node" && existsSync(nodePath)) {
+      details.nodePathValid = true;
+    } else if (nodePath === "node") {
+      // Using 'node' from PATH - this might work but is less reliable
+      warnings.push("Using 'node' from PATH. Consider installing Node.js to a standard location.");
+      details.nodePathValid = true; // Still valid, just with a warning
+    } else {
+      errors.push("Could not locate Node.js executable. Please ensure Node.js is installed.");
+    }
+  } else {
+    // On Unix, 'node' in PATH is standard
+    details.nodePathValid = true;
+  }
+
+  // 3. Check if settings.json has statusline configured
+  const settingsPath = join(homedir(), ".claude", "settings.json");
+  if (existsSync(settingsPath)) {
+    try {
+      const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      if (settings.statusLine?.command) {
+        const cmd = settings.statusLine.command;
+        if (isOurStatusLine(cmd) || isOurWrapper(cmd)) {
+          details.settingsConfigured = true;
+        } else {
+          warnings.push("settings.json has a different statusline configured");
+        }
+      } else {
+        errors.push("statusLine not configured in settings.json");
+      }
+    } catch (e) {
+      errors.push(`Could not parse settings.json: ${e}`);
+    }
+  } else {
+    errors.push("settings.json not found");
+  }
+
+  // 4. Try to run the statusline command
+  if (details.scriptExists && details.nodePathValid) {
+    try {
+      const command = buildNodeCommand(OMC_STATUSLINE_COMMAND);
+      execSync(command, {
+        encoding: "utf-8",
+        timeout: 10000,
+        windowsHide: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      details.commandWorks = true;
+    } catch (e) {
+      // The statusline might output to stderr or return non-zero, check if it at least runs
+      const error = e as { status?: number; stderr?: string };
+      if (error.status !== undefined) {
+        // Command ran but exited with error - this is often okay for statusline
+        details.commandWorks = true;
+        warnings.push("Statusline command ran but returned non-zero exit code");
+      } else {
+        errors.push(`Statusline command failed to execute: ${e}`);
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    details,
+  };
 }

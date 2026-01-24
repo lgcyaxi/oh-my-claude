@@ -338,22 +338,32 @@ program
         console.log(`  ${exists ? ok(hook) : fail(hook)}`);
       }
 
-      // StatusLine detail
+      // StatusLine detail with validation
       console.log(`\n${header("StatusLine (detailed):")}`);
-      const statusLineDir = join(homedir(), ".claude", "oh-my-claude", "dist", "statusline");
-      const statusLineScript = join(statusLineDir, "statusline.js");
-      const statusFileExists = existsSync(statusLineScript);
-      console.log(`  ${statusFileExists ? ok("statusline.js installed") : fail("statusline.js not installed")}`);
 
       try {
+        const { validateStatusLineSetup } = require("./installer/statusline-merger");
+        const validation = validateStatusLineSetup();
+
+        // Script existence
+        console.log(`  ${validation.details.scriptExists ? ok("statusline.js installed") : fail("statusline.js not installed")}`);
+
+        // Node path (relevant on Windows)
+        if (process.platform === "win32") {
+          console.log(`  ${validation.details.nodePathValid ? ok("Node.js path valid") : fail("Node.js path invalid")}`);
+        }
+
+        // Settings.json configuration
+        console.log(`  ${validation.details.settingsConfigured ? ok("StatusLine configured in settings.json") : warn("StatusLine not configured in settings.json")}`);
+
+        // Settings mode detection
         const settingsPath = join(homedir(), ".claude", "settings.json");
         if (existsSync(settingsPath)) {
           const settings = JSON.parse(require("node:fs").readFileSync(settingsPath, "utf-8"));
           if (settings.statusLine) {
             const cmd = settings.statusLine.command || "";
-            const isOurs = cmd.includes("oh-my-claude");
             const isWrapper = cmd.includes("statusline-wrapper");
-            console.log(`  ${ok("StatusLine configured in settings.json")}`);
+            const isOurs = cmd.includes("oh-my-claude");
             if (isWrapper) {
               console.log(`    Mode: ${c.yellow}Merged (wrapper)${c.reset}`);
             } else if (isOurs) {
@@ -361,12 +371,43 @@ program
             } else {
               console.log(`    Mode: ${c.cyan}External${c.reset}`);
             }
-          } else {
-            console.log(`  ${warn("StatusLine not configured in settings.json")}`);
           }
         }
-      } catch {
-        console.log(`  ${fail("Failed to read settings.json")}`);
+
+        // Command execution test
+        console.log(`  ${validation.details.commandWorks ? ok("StatusLine command works") : fail("StatusLine command failed")}`);
+
+        // Config file check
+        const configDir = join(homedir(), ".config", "oh-my-claude");
+        const configPath = join(configDir, "statusline.json");
+        const configExists = existsSync(configPath);
+        console.log(`  ${configExists ? ok("StatusLine config exists") : warn("StatusLine config not found")}`);
+        if (configExists) {
+          console.log(`    Path: ${dimText(configPath)}`);
+        } else {
+          console.log(`    ${dimText(`Expected: ${configPath}`)}`);
+        }
+
+        // Show any warnings
+        if (validation.warnings.length > 0) {
+          console.log(`\n  ${subheader("Warnings:")}`);
+          for (const w of validation.warnings) {
+            console.log(`    ${warn(w)}`);
+          }
+        }
+
+        // Show any errors
+        if (validation.errors.length > 0) {
+          console.log(`\n  ${subheader("Errors:")}`);
+          for (const e of validation.errors) {
+            console.log(`    ${fail(e)}`);
+          }
+        }
+
+        // Overall status
+        console.log(`\n  Overall: ${validation.valid ? `${c.green}✓ Healthy${c.reset}` : `${c.red}✗ Issues detected${c.reset}`}`);
+      } catch (error) {
+        console.log(`  ${fail("Failed to validate StatusLine:")} ${error}`);
       }
     }
 

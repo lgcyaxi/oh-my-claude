@@ -1,11 +1,12 @@
 /**
  * StatusLine configuration loader
- * Config file: ~/.config/oh-my-claude/statusline.json
+ * Config file: ~/.config/oh-my-claude/statusline.json (Unix/macOS)
+ *              %USERPROFILE%\.config\oh-my-claude\statusline.json (Windows)
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
 import { z } from "zod";
 import type { StatusLineConfig, SegmentId } from "./segments/types";
 import { PRESETS, DEFAULT_SEGMENT_POSITIONS } from "./segments/types";
@@ -112,32 +113,90 @@ function applyPresetToConfig(config: StatusLineConfig): StatusLineConfig {
 }
 
 /**
+ * Ensure config directory exists with proper error handling for Windows
+ * Returns true if directory exists or was created successfully
+ */
+export function ensureConfigDir(): boolean {
+  try {
+    if (existsSync(CONFIG_DIR)) {
+      // Verify it's actually a directory
+      const stat = statSync(CONFIG_DIR);
+      if (!stat.isDirectory()) {
+        console.error(`[statusline] Config path exists but is not a directory: ${CONFIG_DIR}`);
+        return false;
+      }
+      return true;
+    }
+
+    // Create directory with recursive option (creates parent dirs too)
+    mkdirSync(CONFIG_DIR, { recursive: true });
+
+    // Verify creation was successful
+    if (!existsSync(CONFIG_DIR)) {
+      console.error(`[statusline] Failed to create config directory: ${CONFIG_DIR}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    // Provide platform-specific error message
+    const isWindows = platform() === "win32";
+    console.error(
+      `[statusline] Failed to create config directory: ${CONFIG_DIR}\n` +
+      `Error: ${error}\n` +
+      (isWindows
+        ? `On Windows, please ensure you have write permissions to: ${homedir()}\\.config\\`
+        : `Please ensure you have write permissions to: ~/.config/`)
+    );
+    return false;
+  }
+}
+
+/**
  * Save configuration to file
  */
 export function saveConfig(config: StatusLineConfig): void {
   try {
-    // Ensure directory exists
-    if (!existsSync(CONFIG_DIR)) {
-      mkdirSync(CONFIG_DIR, { recursive: true });
+    // Ensure directory exists with explicit validation
+    if (!ensureConfigDir()) {
+      return;
     }
 
     const content = JSON.stringify(config, null, 2);
     writeFileSync(CONFIG_PATH, content, "utf-8");
+
+    // Verify file was written successfully
+    if (!existsSync(CONFIG_PATH)) {
+      console.error(`[statusline] Config file was not created at: ${CONFIG_PATH}`);
+    }
   } catch (error) {
-    // Log error but don't throw - non-critical
-    console.error("Failed to save statusline config:", error);
+    console.error(`[statusline] Failed to save config to ${CONFIG_PATH}:`, error);
   }
 }
 
 /**
  * Create default config file if it doesn't exist
  * Called during installation
+ * Returns true if config exists or was created successfully
  */
-export function ensureConfigExists(preset: StatusLineConfig["preset"] = "standard"): void {
+export function ensureConfigExists(preset: StatusLineConfig["preset"] = "standard"): boolean {
+  // First ensure directory exists
+  if (!ensureConfigDir()) {
+    return false;
+  }
+
   if (!existsSync(CONFIG_PATH)) {
     const config = getDefaultConfig(preset);
     saveConfig(config);
+
+    // Verify config was created
+    if (!existsSync(CONFIG_PATH)) {
+      console.error(`[statusline] Failed to create default config at: ${CONFIG_PATH}`);
+      return false;
+    }
   }
+
+  return true;
 }
 
 /**

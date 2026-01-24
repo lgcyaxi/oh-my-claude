@@ -105,9 +105,20 @@ export interface InstallResult {
   commands: { installed: string[]; skipped: string[] };
   hooks: { installed: string[]; updated: string[]; skipped: string[] };
   mcp: { installed: boolean; updated: boolean };
-  statusLine: { installed: boolean; wrapperCreated: boolean; updated: boolean };
+  statusLine: {
+    installed: boolean;
+    wrapperCreated: boolean;
+    updated: boolean;
+    configCreated: boolean;
+    validation?: {
+      valid: boolean;
+      errors: string[];
+      warnings: string[];
+    };
+  };
   config: { created: boolean };
   errors: string[];
+  warnings: string[];
 }
 
 /**
@@ -135,9 +146,10 @@ export async function install(options?: {
     commands: { installed: [], skipped: [] },
     hooks: { installed: [], updated: [], skipped: [] },
     mcp: { installed: false, updated: false },
-    statusLine: { installed: false, wrapperCreated: false, updated: false },
+    statusLine: { installed: false, wrapperCreated: false, updated: false, configCreated: false },
     config: { created: false },
     errors: [],
+    warnings: [],
   };
 
   const installDir = getInstallDir();
@@ -304,7 +316,38 @@ process.exit(1);
         result.statusLine.updated = statusLineResult.updated;
 
         // Create default statusline segment config (standard preset, enabled by default)
-        ensureStatusLineConfigExists("standard");
+        // This now returns a boolean indicating success
+        result.statusLine.configCreated = ensureStatusLineConfigExists("standard");
+        if (!result.statusLine.configCreated) {
+          result.warnings.push("Failed to create statusline config file. Statusline may not work correctly.");
+        }
+
+        // Validate statusline setup
+        const { validateStatusLineSetup } = require("./statusline-merger");
+        const validation = validateStatusLineSetup();
+        result.statusLine.validation = {
+          valid: validation.valid,
+          errors: validation.errors,
+          warnings: validation.warnings,
+        };
+
+        // Add validation errors/warnings to main result
+        if (!validation.valid) {
+          for (const err of validation.errors) {
+            result.warnings.push(`[statusline] ${err}`);
+          }
+        }
+        for (const warn of validation.warnings) {
+          result.warnings.push(`[statusline] ${warn}`);
+        }
+
+        if (debug && !validation.valid) {
+          console.log(`[DEBUG] Statusline validation failed:`);
+          console.log(`[DEBUG]   Script exists: ${validation.details.scriptExists}`);
+          console.log(`[DEBUG]   Node path valid: ${validation.details.nodePathValid}`);
+          console.log(`[DEBUG]   Settings configured: ${validation.details.settingsConfigured}`);
+          console.log(`[DEBUG]   Command works: ${validation.details.commandWorks}`);
+        }
       } catch (error) {
         result.errors.push(`Failed to install statusline: ${error}`);
       }
