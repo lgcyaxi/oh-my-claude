@@ -103,11 +103,14 @@ function addHook(
     settings.hooks[hookType] = [];
   }
 
-  // Check if hook already exists
+  // Extract the hook script filename for precise matching
+  // e.g., "node /path/to/oh-my-claude/hooks/auto-memory.js" → "auto-memory.js"
+  const scriptFile = command.split("/").pop() ?? command;
+
+  // Check if this SPECIFIC hook already exists (match by script filename, not generic path)
   const existingIndex = settings.hooks[hookType]!.findIndex(
     (h) =>
-      h.matcher === matcher &&
-      h.hooks.some((hook) => hook.command.includes("oh-my-claude"))
+      h.hooks.some((hook) => hook.command.endsWith(scriptFile))
   );
 
   if (existingIndex !== -1) {

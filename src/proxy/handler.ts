@@ -9,6 +9,7 @@ import { readSwitchState, resetSwitchState, decrementAndCheck, isTimedOut } from
 import { getPassthroughAuth, getProviderAuth } from "./auth";
 import { forwardToUpstream, createStreamingResponse } from "./stream";
 import { loadConfig, isProviderConfigured } from "../config";
+import { sanitizeRequestBody } from "./sanitize";
 
 /** Startup timestamp for uptime tracking */
 const startedAt = Date.now();
@@ -111,9 +112,10 @@ async function handleSwitched(
   try {
     const { apiKey, baseUrl } = getProviderAuth(provider);
 
-    // Parse body to rewrite the model field
+    // Parse body to rewrite the model field and sanitize for provider compatibility
     const body = await req.json() as Record<string, unknown>;
     body.model = model;
+    sanitizeRequestBody(body, provider);
 
     // Reconstruct the target URL preserving the path
     const url = new URL(req.url);
