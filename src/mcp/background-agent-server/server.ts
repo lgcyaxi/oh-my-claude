@@ -178,6 +178,48 @@ For parallel execution of multiple agents, use launch_background_task + poll_tas
     },
   },
   {
+    name: "execute_with_model",
+    description: `Execute a prompt with an explicit provider and model (blocking).
+
+Use this for direct model access without agent/category routing. Saves tokens by bypassing agent system prompts.
+
+**Available Providers**: deepseek, zhipu, minimax, openrouter (must be configured with API key)
+
+**Example Models**:
+- deepseek: deepseek-reasoner, deepseek-chat
+- zhipu: glm-4.7, glm-4v-flash
+- minimax: minimax-m2.1
+
+**Timeout Behavior**:
+If the task takes longer than the timeout (default: 5 minutes), returns the task_id so you can poll manually with poll_task.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: {
+          type: "string",
+          description: "Provider name (e.g., deepseek, zhipu, minimax, openrouter)",
+        },
+        model: {
+          type: "string",
+          description: "Model name (e.g., deepseek-reasoner, glm-4.7, minimax-m2.1)",
+        },
+        prompt: {
+          type: "string",
+          description: "The prompt to send to the model",
+        },
+        system_prompt: {
+          type: "string",
+          description: "Optional system prompt",
+        },
+        timeout_ms: {
+          type: "number",
+          description: "Optional timeout in milliseconds (default: 300000 = 5 minutes)",
+        },
+      },
+      required: ["provider", "model", "prompt"],
+    },
+  },
+  {
     name: "poll_task",
     description:
       "Poll a background task for completion. Returns status and result when available.",
@@ -511,6 +553,68 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 skipContext: context_hints.skip_context,
               }
             : undefined,
+        });
+
+        // Wait for completion
+        const timeout = timeout_ms ?? 5 * 60 * 1000;
+        const result = await waitForTaskCompletion(taskId, timeout);
+
+        // Handle timeout
+        if (result.error?.includes("Timeout")) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                status: "timeout",
+                task_id: taskId,
+                message: result.error,
+              }),
+            }],
+          };
+        }
+
+        // Handle failure
+        if (result.status === "failed") {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ status: "failed", error: result.error }),
+            }],
+            isError: true,
+          };
+        }
+
+        // Success
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ status: result.status, result: result.result }),
+          }],
+        };
+      }
+
+      case "execute_with_model": {
+        const { provider, model, prompt, system_prompt, timeout_ms } = args as {
+          provider: string;
+          model: string;
+          prompt: string;
+          system_prompt?: string;
+          timeout_ms?: number;
+        };
+
+        if (!provider || !model || !prompt) {
+          return {
+            content: [{ type: "text", text: "Error: provider, model, and prompt are required" }],
+            isError: true,
+          };
+        }
+
+        // Launch the task with direct model routing
+        const taskId = await launchTask({
+          providerName: provider,
+          modelName: model,
+          prompt,
+          systemPrompt: system_prompt,
         });
 
         // Wait for completion

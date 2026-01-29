@@ -37,6 +37,7 @@ export const StatusLineConfigSchema = z.object({
       session: SegmentConfigSchema.default({ enabled: true, position: 5 }),
       "output-style": SegmentConfigSchema.default({ enabled: false, position: 6 }),
       mcp: SegmentConfigSchema.default({ enabled: true, position: 7 }),
+      memory: SegmentConfigSchema.default({ enabled: false, position: 8 }),
     })
     .default({}),
   style: StyleConfigSchema.default({}),
@@ -59,6 +60,7 @@ export function getDefaultConfig(preset: StatusLineConfig["preset"] = "standard"
     "session",
     "output-style",
     "mcp",
+    "memory",
   ];
 
   const segments: Record<SegmentId, { enabled: boolean; position: number }> = {} as any;

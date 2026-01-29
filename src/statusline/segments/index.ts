@@ -40,6 +40,7 @@ import { mcpSegment } from "./mcp";
 import { modelSegment } from "./model";
 import { contextSegment } from "./context";
 import { outputStyleSegment } from "./output-style";
+import { memorySegment } from "./memory";
 
 // Registry of all available segments
 const segmentRegistry = new Map<SegmentId, Segment>();
@@ -94,6 +95,7 @@ export function applyPreset(
     "session",
     "output-style",
     "mcp",
+    "memory",
   ];
 
   const result: Record<SegmentId, { enabled: boolean; position: number }> = {} as any;
@@ -182,3 +184,4 @@ registerSegment(contextSegment);
 registerSegment(sessionSegment);
 registerSegment(outputStyleSegment);
 registerSegment(mcpSegment);
+registerSegment(memorySegment);

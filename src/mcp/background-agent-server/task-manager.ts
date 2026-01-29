@@ -7,7 +7,7 @@
  * - Write status file for statusline display
  */
 
-import { routeByAgent, routeByCategory } from "../../providers/router";
+import { routeByAgent, routeByCategory, routeByModel } from "../../providers/router";
 import { getAgent } from "../../agents";
 import { getAgentProfile } from "../../agents/context-profiles";
 import { loadConfig, resolveProviderForAgent, resolveProviderForCategory } from "../../config";
@@ -41,6 +41,10 @@ export interface Task {
   id: string;
   agentName?: string;
   categoryName?: string;
+  /** Explicit provider name for direct model routing */
+  providerName?: string;
+  /** Explicit model name for direct model routing */
+  modelName?: string;
   prompt: string;
   status: TaskStatus;
   result?: string;
@@ -112,14 +116,16 @@ export function updateStatusFile(): void {
 export async function launchTask(options: {
   agentName?: string;
   categoryName?: string;
+  providerName?: string;
+  modelName?: string;
   prompt: string;
   systemPrompt?: string;
   contextHints?: ContextHintsInput;
 }): Promise<string> {
-  const { agentName, categoryName, prompt, systemPrompt, contextHints } = options;
+  const { agentName, categoryName, providerName, modelName, prompt, systemPrompt, contextHints } = options;
 
-  if (!agentName && !categoryName) {
-    throw new Error("Either agentName or categoryName must be provided");
+  if (!agentName && !categoryName && !(providerName && modelName)) {
+    throw new Error("Either agentName, categoryName, or providerName+modelName must be provided");
   }
 
   const taskId = generateTaskId();
@@ -133,11 +139,14 @@ export async function launchTask(options: {
     }
   }
 
-  // Look up provider and model for this agent/category
+  // Look up provider and model for this agent/category (or use explicit values)
   const config = loadConfig();
   let provider: string | undefined;
   let model: string | undefined;
-  if (agentName) {
+  if (providerName && modelName) {
+    provider = providerName;
+    model = modelName;
+  } else if (agentName) {
     const agentConfig = resolveProviderForAgent(config, agentName);
     provider = agentConfig?.provider;
     model = agentConfig?.model;
@@ -151,6 +160,8 @@ export async function launchTask(options: {
     id: taskId,
     agentName,
     categoryName,
+    providerName,
+    modelName,
     prompt,
     status: "pending",
     provider,
@@ -232,12 +243,14 @@ async function runTask(task: Task, systemPrompt?: string): Promise<void> {
 
     let response;
 
-    if (task.agentName) {
+    if (task.providerName && task.modelName) {
+      response = await routeByModel(task.providerName, task.modelName, messages);
+    } else if (task.agentName) {
       response = await routeByAgent(task.agentName, messages);
     } else if (task.categoryName) {
       response = await routeByCategory(task.categoryName, messages);
     } else {
-      throw new Error("No agent or category specified");
+      throw new Error("No agent, category, or provider+model specified");
     }
 
     // Extract result from response

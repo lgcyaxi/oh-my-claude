@@ -162,6 +162,7 @@ omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [�
 | **Session** | API quota usage | `[79% 7d:4%]` (5-hour/7-day) |
 | **Output Style** | Current style | `[eng-pro]` |
 | **MCP** | Background tasks | `[⠙ Oracle: 32s]` |
+| **Memory** | Memory store count | `[mem:5]` |
 
 ### Presets
 
@@ -171,7 +172,7 @@ Configure in `~/.config/oh-my-claude/statusline.json`:
 |--------|----------|
 | **minimal** | Git, Directory |
 | **standard** | Model, Git, Directory, Context, Session, MCP |
-| **full** | All segments (including Output Style) |
+| **full** | All segments (including Output Style, Memory) |
 
 ```json
 {
@@ -362,6 +363,8 @@ These agents run via oh-my-claude's MCP server using external API providers. **W
 | **Document-Writer** | MiniMax | MiniMax-M2.1 | Documentation |
 
 **Invocation:** `launch_background_task(agent="oracle", prompt="...")` or `execute_agent(agent="oracle", prompt="...")`
+
+**Direct Model Access:** `execute_with_model(provider="deepseek", model="deepseek-reasoner", prompt="...")` — bypasses agent routing for token-efficient direct model calls.
 
 > **Note:** If a provider's API key is not configured, tasks using that provider will fail. Set the required environment variable (e.g., `DEEPSEEK_API_KEY`) before using agents that depend on it.
 

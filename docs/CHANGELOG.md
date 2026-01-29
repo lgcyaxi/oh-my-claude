@@ -4,7 +4,7 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.3.x](changelog/v1.3.x.md) - Current Development
 
-**Latest: v1.3.0-beta.2** (2026-01-29)
+**Latest: v1.3.0-beta.3** (2026-01-29)
 
 ### Highlights
 
@@ -12,6 +12,8 @@ All notable changes to oh-my-claude are documented here.
 - **5 Built-in Style Presets** - engineer-professional, agent, concise-coder, teaching, review
 - **Custom Style Support** - Create and manage custom output styles in `~/.claude/output-styles/`
 - **Memory System** - Markdown-first persistent memory with MCP tools and CLI
+- **`execute_with_model` MCP Tool** - Direct model routing for token-efficient calls
+- **Memory StatusLine Segment** - Shows memory count in statusline `[mem:N]`
 - **Companion Tools** - UI UX Pro Max skill via `setup-tools`
 
 ---
@@ -70,6 +72,7 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v1.3.0-beta.3 | 2026-01-29 | Beta | execute_with_model tool, memory statusline segment |
 | v1.3.0-beta.0 | 2026-01-29 | Beta | Output style manager with 5 built-in presets |
 | v1.2.2 | 2026-01-29 | Patch | Segment statusline, CLI commands, rich context, concurrent tasks, Windows fixes |
 | v1.2.1 | 2026-01-17 | Patch | Doctor improvements, beta channel |

@@ -85,11 +85,12 @@ npm publish --access public
 ## Key Files
 
 - `src/config/loader.ts` - Config loading and provider resolution
-- `src/providers/router.ts` - Routes requests to providers
+- `src/providers/router.ts` - Routes requests to providers (routeByAgent, routeByCategory, routeByModel)
 - `src/mcp/background-agent-server/server.ts` - MCP server implementation
 - `src/styles/index.ts` - Output style manager (list, set, reset, create)
 - `src/memory/index.ts` - Memory system barrel export (store, parser, search)
-- `src/statusline/config.ts` - StatusLine config and segment management
+- `src/statusline/config.ts` - StatusLine config and segment management (8 segments)
+- `src/statusline/segments/memory.ts` - Memory statusline segment
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
 
 ## Documentation Convention

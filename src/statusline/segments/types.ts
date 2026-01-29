@@ -11,7 +11,8 @@ export type SegmentId =
   | "context"
   | "session"
   | "output-style"
-  | "mcp";
+  | "mcp"
+  | "memory";
 
 // Semantic colors for status indication
 export type SemanticColor = "good" | "warning" | "critical" | "neutral";
@@ -94,7 +95,7 @@ export interface Segment {
 export const PRESETS: Record<StatusLineConfig["preset"], SegmentId[]> = {
   minimal: ["git", "directory"],
   standard: ["model", "git", "directory", "context", "session", "mcp"],
-  full: ["model", "git", "directory", "context", "session", "output-style", "mcp"],
+  full: ["model", "git", "directory", "context", "session", "output-style", "mcp", "memory"],
 };
 
 // Default segment positions
@@ -106,4 +107,5 @@ export const DEFAULT_SEGMENT_POSITIONS: Record<SegmentId, number> = {
   session: 5,
   "output-style": 6,
   mcp: 7,
+  memory: 8,
 };

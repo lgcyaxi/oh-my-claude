@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.3.0-beta.2");
+  .version("1.3.0-beta.3");
 
 // Install command
 program
@@ -935,9 +935,9 @@ statuslineCmd
 // Statusline toggle subcommand
 statuslineCmd
   .command("toggle <segment> [state]")
-  .description("Toggle a segment on/off (model, git, directory, context, session, output-style, mcp)")
+  .description("Toggle a segment on/off (model, git, directory, context, session, output-style, mcp, memory)")
   .action((segment: string, state?: string) => {
-    const validSegments = ["model", "git", "directory", "context", "session", "output-style", "mcp"];
+    const validSegments = ["model", "git", "directory", "context", "session", "output-style", "mcp", "memory"];
     if (!validSegments.includes(segment)) {
       console.log(`Invalid segment: ${segment}`);
       console.log(`Valid segments: ${validSegments.join(", ")}`);
