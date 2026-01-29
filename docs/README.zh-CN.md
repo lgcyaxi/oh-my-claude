@@ -16,6 +16,8 @@
 - **规划系统** - 使用 Prometheus 智能体进行战略规划和巨石状态追踪
 - **官方 MCP 一键安装** - 一条命令安装 Sequential Thinking、MiniMax 和 GLM MCP 服务
 - **Hook 集成** - 代码质量检查和待办追踪
+- **输出样式管理器** - 通过 CLI 在内置和自定义输出样式之间切换
+- **配套工具** - 一键安装 UI UX Pro Max、CCometixLine 等工具
 
 ## 快速开始
 

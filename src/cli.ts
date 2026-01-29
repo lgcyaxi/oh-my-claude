@@ -419,6 +419,39 @@ program
       }
     }
 
+    // Check companion tools
+    if (detail) {
+      console.log(`\n${header("Companion Tools:")}`);
+
+      // Check UI UX Pro Max
+      const skillDir = join(homedir(), ".claude", "skills", "ui-ux-pro-max");
+      const skillExists = existsSync(skillDir);
+      console.log(`  ${skillExists ? ok("UI UX Pro Max skill") : dimText("○ UI UX Pro Max (not installed)")}`);
+      if (skillExists) {
+        const skillMd = join(skillDir, "SKILL.md");
+        console.log(`    Path: ${dimText(skillDir)}`);
+        console.log(`    SKILL.md: ${existsSync(skillMd) ? `${c.green}found${c.reset}` : `${c.red}missing${c.reset}`}`);
+      }
+
+      // Check CCometixLine
+      let cclineInstalled = false;
+      try {
+        require("node:child_process").execSync("which ccline", { stdio: "pipe" });
+        cclineInstalled = true;
+      } catch { /* not installed */ }
+      console.log(`  ${cclineInstalled ? ok("CCometixLine") : dimText("○ CCometixLine (not installed)")}`);
+
+      // Check output styles
+      const stylesDir = join(homedir(), ".claude", "output-styles");
+      const stylesExist = existsSync(stylesDir);
+      if (stylesExist) {
+        const styleCount = require("node:fs").readdirSync(stylesDir).filter((f: string) => f.endsWith(".md")).length;
+        console.log(`  ${ok(`Output styles: ${styleCount} style(s)`)}`);
+      } else {
+        console.log(`  ${dimText("○ Output styles (not deployed)")}`);
+      }
+    }
+
     // Check providers
     console.log(`\n${header("Providers:")}`);
     try {
@@ -1459,6 +1492,11 @@ program
         value: "ccline",
         description: "Enhanced statusline for Claude Code",
       },
+      {
+        name: "UI UX Pro Max",
+        value: "uipro",
+        description: "AI design intelligence skill - 67 styles, 96 palettes, 57 font pairings",
+      },
     ];
 
     // List mode
@@ -1624,6 +1662,82 @@ try {
 
         console.log();
         console.log(ok("CCometixLine installed successfully!"));
+      }
+
+      if (toolValue === "uipro") {
+        const { existsSync } = await import("node:fs");
+
+        // Check prerequisites
+        let hasPython = false;
+        try {
+          execSync("python3 --version", { stdio: "pipe" });
+          hasPython = true;
+        } catch {
+          try {
+            execSync("python --version", { stdio: "pipe" });
+            hasPython = true;
+          } catch {
+            // No Python
+          }
+        }
+
+        if (!hasPython) {
+          console.log(fail("Python 3 is required for UI UX Pro Max"));
+          console.log(dimText("Install Python 3 from https://python.org/ and try again."));
+          continue;
+        }
+
+        // Check if already installed
+        let alreadyInstalled = false;
+        try {
+          execSync("npx uipro-cli --help", { stdio: "pipe", timeout: 15000 });
+          alreadyInstalled = true;
+        } catch {
+          // Not installed
+        }
+
+        // Also check if skill files exist
+        const skillDir = join(homedir(), ".claude", "skills", "ui-ux-pro-max");
+        const skillExists = existsSync(skillDir);
+
+        if (alreadyInstalled || skillExists) {
+          const reinstall = await confirm({
+            message: "UI UX Pro Max already installed. Reinstall?",
+            default: false,
+          });
+
+          if (!reinstall) {
+            console.log(dimText("Keeping existing UI UX Pro Max installation."));
+            continue;
+          }
+        }
+
+        // Step 1: Install uipro-cli globally
+        console.log("Installing UI UX Pro Max CLI...");
+        try {
+          execSync("npm install -g uipro-cli", { stdio: "inherit", timeout: 60000 });
+          console.log(ok("uipro-cli installed"));
+        } catch (error) {
+          console.log(fail("Failed to install uipro-cli"));
+          console.log(dimText("Try manually: npm install -g uipro-cli"));
+          continue;
+        }
+
+        // Step 2: Initialize for Claude Code
+        console.log("Initializing UI UX Pro Max for Claude Code...");
+        try {
+          execSync("npx uipro-cli init --ai claude", { stdio: "inherit", timeout: 60000 });
+          console.log(ok("UI UX Pro Max initialized for Claude Code"));
+        } catch (error) {
+          console.log(fail("Failed to initialize UI UX Pro Max"));
+          console.log(dimText("Try manually: npx uipro-cli init --ai claude"));
+          continue;
+        }
+
+        console.log();
+        console.log(ok("UI UX Pro Max installed successfully!"));
+        console.log(dimText("Skills installed to ~/.claude/skills/ui-ux-pro-max/"));
+        console.log(dimText("Use it by asking Claude about UI/UX design, styles, or color palettes."));
       }
     }
 
