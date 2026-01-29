@@ -26,8 +26,8 @@ import {
   cleanupTasks,
   updateStatusFile,
   waitForTaskCompletion,
+  getConcurrencyStatus,
 } from "./task-manager";
-import { getConcurrencyStatus } from "./concurrency";
 import { getProvidersStatus } from "../../providers/router";
 import { agents } from "../../agents";
 
@@ -42,7 +42,7 @@ Use this for async operations that should run in parallel without blocking.
 **Available Agents** (use 'agent' parameter):
 - oracle: Deep reasoning, architecture advice (DeepSeek reasoner)
 - librarian: External docs, library research (ZhiPu GLM)
-- explore: Codebase search (DeepSeek chat)
+- analyst: Code analysis, patterns (DeepSeek chat)
 - frontend-ui-ux: Visual/UI work (ZhiPu GLM-4v)
 - document-writer: Documentation (MiniMax)
 
@@ -59,7 +59,7 @@ Note: Agents using Claude subscription (sisyphus, claude-reviewer, claude-scout)
         agent: {
           type: "string",
           description:
-            "Agent name to use (oracle, librarian, explore, frontend-ui-ux, document-writer)",
+            "Agent name to use (oracle, analyst, librarian, frontend-ui-ux, document-writer)",
         },
         category: {
           type: "string",
@@ -75,6 +75,26 @@ Note: Agents using Claude subscription (sisyphus, claude-reviewer, claude-scout)
           description:
             "Optional custom system prompt (overrides agent default)",
         },
+        context_hints: {
+          type: "object",
+          description: "Optional hints for automatic context gathering",
+          properties: {
+            keywords: {
+              type: "array",
+              items: { type: "string" },
+              description: "Keywords to help detect relevant context",
+            },
+            file_patterns: {
+              type: "array",
+              items: { type: "string" },
+              description: "Glob patterns for files to include",
+            },
+            skip_context: {
+              type: "boolean",
+              description: "Set to true to disable automatic context",
+            },
+          },
+        },
       },
       required: ["prompt"],
     },
@@ -88,7 +108,7 @@ Use this for synchronous agent execution when you need the result immediately.
 **Available Agents** (use 'agent' parameter):
 - oracle: Deep reasoning, architecture advice (DeepSeek reasoner)
 - librarian: External docs, library research (ZhiPu GLM)
-- explore: Codebase search (DeepSeek chat)
+- analyst: Code analysis, patterns (DeepSeek chat)
 - frontend-ui-ux: Visual/UI work (ZhiPu GLM-4v)
 - document-writer: Documentation (MiniMax)
 
@@ -107,7 +127,7 @@ For parallel execution of multiple agents, use launch_background_task + poll_tas
       properties: {
         agent: {
           type: "string",
-          description: "Agent name (oracle, librarian, explore, frontend-ui-ux, document-writer)",
+          description: "Agent name (oracle, analyst, librarian, frontend-ui-ux, document-writer)",
         },
         category: {
           type: "string",
@@ -125,6 +145,26 @@ For parallel execution of multiple agents, use launch_background_task + poll_tas
           type: "number",
           description: "Optional timeout in milliseconds (default: 300000 = 5 minutes)",
         },
+        context_hints: {
+          type: "object",
+          description: "Optional hints for automatic context gathering",
+          properties: {
+            keywords: {
+              type: "array",
+              items: { type: "string" },
+              description: "Keywords to help detect relevant context",
+            },
+            file_patterns: {
+              type: "array",
+              items: { type: "string" },
+              description: "Glob patterns for files to include",
+            },
+            skip_context: {
+              type: "boolean",
+              description: "Set to true to disable automatic context",
+            },
+          },
+        },
       },
       required: ["prompt"],
     },
@@ -139,6 +179,10 @@ For parallel execution of multiple agents, use launch_background_task + poll_tas
         task_id: {
           type: "string",
           description: "The task ID returned by launch_background_task",
+        },
+        wait_seconds: {
+          type: "number",
+          description: "Wait up to this many seconds for completion before returning (default: 0 = instant). Use 10-30 seconds to reduce polling frequency while allowing statusline updates.",
         },
       },
       required: ["task_id"],
@@ -215,11 +259,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "launch_background_task": {
-        const { agent, category, prompt, system_prompt } = args as {
+        const { agent, category, prompt, system_prompt, context_hints } = args as {
           agent?: string;
           category?: string;
           prompt: string;
           system_prompt?: string;
+          context_hints?: {
+            keywords?: string[];
+            file_patterns?: string[];
+            skip_context?: boolean;
+          };
         };
 
         if (!prompt) {
@@ -261,6 +310,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           categoryName: category,
           prompt,
           systemPrompt: system_prompt,
+          contextHints: context_hints
+            ? {
+                keywords: context_hints.keywords,
+                filePatterns: context_hints.file_patterns,
+                skipContext: context_hints.skip_context,
+              }
+            : undefined,
         });
 
         return {
@@ -278,12 +334,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "execute_agent": {
-        const { agent, category, prompt, system_prompt, timeout_ms } = args as {
+        const { agent, category, prompt, system_prompt, timeout_ms, context_hints } = args as {
           agent?: string;
           category?: string;
           prompt: string;
           system_prompt?: string;
           timeout_ms?: number;
+          context_hints?: {
+            keywords?: string[];
+            file_patterns?: string[];
+            skip_context?: boolean;
+          };
         };
 
         if (!prompt) {
@@ -322,6 +383,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           categoryName: category,
           prompt,
           systemPrompt: system_prompt,
+          contextHints: context_hints
+            ? {
+                keywords: context_hints.keywords,
+                filePatterns: context_hints.file_patterns,
+                skipContext: context_hints.skip_context,
+              }
+            : undefined,
         });
 
         // Wait for completion
@@ -363,7 +431,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "poll_task": {
-        const { task_id } = args as { task_id: string };
+        const { task_id, wait_seconds } = args as { task_id: string; wait_seconds?: number };
 
         if (!task_id) {
           return {
@@ -372,6 +440,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        // If wait_seconds provided, wait for completion with timeout
+        if (wait_seconds && wait_seconds > 0) {
+          const timeoutMs = Math.min(wait_seconds * 1000, 60000); // Cap at 60 seconds
+          const result = await waitForTaskCompletion(task_id, timeoutMs, 500);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result),
+              },
+            ],
+          };
+        }
+
+        // Instant poll (no waiting)
         const result = pollTask(task_id);
 
         return {

@@ -87,7 +87,7 @@ export const claudeScoutAgent: AgentDefinition = {
     "Fast scout for quick exploration and simple tasks. Prioritizes speed while maintaining accuracy.",
   prompt: CLAUDE_SCOUT_PROMPT,
   defaultProvider: "claude",
-  defaultModel: "claude-haiku-4-5",
+  defaultModel: "claude-haiku-4.5",
   defaultTemperature: 0.3,
   executionMode: "task",
   restrictedTools: ["Edit", "Write"],

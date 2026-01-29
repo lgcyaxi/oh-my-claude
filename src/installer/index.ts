@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 
 /**
  * Get the package root directory
@@ -54,6 +55,7 @@ function getPackageRoot(): string {
 import { generateAllAgentFiles, removeAgentFiles } from "../generators/agent-generator";
 import { installHooks, installMcpServer, installStatusLine, uninstallFromSettings, uninstallStatusLine } from "./settings-merger";
 import { DEFAULT_CONFIG } from "../config/schema";
+import { ensureConfigExists as ensureStatusLineConfigExists } from "../statusline/config";
 
 /**
  * Get commands directory
@@ -103,9 +105,20 @@ export interface InstallResult {
   commands: { installed: string[]; skipped: string[] };
   hooks: { installed: string[]; updated: string[]; skipped: string[] };
   mcp: { installed: boolean; updated: boolean };
-  statusLine: { installed: boolean; wrapperCreated: boolean; updated: boolean };
+  statusLine: {
+    installed: boolean;
+    wrapperCreated: boolean;
+    updated: boolean;
+    configCreated: boolean;
+    validation?: {
+      valid: boolean;
+      errors: string[];
+      warnings: string[];
+    };
+  };
   config: { created: boolean };
   errors: string[];
+  warnings: string[];
 }
 
 /**
@@ -133,9 +146,10 @@ export async function install(options?: {
     commands: { installed: [], skipped: [] },
     hooks: { installed: [], updated: [], skipped: [] },
     mcp: { installed: false, updated: false },
-    statusLine: { installed: false, wrapperCreated: false, updated: false },
+    statusLine: { installed: false, wrapperCreated: false, updated: false, configCreated: false },
     config: { created: false },
     errors: [],
+    warnings: [],
   };
 
   const installDir = getInstallDir();
@@ -169,6 +183,7 @@ export async function install(options?: {
     }
 
     // 2. Install slash commands
+    // Always update our command files - they're managed by oh-my-claude
     if (!options?.skipCommands) {
       try {
         const commandsDir = getCommandsDir();
@@ -183,11 +198,13 @@ export async function install(options?: {
           for (const file of commandFiles) {
             const srcPath = join(srcCommandsDir, file);
             const destPath = join(commandsDir, file);
-            if (!existsSync(destPath) || options?.force) {
-              copyFileSync(srcPath, destPath);
-              result.commands.installed.push(file.replace(".md", ""));
+            const wasExisting = existsSync(destPath);
+            // Always copy our command files (they're ours, we should update them)
+            copyFileSync(srcPath, destPath);
+            if (wasExisting) {
+              result.commands.installed.push(`${file.replace(".md", "")} (updated)`);
             } else {
-              result.commands.skipped.push(file.replace(".md", ""));
+              result.commands.installed.push(file.replace(".md", ""));
             }
           }
         } else {
@@ -297,12 +314,95 @@ process.exit(1);
         result.statusLine.installed = statusLineResult.installed;
         result.statusLine.wrapperCreated = statusLineResult.wrapperCreated;
         result.statusLine.updated = statusLineResult.updated;
+
+        // Create default statusline segment config (full preset for maximum visibility)
+        // This now returns a boolean indicating success
+        result.statusLine.configCreated = ensureStatusLineConfigExists("full");
+        if (!result.statusLine.configCreated) {
+          result.warnings.push("Failed to create statusline config file. Statusline may not work correctly.");
+        }
+
+        // Validate statusline setup
+        const { validateStatusLineSetup } = require("./statusline-merger");
+        const validation = validateStatusLineSetup();
+        result.statusLine.validation = {
+          valid: validation.valid,
+          errors: validation.errors,
+          warnings: validation.warnings,
+        };
+
+        // Add validation errors/warnings to main result
+        if (!validation.valid) {
+          for (const err of validation.errors) {
+            result.warnings.push(`[statusline] ${err}`);
+          }
+        }
+        for (const warn of validation.warnings) {
+          result.warnings.push(`[statusline] ${warn}`);
+        }
+
+        if (debug && !validation.valid) {
+          console.log(`[DEBUG] Statusline validation failed:`);
+          console.log(`[DEBUG]   Script exists: ${validation.details.scriptExists}`);
+          console.log(`[DEBUG]   Node path valid: ${validation.details.nodePathValid}`);
+          console.log(`[DEBUG]   Settings configured: ${validation.details.settingsConfigured}`);
+          console.log(`[DEBUG]   Command works: ${validation.details.commandWorks}`);
+        }
       } catch (error) {
         result.errors.push(`Failed to install statusline: ${error}`);
       }
     }
 
-    // 5. Create default config if not exists
+    // 5. Copy package.json for version detection
+    try {
+      const srcPkgPath = join(sourceDir, "package.json");
+      const destPkgPath = join(installDir, "package.json");
+      if (existsSync(srcPkgPath)) {
+        copyFileSync(srcPkgPath, destPkgPath);
+      }
+    } catch (error) {
+      // Non-critical error, just log
+      if (debug) console.log(`[DEBUG] Failed to copy package.json: ${error}`);
+    }
+
+    // 5b. Check if installing from git dev branch and create beta marker
+    try {
+      const gitDir = join(sourceDir, ".git");
+      if (existsSync(gitDir)) {
+        // Get current branch
+        const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+          cwd: sourceDir,
+          encoding: "utf-8",
+          stdio: ["pipe", "pipe", "pipe"],
+        }).trim();
+
+        // If on dev branch, create beta channel marker
+        if (branch === "dev") {
+          const ref = execSync("git rev-parse --short HEAD", {
+            cwd: sourceDir,
+            encoding: "utf-8",
+            stdio: ["pipe", "pipe", "pipe"],
+          }).trim();
+
+          const { setBetaChannelInfo } = require("./beta-channel");
+          setBetaChannelInfo({
+            ref,
+            branch: "dev",
+            installedAt: new Date().toISOString(),
+          });
+          if (debug) console.log(`[DEBUG] Created beta channel marker: dev @ ${ref}`);
+        } else {
+          // Not on dev branch, clear any existing beta marker
+          const { clearBetaChannel } = require("./beta-channel");
+          clearBetaChannel();
+        }
+      }
+    } catch (error) {
+      // Not in a git repo or git not available, ignore
+      if (debug) console.log(`[DEBUG] Git check failed: ${error}`);
+    }
+
+    // 6. Create default config if not exists
     const configPath = getConfigPath();
     if (!existsSync(configPath) || options?.force) {
       try {

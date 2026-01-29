@@ -1,176 +1,236 @@
 /**
- * Concurrency manager for background agent tasks
+ * Concurrency Manager for background agent execution
  *
- * Manages rate limiting per provider to avoid API throttling
+ * Implements a semaphore-based concurrency control system to prevent
+ * resource exhaustion when running multiple background tasks in parallel.
+ *
+ * Features:
+ * - Per-provider concurrency limits
+ * - Global concurrency limit
+ * - Queue management with FIFO ordering
+ * - Slot tracking for status display
  */
 
 import { loadConfig } from "../../config";
 
-interface QueuedTask {
-  provider: string;
-  execute: () => Promise<void>;
-  resolve: () => void;
-  reject: (error: Error) => void;
+export interface ConcurrencyConfig {
+  /** Global maximum concurrent tasks across all providers */
+  global: number;
+  /** Per-provider limits (provider name -> max concurrent) */
+  perProvider: Record<string, number>;
 }
 
-// Active task counts per provider
-const activeCounts = new Map<string, number>();
+// Default concurrency limits
+const DEFAULT_LIMITS: ConcurrencyConfig = {
+  global: 10,
+  perProvider: {
+    deepseek: 5,
+    zhipu: 5,
+    minimax: 3,
+    openrouter: 5,
+  },
+};
 
-// Task queues per provider
-const queues = new Map<string, QueuedTask[]>();
+// Active task counts
+const activeCount = {
+  global: 0,
+  perProvider: new Map<string, number>(),
+};
+
+// Waiting queue: array of { provider, resolve } to release when slot available
+interface QueuedTask {
+  provider: string;
+  resolve: () => void;
+}
+const waitingQueue: QueuedTask[] = [];
 
 /**
- * Get concurrency limit for a provider
+ * Get concurrency limits from config or defaults
  */
-function getConcurrencyLimit(provider: string): number {
-  const config = loadConfig();
-
-  // Check per-provider limit
-  const perProvider = config.concurrency.per_provider?.[provider];
-  if (perProvider !== undefined) {
-    return perProvider;
+function getLimits(): ConcurrencyConfig {
+  try {
+    const config = loadConfig();
+    const concurrency = (config as any).concurrency;
+    if (concurrency) {
+      return {
+        global: concurrency.global ?? DEFAULT_LIMITS.global,
+        perProvider: {
+          ...DEFAULT_LIMITS.perProvider,
+          ...concurrency.per_provider,
+        },
+      };
+    }
+  } catch {
+    // Use defaults if config loading fails
   }
+  return DEFAULT_LIMITS;
+}
 
-  // Fall back to default
-  return config.concurrency.default;
+/**
+ * Get the limit for a specific provider
+ */
+function getProviderLimit(provider: string): number {
+  const limits = getLimits();
+  return limits.perProvider[provider] ?? 5;
 }
 
 /**
  * Get current active count for a provider
  */
-function getActiveCount(provider: string): number {
-  return activeCounts.get(provider) ?? 0;
+function getProviderActiveCount(provider: string): number {
+  return activeCount.perProvider.get(provider) ?? 0;
 }
 
 /**
- * Increment active count for a provider
+ * Check if we can acquire a slot for the given provider
  */
-function incrementActive(provider: string): void {
-  const current = getActiveCount(provider);
-  activeCounts.set(provider, current + 1);
+function canAcquire(provider: string): boolean {
+  const limits = getLimits();
+  const providerActive = getProviderActiveCount(provider);
+  const providerLimit = getProviderLimit(provider);
+
+  return activeCount.global < limits.global && providerActive < providerLimit;
 }
 
 /**
- * Decrement active count for a provider and process queue
+ * Acquire a concurrency slot for the given provider
+ * Returns immediately if slot available, or waits in queue
  */
-function decrementActive(provider: string): void {
-  const current = getActiveCount(provider);
-  activeCounts.set(provider, Math.max(0, current - 1));
-
-  // Process next item in queue
-  processQueue(provider);
-}
-
-/**
- * Process the next item in the queue for a provider
- */
-function processQueue(provider: string): void {
-  const queue = queues.get(provider);
-  if (!queue || queue.length === 0) {
+export async function acquireSlot(provider: string): Promise<void> {
+  if (canAcquire(provider)) {
+    // Slot available, acquire immediately
+    activeCount.global++;
+    activeCount.perProvider.set(
+      provider,
+      getProviderActiveCount(provider) + 1
+    );
     return;
   }
 
-  const limit = getConcurrencyLimit(provider);
-  const active = getActiveCount(provider);
-
-  if (active < limit) {
-    const task = queue.shift();
-    if (task) {
-      incrementActive(provider);
-
-      task
-        .execute()
-        .then(() => {
-          task.resolve();
-        })
-        .catch((error) => {
-          task.reject(error);
-        })
-        .finally(() => {
-          decrementActive(provider);
-        });
-    }
-  }
+  // No slot available, wait in queue
+  return new Promise<void>((resolve) => {
+    waitingQueue.push({ provider, resolve });
+  });
 }
 
 /**
- * Execute a task with concurrency control
- *
- * If the provider is at its concurrency limit, the task will be queued
+ * Release a concurrency slot for the given provider
+ * Wakes up next waiting task if any
  */
-export async function withConcurrencyLimit<T>(
-  provider: string,
-  execute: () => Promise<T>
-): Promise<T> {
-  const limit = getConcurrencyLimit(provider);
-  const active = getActiveCount(provider);
-
-  // If under limit, execute immediately
-  if (active < limit) {
-    incrementActive(provider);
-    try {
-      return await execute();
-    } finally {
-      decrementActive(provider);
-    }
+export function releaseSlot(provider: string): void {
+  // Decrement counts
+  activeCount.global = Math.max(0, activeCount.global - 1);
+  const current = getProviderActiveCount(provider);
+  if (current > 0) {
+    activeCount.perProvider.set(provider, current - 1);
   }
 
-  // Otherwise, queue the task
-  return new Promise<T>((resolve, reject) => {
-    const queue = queues.get(provider) ?? [];
+  // Try to wake up a waiting task
+  processQueue();
+}
 
-    queue.push({
-      provider,
-      execute: async () => {
-        try {
-          const result = await execute();
-          resolve(result);
-        } catch (error) {
-          reject(error);
-          throw error;
-        }
-      },
-      resolve: () => {}, // Handled in execute
-      reject,
-    });
+/**
+ * Process the waiting queue, starting any tasks that can now run
+ */
+function processQueue(): void {
+  // Process in FIFO order, but skip tasks that still can't run
+  let i = 0;
+  while (i < waitingQueue.length) {
+    const queued = waitingQueue[i];
+    if (!queued) break;
 
-    queues.set(provider, queue);
-  });
+    if (canAcquire(queued.provider)) {
+      // Remove from queue and start
+      waitingQueue.splice(i, 1);
+      activeCount.global++;
+      activeCount.perProvider.set(
+        queued.provider,
+        getProviderActiveCount(queued.provider) + 1
+      );
+      queued.resolve();
+      // Don't increment i since we removed an element
+    } else {
+      i++;
+    }
+  }
 }
 
 /**
  * Get concurrency status for all providers
  */
-export function getConcurrencyStatus(): Record<
-  string,
-  { active: number; limit: number; queued: number }
-> {
-  const config = loadConfig();
-  const status: Record<string, { active: number; limit: number; queued: number }> = {};
+export function getConcurrencyStatus(): {
+  global: { active: number; limit: number; queued: number };
+  perProvider: Record<string, { active: number; limit: number; queued: number }>;
+} {
+  const limits = getLimits();
 
-  // Get all known providers
-  const providers = Object.keys(config.providers);
+  // Count queued tasks per provider
+  const queuedPerProvider = new Map<string, number>();
+  for (const queued of waitingQueue) {
+    queuedPerProvider.set(
+      queued.provider,
+      (queuedPerProvider.get(queued.provider) ?? 0) + 1
+    );
+  }
 
-  for (const provider of providers) {
-    status[provider] = {
-      active: getActiveCount(provider),
-      limit: getConcurrencyLimit(provider),
-      queued: queues.get(provider)?.length ?? 0,
+  // Build per-provider status
+  const perProvider: Record<string, { active: number; limit: number; queued: number }> = {};
+  for (const [provider, limit] of Object.entries(limits.perProvider)) {
+    perProvider[provider] = {
+      active: getProviderActiveCount(provider),
+      limit,
+      queued: queuedPerProvider.get(provider) ?? 0,
     };
   }
 
-  return status;
+  return {
+    global: {
+      active: activeCount.global,
+      limit: limits.global,
+      queued: waitingQueue.length,
+    },
+    perProvider,
+  };
 }
 
 /**
- * Clear all queues (useful for shutdown)
+ * Get a compact status string for display
+ * e.g., "3/10 global | DS: 2/5 | ZP: 1/5"
  */
-export function clearQueues(): void {
-  for (const [provider, queue] of queues) {
-    for (const task of queue) {
-      task.reject(new Error("Queue cleared"));
+export function getConcurrencyStatusString(): string {
+  const status = getConcurrencyStatus();
+  const parts: string[] = [];
+
+  // Global status
+  parts.push(`${status.global.active}/${status.global.limit}`);
+
+  // Per-provider status (only show active ones)
+  const providerAbbrev: Record<string, string> = {
+    deepseek: "DS",
+    zhipu: "ZP",
+    minimax: "MM",
+    openrouter: "OR",
+  };
+
+  for (const [provider, info] of Object.entries(status.perProvider)) {
+    if (info.active > 0 || info.queued > 0) {
+      const abbrev = providerAbbrev[provider] ?? provider.slice(0, 2).toUpperCase();
+      let providerStatus = `${abbrev}: ${info.active}/${info.limit}`;
+      if (info.queued > 0) {
+        providerStatus += ` (+${info.queued})`;
+      }
+      parts.push(providerStatus);
     }
   }
-  queues.clear();
-  activeCounts.clear();
+
+  return parts.join(" | ");
+}
+
+/**
+ * Reset all counters (for testing)
+ */
+export function resetConcurrency(): void {
+  activeCount.global = 0;
+  activeCount.perProvider.clear();
+  waitingQueue.length = 0;
 }

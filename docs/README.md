@@ -9,12 +9,12 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) v
 ## Features
 
 - **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax
+- **Concurrent Background Tasks** - Run multiple agents in parallel with configurable limits
 - **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Librarian, etc.)
 - **Slash Commands** - Quick actions (`/omcx-commit`, `/omcx-implement`) and agent activation (`/omc-sisyphus`, `/omc-plan`)
-- **Real-Time StatusLine** - Live status bar showing active agents, task progress, and provider availability
+- **Real-Time StatusLine** - Live status bar showing active agents, task progress, and concurrency slots
 - **Planning System** - Strategic planning with Prometheus agent and boulder-state tracking
 - **Official MCP Setup** - One-command installation for Sequential Thinking, MiniMax, and GLM MCPs
-- **Concurrent Execution** - Per-provider rate limiting and parallel task management
 - **Hook Integration** - Code quality checks, todo tracking, and agent monitoring
 
 ## Quick Start
@@ -132,31 +132,94 @@ Ultrawork mode activates **maximum performance execution** with zero-tolerance c
 
 ## Real-Time StatusLine
 
-oh-my-claude provides a real-time status bar that shows active agents and provider availability directly in Claude Code.
+oh-my-claude provides a segment-based statusline that shows rich information directly in Claude Code.
 
-### Status Display
+### Example Output
 
 ```
-omc ready | DS: 10 ZP: 10 MM: 5                    # Idle - showing available slots
-omc [Oracle: 32s] [@Scout: 15s] | DS: 1/10 ...    # Active tasks with elapsed time
+omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [⠙ Oracle: 32s]
+     │          │        │              │              │           │          │
+     │          │        │              │              │           │          └─ MCP tasks
+     │          │        │              │              │           └─ Output style
+     │          │        │              │              └─ API quota (5h/7d)
+     │          │        │              └─ Context tokens (used/limit)
+     │          │        └─ Project name
+     │          └─ Git branch (* = dirty, ↑2 = ahead)
+     └─ Model name
 ```
 
-### Legend
+### Segments
 
-- **omc ready** - System is ready, no active tasks
-- **[Oracle: 32s]** - MCP background agent running (via external API)
-- **[@Scout: 15s]** - Task tool agent running (via Claude subscription)
-- **DS: 1/10** - DeepSeek: 1 active / 10 max concurrent slots
-- **ZP: 0/10** - ZhiPu: 0 active / 10 max concurrent
-- **MM: 0/5** - MiniMax: 0 active / 5 max concurrent
+| Segment | Description | Example |
+|---------|-------------|---------|
+| **Model** | Current Claude model | `[opus-4.5]` |
+| **Git** | Branch + status | `[dev*↑2]` (dirty, 2 ahead) |
+| **Directory** | Project name | `[oh-my-claude]` |
+| **Context** | Token usage % | `[45% 89k/200k]` |
+| **Session** | API quota usage | `[79% 7d:4%]` (5-hour/7-day) |
+| **Output Style** | Current style | `[eng-pro]` |
+| **MCP** | Background tasks | `[⠙ Oracle: 32s]` |
+
+### Presets
+
+Configure in `~/.config/oh-my-claude/statusline.json`:
+
+| Preset | Segments |
+|--------|----------|
+| **minimal** | Git, Directory |
+| **standard** | Model, Git, Directory, Context, Session, MCP |
+| **full** | All segments (including Output Style) |
+
+```json
+{
+  "enabled": true,
+  "preset": "standard",
+  "segments": {
+    "model": { "enabled": false, "position": 1 },
+    "git": { "enabled": true, "position": 2 },
+    "directory": { "enabled": true, "position": 3 },
+    "context": { "enabled": false, "position": 4 },
+    "session": { "enabled": true, "position": 5 },
+    "output-style": { "enabled": false, "position": 6 },
+    "mcp": { "enabled": true, "position": 7 }
+  },
+  "style": {
+    "separator": " ",
+    "brackets": true,
+    "colors": true
+  }
+}
+```
+
+### Semantic Colors
+
+- 🟢 **Green** - Good (clean git, low usage)
+- 🟡 **Yellow** - Warning (dirty git, 50-80% usage)
+- 🔴 **Red** - Critical (>80% usage)
+- 🔵 **Cyan** - Neutral (directory, info)
 
 ### CLI Control
 
 ```bash
+# Check status
 npx @lgcyaxi/oh-my-claude statusline --status    # Check statusline status
+
+# Enable/Disable
 npx @lgcyaxi/oh-my-claude statusline --enable    # Enable statusline
 npx @lgcyaxi/oh-my-claude statusline --disable   # Disable statusline
+
+# Change preset
+npx @lgcyaxi/oh-my-claude statusline preset minimal   # Set minimal preset
+npx @lgcyaxi/oh-my-claude statusline preset standard  # Set standard preset
+npx @lgcyaxi/oh-my-claude statusline preset full      # Set full preset (default)
+
+# Toggle individual segments
+npx @lgcyaxi/oh-my-claude statusline toggle model on      # Enable model segment
+npx @lgcyaxi/oh-my-claude statusline toggle output-style  # Toggle output-style
+npx @lgcyaxi/oh-my-claude statusline toggle context off   # Disable context segment
 ```
+
+**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mcp`
 
 ### Multi-Line Support
 
@@ -238,9 +301,11 @@ npx @lgcyaxi/oh-my-claude uninstall            # Remove oh-my-claude
 npx @lgcyaxi/oh-my-claude uninstall --keep-config  # Keep config file
 
 # StatusLine
-npx @lgcyaxi/oh-my-claude statusline --status  # Check statusline status
-npx @lgcyaxi/oh-my-claude statusline --enable  # Enable statusline
-npx @lgcyaxi/oh-my-claude statusline --disable # Disable statusline
+npx @lgcyaxi/oh-my-claude statusline --status   # Check statusline status
+npx @lgcyaxi/oh-my-claude statusline --enable   # Enable statusline
+npx @lgcyaxi/oh-my-claude statusline --disable  # Disable statusline
+npx @lgcyaxi/oh-my-claude statusline preset <name>     # Set preset (minimal/standard/full)
+npx @lgcyaxi/oh-my-claude statusline toggle <segment>  # Toggle segment on/off
 ```
 
 ## Configuration
@@ -276,15 +341,24 @@ Configuration file: `~/.claude/oh-my-claude.json`
     "librarian": { "provider": "zhipu", "model": "glm-4.7" }
   },
   "concurrency": {
-    "default": 5,
+    "global": 10,
     "per_provider": {
-      "deepseek": 10,
-      "zhipu": 10,
-      "minimax": 5
+      "deepseek": 5,
+      "zhipu": 5,
+      "minimax": 3
     }
   }
 }
 ```
+
+### Concurrency Settings
+
+Control how many background tasks can run in parallel:
+
+- **global**: Maximum concurrent tasks across all providers (default: 10)
+- **per_provider**: Per-provider limits to prevent rate limiting
+
+When limits are reached, new tasks queue and start automatically when slots free up.
 
 ## Architecture
 

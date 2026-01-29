@@ -4,23 +4,38 @@
  * Manages the lifecycle of background tasks:
  * - Launch tasks with agent/category routing
  * - Track task status and results
- * - Handle concurrency limits per provider
  * - Write status file for statusline display
  */
 
 import { routeByAgent, routeByCategory } from "../../providers/router";
 import { getAgent } from "../../agents";
+import { getAgentProfile } from "../../agents/context-profiles";
 import { loadConfig, resolveProviderForAgent, resolveProviderForCategory } from "../../config";
 import type { ChatMessage } from "../../providers/types";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
-import { getConcurrencyStatus } from "./concurrency";
 import { getSessionStatusPath, ensureSessionDir, cleanupStaleSessions } from "../../statusline/session";
+import { detectContextNeeds, gatherContext, formatContextForPrompt } from "../../context";
+import {
+  acquireSlot,
+  releaseSlot,
+  getConcurrencyStatus as getConcurrencyStatusInternal,
+  getConcurrencyStatusString,
+} from "./concurrency";
+
+// Re-export for server.ts
+export { getConcurrencyStatusInternal as getConcurrencyStatus, getConcurrencyStatusString };
 
 // Cleanup stale sessions on server startup
 cleanupStaleSessions(60 * 60 * 1000); // 1 hour
 
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+
+export interface ContextHintsInput {
+  keywords?: string[];
+  filePatterns?: string[];
+  skipContext?: boolean;
+}
 
 export interface Task {
   id: string;
@@ -32,6 +47,10 @@ export interface Task {
   error?: string;
   /** Provider being used (for statusline display) */
   provider?: string;
+  /** Model being used (for statusline display) */
+  model?: string;
+  /** Context hints for enriching prompt */
+  contextHints?: ContextHintsInput;
   createdAt: number;
   startedAt?: number;
   completedAt?: number;
@@ -56,21 +75,27 @@ export function updateStatusFile(): void {
     ensureSessionDir();
     const statusPath = getSessionStatusPath();
 
-    // Get active tasks with provider tracking
+    // Get active tasks with rich info for statusline
     const activeTasks = Array.from(tasks.values())
       .filter((t) => t.status === "running" || t.status === "pending")
       .map((t) => ({
         agent: t.agentName || t.categoryName || "unknown",
         startedAt: t.startedAt || t.createdAt,
         provider: t.provider,
+        model: t.model,
+        prompt: t.prompt.slice(0, 100), // Truncate for display
       }));
 
-    // Get provider concurrency
-    const providers = getConcurrencyStatus();
+    // Get concurrency status for display
+    const concurrency = getConcurrencyStatusInternal();
 
     const status = {
       activeTasks,
-      providers,
+      concurrency: {
+        active: concurrency.global.active,
+        limit: concurrency.global.limit,
+        queued: concurrency.global.queued,
+      },
       updatedAt: new Date().toISOString(),
     };
 
@@ -89,8 +114,9 @@ export async function launchTask(options: {
   categoryName?: string;
   prompt: string;
   systemPrompt?: string;
+  contextHints?: ContextHintsInput;
 }): Promise<string> {
-  const { agentName, categoryName, prompt, systemPrompt } = options;
+  const { agentName, categoryName, prompt, systemPrompt, contextHints } = options;
 
   if (!agentName && !categoryName) {
     throw new Error("Either agentName or categoryName must be provided");
@@ -107,15 +133,18 @@ export async function launchTask(options: {
     }
   }
 
-  // Look up provider for this agent/category
+  // Look up provider and model for this agent/category
   const config = loadConfig();
   let provider: string | undefined;
+  let model: string | undefined;
   if (agentName) {
     const agentConfig = resolveProviderForAgent(config, agentName);
     provider = agentConfig?.provider;
+    model = agentConfig?.model;
   } else if (categoryName) {
     const categoryConfig = resolveProviderForCategory(config, categoryName);
     provider = categoryConfig?.provider;
+    model = categoryConfig?.model;
   }
 
   const task: Task = {
@@ -125,6 +154,8 @@ export async function launchTask(options: {
     prompt,
     status: "pending",
     provider,
+    model,
+    contextHints,
     createdAt: Date.now(),
   };
 
@@ -141,9 +172,15 @@ export async function launchTask(options: {
 }
 
 /**
- * Run a task asynchronously
+ * Run a task asynchronously with concurrency control
  */
 async function runTask(task: Task, systemPrompt?: string): Promise<void> {
+  // Get provider for concurrency tracking
+  const provider = task.provider ?? "unknown";
+
+  // Wait for a concurrency slot
+  await acquireSlot(provider);
+
   task.status = "running";
   task.startedAt = Date.now();
   tasks.set(task.id, task);
@@ -160,10 +197,37 @@ async function runTask(task: Task, systemPrompt?: string): Promise<void> {
       });
     }
 
-    // Add user prompt
+    // Enrich prompt with context if not skipped
+    let enrichedPrompt = task.prompt;
+    if (!task.contextHints?.skipContext && task.agentName) {
+      try {
+        const profile = getAgentProfile(task.agentName);
+        const contextTypes = detectContextNeeds(task.prompt, {
+          keywords: task.contextHints?.keywords,
+          filePatterns: task.contextHints?.filePatterns,
+        });
+
+        const workingDir = process.cwd();
+        const context = await gatherContext(
+          workingDir,
+          contextTypes,
+          profile,
+          task.contextHints?.filePatterns
+        );
+
+        if (context.items.length > 0) {
+          const contextBlock = formatContextForPrompt(context);
+          enrichedPrompt = `${contextBlock}\n\n${task.prompt}`;
+        }
+      } catch {
+        // Silently fail context gathering - proceed without context
+      }
+    }
+
+    // Add user prompt (with enriched context if available)
     messages.push({
       role: "user",
-      content: task.prompt,
+      content: enrichedPrompt,
     });
 
     let response;
@@ -190,6 +254,9 @@ async function runTask(task: Task, systemPrompt?: string): Promise<void> {
     task.completedAt = Date.now();
     tasks.set(task.id, task);
     updateStatusFile();
+  } finally {
+    // Always release the concurrency slot
+    releaseSlot(provider);
   }
 }
 

@@ -3,7 +3,6 @@
  *
  * Each Claude Code session gets a unique session ID to isolate:
  * - Active task tracking
- * - Provider concurrency counters
  *
  * Session ID is based on Claude Code's parent PID (PPID) so that:
  * - All hooks (task-tracker, statusline) share the same session
@@ -41,6 +40,32 @@ function isProcessRunning(pid: number): boolean {
  * Returns null if process doesn't exist
  */
 function getProcessInfo(pid: number): { comm: string; ppid: number } | null {
+  // Windows: use wmic or PowerShell to get process info
+  if (process.platform === "win32") {
+    try {
+      // Use PowerShell to get process name and parent process ID
+      const result = spawnSync("powershell", [
+        "-NoProfile",
+        "-Command",
+        `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object @{Name='Name';Expression={$_.ProcessName}}, @{Name='ParentId';Expression={$_.ParentProcessId}} | ConvertTo-Json`
+      ], {
+        encoding: "utf-8",
+        timeout: 5000,
+      });
+      if (result.status !== 0 || !result.stdout) {
+        return null;
+      }
+      const data = JSON.parse(result.stdout.trim());
+      if (!data || !data.Name || !data.ParentId) {
+        return null;
+      }
+      return { comm: data.Name, ppid: data.ParentId };
+    } catch {
+      return null;
+    }
+  }
+
+  // Unix/Linux/macOS: use ps command
   try {
     const result = spawnSync("ps", ["-p", String(pid), "-o", "comm=,ppid="], {
       encoding: "utf-8",
@@ -76,14 +101,21 @@ function findClaudeCodePID(): number | null {
     if (!info) break;
 
     // Check if this is the Claude Code process
-    // The command will be "claude" or contain "claude" in the path
+    // Unix: "claude" or path ending with "/claude"
+    // Windows: "claude.exe" or "claude" (without extension from PowerShell)
     const commLower = info.comm.toLowerCase();
-    if (commLower === "claude" || commLower.endsWith("/claude")) {
+    const isClaude = process.platform === "win32"
+      ? (commLower === "claude" || commLower === "claude.exe")
+      : (commLower === "claude" || commLower.endsWith("/claude"));
+
+    if (isClaude) {
       return currentPid;
     }
 
     // Move up to parent
-    if (info.ppid <= 1) break; // Reached init/launchd
+    // On Windows, PID 0 is System Idle Process, on Unix 1 is init
+    const minPid = process.platform === "win32" ? 0 : 1;
+    if (info.ppid <= minPid) break;
     currentPid = info.ppid;
   }
 

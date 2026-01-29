@@ -299,7 +299,7 @@ export const prometheusAgent: AgentDefinition = {
     "Strategic planning consultant. Interviews users, gathers context via explore agents, and creates structured work plans in .sisyphus/plans/.",
   prompt: PROMETHEUS_PROMPT,
   defaultProvider: "claude",
-  defaultModel: "claude-sonnet-4-5",
+  defaultModel: "claude-sonnet-4.5",
   executionMode: "task",
 };
 

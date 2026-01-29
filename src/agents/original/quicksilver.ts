@@ -77,7 +77,7 @@ export const quicksilverAgent: OriginalAgentDefinition = {
   name: "Quicksilver",
   description: "Fast, lightweight agent for quick tasks, lookups, and verifications",
   provider: "claude",
-  model: "claude-haiku-4-5",
+  model: "claude-haiku-4.5",
   executionMode: "task",
   prompt: QUICKSILVER_PROMPT,
   temperature: 0.3,

@@ -1,6 +1,6 @@
 {
   "name": "@lgcyaxi/oh-my-claude",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
   "type": "module",
   "main": "dist/index.js",
@@ -9,6 +9,7 @@
     "oh-my-claude": "bin/oh-my-claude.js"
   },
   "scripts": {
+    "prepare": "bun run build:all || echo 'Build skipped (bun not available or already built)'",
     "build": "bun build src/index.ts src/cli.ts --outdir dist --target node --splitting",
     "build:mcp": "bun build src/mcp/background-agent-server/server.ts --outdir dist/mcp --target node",
     "build:hooks": "bun build src/hooks/comment-checker.ts src/hooks/todo-continuation.ts src/hooks/task-notification.ts src/hooks/task-tracker.ts --outdir dist/hooks --target node",

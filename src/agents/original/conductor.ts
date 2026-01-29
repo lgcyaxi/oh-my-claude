@@ -80,7 +80,7 @@ export const conductorAgent: OriginalAgentDefinition = {
   name: "Conductor",
   description: "Primary orchestrator that coordinates complex tasks and delegates to specialists",
   provider: "claude",
-  model: "claude-opus-4-5",
+  model: "claude-opus-4.5",
   executionMode: "task",
   prompt: CONDUCTOR_PROMPT,
   temperature: 0.2,

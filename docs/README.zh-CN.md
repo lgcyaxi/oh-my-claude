@@ -9,11 +9,12 @@
 ## 特性
 
 - **多供应商 MCP 服务器** - 支持 DeepSeek、智谱 GLM、MiniMax 的后台任务执行
+- **并发后台任务** - 支持多智能体并行运行，可配置并发限制
 - **专业化智能体工作流** - 预配置的专业智能体（Sisyphus、Oracle、Librarian 等）
 - **斜杠命令** - 快捷操作（`/omcx-commit`、`/omcx-implement`）和智能体激活（`/omc-sisyphus`、`/omc-plan`）
+- **实时状态栏** - 显示活跃智能体、任务进度和并发槽位
 - **规划系统** - 使用 Prometheus 智能体进行战略规划和巨石状态追踪
 - **官方 MCP 一键安装** - 一条命令安装 Sequential Thinking、MiniMax 和 GLM MCP 服务
-- **并发执行** - 按供应商限速和并行任务管理
 - **Hook 集成** - 代码质量检查和待办追踪
 
 ## 快速开始
@@ -129,6 +130,101 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 - 每个步骤验证后才标记完成
 - 巨石状态持久化以支持会话延续
 
+## 实时状态栏
+
+oh-my-claude 提供基于分段的状态栏，在 Claude Code 中直接显示丰富的信息。
+
+### 示例输出
+
+```
+omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [⠙ Oracle: 32s]
+     │          │        │              │              │           │          │
+     │          │        │              │              │           │          └─ MCP 任务
+     │          │        │              │              │           └─ 输出样式
+     │          │        │              │              └─ API 配额（5小时/7天）
+     │          │        │              └─ 上下文令牌（已用/限制）
+     │          │        └─ 项目名称
+     │          └─ Git 分支（* = 有修改，↑2 = 领先2次提交）
+     └─ 模型名称
+```
+
+### 分段说明
+
+| 分段 | 描述 | 示例 |
+|------|------|------|
+| **Model** | 当前 Claude 模型 | `[opus-4.5]` |
+| **Git** | 分支 + 状态 | `[dev*↑2]`（有修改，领先2次提交） |
+| **Directory** | 项目名称 | `[oh-my-claude]` |
+| **Context** | 令牌使用率 | `[45% 89k/200k]` |
+| **Session** | API 配额使用率 | `[79% 7d:4%]`（5小时/7天） |
+| **Output Style** | 当前输出样式 | `[eng-pro]` |
+| **MCP** | 后台任务 | `[⠙ Oracle: 32s]` |
+
+### 预设配置
+
+在 `~/.config/oh-my-claude/statusline.json` 中配置：
+
+| 预设 | 包含分段 |
+|------|----------|
+| **minimal** | Git、Directory |
+| **standard** | Model、Git、Directory、Context、Session、MCP |
+| **full** | 所有分段（包括 Output Style） |
+
+```json
+{
+  "enabled": true,
+  "preset": "standard",
+  "segments": {
+    "model": { "enabled": false, "position": 1 },
+    "git": { "enabled": true, "position": 2 },
+    "directory": { "enabled": true, "position": 3 },
+    "context": { "enabled": false, "position": 4 },
+    "session": { "enabled": true, "position": 5 },
+    "output-style": { "enabled": false, "position": 6 },
+    "mcp": { "enabled": true, "position": 7 }
+  },
+  "style": {
+    "separator": " ",
+    "brackets": true,
+    "colors": true
+  }
+}
+```
+
+### 语义颜色
+
+- 🟢 **绿色** - 良好（干净的 git 状态、低使用率）
+- 🟡 **黄色** - 警告（有未提交修改、50-80% 使用率）
+- 🔴 **红色** - 危险（>80% 使用率）
+- 🔵 **青色** - 中性（目录、一般信息）
+
+### CLI 控制
+
+```bash
+# 检查状态
+npx @lgcyaxi/oh-my-claude statusline --status    # 检查状态栏状态
+
+# 启用/禁用
+npx @lgcyaxi/oh-my-claude statusline --enable    # 启用状态栏
+npx @lgcyaxi/oh-my-claude statusline --disable   # 禁用状态栏
+
+# 切换预设
+npx @lgcyaxi/oh-my-claude statusline preset minimal   # 设置精简预设
+npx @lgcyaxi/oh-my-claude statusline preset standard  # 设置标准预设
+npx @lgcyaxi/oh-my-claude statusline preset full      # 设置完整预设（默认）
+
+# 切换单个分段
+npx @lgcyaxi/oh-my-claude statusline toggle model on      # 启用 model 分段
+npx @lgcyaxi/oh-my-claude statusline toggle output-style  # 切换 output-style
+npx @lgcyaxi/oh-my-claude statusline toggle context off   # 禁用 context 分段
+```
+
+**可用分段：** `model`、`git`、`directory`、`context`、`session`、`output-style`、`mcp`
+
+### 多行支持
+
+当您已有状态栏（如 CCometixLine）时，oh-my-claude 会自动创建一个包装器，将两者显示在不同行。
+
 ## 智能体工作流
 
 oh-my-claude 提供两种类型的智能体：
@@ -203,6 +299,13 @@ npx @lgcyaxi/oh-my-claude setup-mcp --glm      # 仅 GLM/智谱服务
 # 卸载
 npx @lgcyaxi/oh-my-claude uninstall            # 移除 oh-my-claude
 npx @lgcyaxi/oh-my-claude uninstall --keep-config  # 保留配置文件
+
+# 状态栏
+npx @lgcyaxi/oh-my-claude statusline --status   # 检查状态栏状态
+npx @lgcyaxi/oh-my-claude statusline --enable   # 启用状态栏
+npx @lgcyaxi/oh-my-claude statusline --disable  # 禁用状态栏
+npx @lgcyaxi/oh-my-claude statusline preset <名称>     # 设置预设 (minimal/standard/full)
+npx @lgcyaxi/oh-my-claude statusline toggle <分段>     # 切换分段开关
 ```
 
 ## 配置
@@ -236,14 +339,6 @@ npx @lgcyaxi/oh-my-claude uninstall --keep-config  # 保留配置文件
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
     "oracle": { "provider": "deepseek", "model": "deepseek-reasoner" },
     "librarian": { "provider": "zhipu", "model": "glm-4.7" }
-  },
-  "concurrency": {
-    "default": 5,
-    "per_provider": {
-      "deepseek": 10,
-      "zhipu": 10,
-      "minimax": 5
-    }
   }
 }
 ```

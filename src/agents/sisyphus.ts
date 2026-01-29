@@ -422,7 +422,7 @@ export const sisyphusAgent: AgentDefinition = {
     "Powerful AI orchestrator from OhMyClaudeCode. Plans obsessively with todos, assesses search complexity before exploration, delegates strategically to specialized agents.",
   prompt: SISYPHUS_PROMPT,
   defaultProvider: "claude",
-  defaultModel: "claude-opus-4-5",
+  defaultModel: "claude-opus-4.5",
   executionMode: "task",
 };
 

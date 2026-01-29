@@ -40,9 +40,10 @@ export const CategoryConfigSchema = z.object({
 
 // Concurrency configuration schema
 export const ConcurrencyConfigSchema = z.object({
-  default: z.number().min(1).max(50).default(5),
-  per_provider: z.record(z.string(), z.number()).optional(),
-  per_model: z.record(z.string(), z.number()).optional(),
+  /** Global maximum concurrent tasks across all providers */
+  global: z.number().min(1).max(50).default(10),
+  /** Per-provider limits */
+  per_provider: z.record(z.string(), z.number().min(1).max(20)).optional(),
 });
 
 // Main configuration schema
@@ -77,16 +78,16 @@ export const OhMyClaudeConfigSchema = z.object({
   }),
 
   agents: z.record(z.string(), AgentConfigSchema).default({
-    // Claude subscription agents (no fallback needed)
-    Sisyphus: { provider: "claude", model: "claude-opus-4-5" },
+    // Claude subscription agents
+    Sisyphus: { provider: "claude", model: "claude-opus-4.5" },
     "claude-reviewer": {
       provider: "claude",
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4.5",
       temperature: 0.1,
     },
     "claude-scout": {
       provider: "claude",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-4.5",
       temperature: 0.3,
     },
     // External API agents
@@ -120,13 +121,13 @@ export const OhMyClaudeConfigSchema = z.object({
   categories: z.record(z.string(), CategoryConfigSchema).default({
     "quick-scout": {
       provider: "claude",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-4.5",
       temperature: 0.3,
     },
-    review: { provider: "claude", model: "claude-sonnet-4-5", temperature: 0.1 },
+    review: { provider: "claude", model: "claude-sonnet-4.5", temperature: 0.1 },
     "most-capable": {
       provider: "claude",
-      model: "claude-opus-4-5",
+      model: "claude-opus-4.5",
       temperature: 0.1,
     },
     "visual-engineering": {
@@ -143,18 +144,11 @@ export const OhMyClaudeConfigSchema = z.object({
     writing: { provider: "minimax", model: "MiniMax-M2.1", temperature: 0.5 },
   }),
 
-  concurrency: ConcurrencyConfigSchema.default({
-    default: 5,
-    per_provider: {
-      deepseek: 10,
-      zhipu: 10,
-      minimax: 5,
-      openrouter: 5,
-    },
-  }),
-
   disabled_agents: z.array(z.string()).optional(),
   disabled_hooks: z.array(z.string()).optional(),
+
+  // Concurrency limits for background tasks
+  concurrency: ConcurrencyConfigSchema.optional(),
 
   // Debug settings
   debugTaskTracker: z.boolean().optional(),

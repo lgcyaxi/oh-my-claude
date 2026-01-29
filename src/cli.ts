@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.2.0");
+  .version("1.2.2");
 
 // Install command
 program
@@ -338,22 +338,32 @@ program
         console.log(`  ${exists ? ok(hook) : fail(hook)}`);
       }
 
-      // StatusLine detail
+      // StatusLine detail with validation
       console.log(`\n${header("StatusLine (detailed):")}`);
-      const statusLineDir = join(homedir(), ".claude", "oh-my-claude", "dist", "statusline");
-      const statusLineScript = join(statusLineDir, "statusline.js");
-      const statusFileExists = existsSync(statusLineScript);
-      console.log(`  ${statusFileExists ? ok("statusline.js installed") : fail("statusline.js not installed")}`);
 
       try {
+        const { validateStatusLineSetup } = require("./installer/statusline-merger");
+        const validation = validateStatusLineSetup();
+
+        // Script existence
+        console.log(`  ${validation.details.scriptExists ? ok("statusline.js installed") : fail("statusline.js not installed")}`);
+
+        // Node path (relevant on Windows)
+        if (process.platform === "win32") {
+          console.log(`  ${validation.details.nodePathValid ? ok("Node.js path valid") : fail("Node.js path invalid")}`);
+        }
+
+        // Settings.json configuration
+        console.log(`  ${validation.details.settingsConfigured ? ok("StatusLine configured in settings.json") : warn("StatusLine not configured in settings.json")}`);
+
+        // Settings mode detection
         const settingsPath = join(homedir(), ".claude", "settings.json");
         if (existsSync(settingsPath)) {
           const settings = JSON.parse(require("node:fs").readFileSync(settingsPath, "utf-8"));
           if (settings.statusLine) {
             const cmd = settings.statusLine.command || "";
-            const isOurs = cmd.includes("oh-my-claude");
             const isWrapper = cmd.includes("statusline-wrapper");
-            console.log(`  ${ok("StatusLine configured in settings.json")}`);
+            const isOurs = cmd.includes("oh-my-claude");
             if (isWrapper) {
               console.log(`    Mode: ${c.yellow}Merged (wrapper)${c.reset}`);
             } else if (isOurs) {
@@ -361,12 +371,43 @@ program
             } else {
               console.log(`    Mode: ${c.cyan}External${c.reset}`);
             }
-          } else {
-            console.log(`  ${warn("StatusLine not configured in settings.json")}`);
           }
         }
-      } catch {
-        console.log(`  ${fail("Failed to read settings.json")}`);
+
+        // Command execution test
+        console.log(`  ${validation.details.commandWorks ? ok("StatusLine command works") : fail("StatusLine command failed")}`);
+
+        // Config file check
+        const configDir = join(homedir(), ".config", "oh-my-claude");
+        const configPath = join(configDir, "statusline.json");
+        const configExists = existsSync(configPath);
+        console.log(`  ${configExists ? ok("StatusLine config exists") : warn("StatusLine config not found")}`);
+        if (configExists) {
+          console.log(`    Path: ${dimText(configPath)}`);
+        } else {
+          console.log(`    ${dimText(`Expected: ${configPath}`)}`);
+        }
+
+        // Show any warnings
+        if (validation.warnings.length > 0) {
+          console.log(`\n  ${subheader("Warnings:")}`);
+          for (const w of validation.warnings) {
+            console.log(`    ${warn(w)}`);
+          }
+        }
+
+        // Show any errors
+        if (validation.errors.length > 0) {
+          console.log(`\n  ${subheader("Errors:")}`);
+          for (const e of validation.errors) {
+            console.log(`    ${fail(e)}`);
+          }
+        }
+
+        // Overall status
+        console.log(`\n  Overall: ${validation.valid ? `${c.green}✓ Healthy${c.reset}` : `${c.red}✗ Issues detected${c.reset}`}`);
+      } catch (error) {
+        console.log(`  ${fail("Failed to validate StatusLine:")} ${error}`);
       }
     }
 
@@ -394,12 +435,34 @@ program
       console.log(`  ${ok("Configuration loaded")}`);
       console.log(`  ${dimText("-")} ${Object.keys(config.agents).length} agents configured`);
       console.log(`  ${dimText("-")} ${Object.keys(config.categories).length} categories configured`);
-      console.log(`  ${dimText("-")} Default concurrency: ${config.concurrency.default}`);
 
       if (detail) {
-        console.log(`\n  ${subheader("Agents configured:")}`);
+        // Separate Task tool agents (Claude subscription) from MCP agents (external APIs)
+        const taskToolAgents: [string, any][] = [];
+        const mcpAgents: [string, any][] = [];
+
         for (const [name, agentConfig] of Object.entries(config.agents)) {
-          console.log(`    ${dimText("-")} ${c.bold}${name}${c.reset}: ${c.cyan}${(agentConfig as any).provider}${c.reset}/${c.blue}${(agentConfig as any).model}${c.reset}`);
+          const provider = (agentConfig as any).provider;
+          const providerConfig = config.providers[provider];
+          if (providerConfig?.type === "claude-subscription") {
+            taskToolAgents.push([name, agentConfig]);
+          } else {
+            mcpAgents.push([name, agentConfig]);
+          }
+        }
+
+        if (taskToolAgents.length > 0) {
+          console.log(`\n  ${subheader("Task tool agents:")} ${c.dim}(model managed by Claude Code)${c.reset}`);
+          for (const [name] of taskToolAgents) {
+            console.log(`    ${dimText("-")} ${c.bold}${name}${c.reset}`);
+          }
+        }
+
+        if (mcpAgents.length > 0) {
+          console.log(`\n  ${subheader("MCP background agents:")}`);
+          for (const [name, agentConfig] of mcpAgents) {
+            console.log(`    ${dimText("-")} ${c.bold}${name}${c.reset}: ${c.cyan}${(agentConfig as any).provider}${c.reset}/${c.blue}${(agentConfig as any).model}${c.reset}`);
+          }
         }
       }
     } catch (error) {
@@ -673,8 +736,8 @@ program
     }
   });
 
-// StatusLine command
-program
+// StatusLine command with subcommands
+const statuslineCmd = program
   .command("statusline")
   .description("Manage statusline integration")
   .option("--enable", "Enable statusline")
@@ -697,11 +760,12 @@ program
       cyan: useColor ? "\x1b[36m" : "",
     };
 
-    const ok = (text: string) => `${c.green}+${c.reset} ${text}`;
-    const fail = (text: string) => `${c.red}x${c.reset} ${text}`;
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
     const warn = (text: string) => `${c.yellow}!${c.reset} ${text}`;
 
     const settingsPath = join(homedir(), ".claude", "settings.json");
+    const configPath = join(homedir(), ".config", "oh-my-claude", "statusline.json");
 
     if (options.status || (!options.enable && !options.disable)) {
       // Show status
@@ -732,6 +796,28 @@ program
             console.log(`  Mode: ${c.green}Direct${c.reset}`);
           } else {
             console.log(`  Mode: ${c.cyan}External${c.reset}`);
+          }
+        }
+
+        // Show config details
+        if (existsSync(configPath)) {
+          const config = JSON.parse(readFileSync(configPath, "utf-8"));
+          console.log(`\n${c.bold}Configuration${c.reset}`);
+          console.log(`  Preset: ${c.cyan}${config.preset || "standard"}${c.reset}`);
+          console.log(`  Enabled segments:`);
+          const segments = config.segments || {};
+          for (const [id, seg] of Object.entries(segments)) {
+            const s = seg as { enabled: boolean; position: number };
+            if (s.enabled) {
+              console.log(`    ${c.green}●${c.reset} ${id}`);
+            }
+          }
+          console.log(`  Disabled segments:`);
+          for (const [id, seg] of Object.entries(segments)) {
+            const s = seg as { enabled: boolean; position: number };
+            if (!s.enabled) {
+              console.log(`    ${c.dim}○${c.reset} ${id}`);
+            }
           }
         }
       } catch (error) {
@@ -770,6 +856,78 @@ program
         console.log(fail(`Failed to disable statusline: ${error}`));
         process.exit(1);
       }
+    }
+  });
+
+// Statusline preset subcommand
+statuslineCmd
+  .command("preset <name>")
+  .description("Set statusline preset (minimal, standard, full)")
+  .action((name: string) => {
+    const validPresets = ["minimal", "standard", "full"];
+    if (!validPresets.includes(name)) {
+      console.log(`Invalid preset: ${name}`);
+      console.log(`Valid presets: ${validPresets.join(", ")}`);
+      process.exit(1);
+    }
+
+    const { setPreset } = require("./statusline/config");
+
+    try {
+      const config = setPreset(name as "minimal" | "standard" | "full");
+      console.log(`✓ Preset changed to: ${name}`);
+      console.log(`\nEnabled segments:`);
+
+      const segments = config.segments || {};
+      for (const [id, seg] of Object.entries(segments)) {
+        const s = seg as { enabled: boolean };
+        if (s.enabled) {
+          console.log(`  ● ${id}`);
+        }
+      }
+    } catch (error) {
+      console.log(`✗ Failed to set preset: ${error}`);
+      process.exit(1);
+    }
+  });
+
+// Statusline toggle subcommand
+statuslineCmd
+  .command("toggle <segment> [state]")
+  .description("Toggle a segment on/off (model, git, directory, context, session, output-style, mcp)")
+  .action((segment: string, state?: string) => {
+    const validSegments = ["model", "git", "directory", "context", "session", "output-style", "mcp"];
+    if (!validSegments.includes(segment)) {
+      console.log(`Invalid segment: ${segment}`);
+      console.log(`Valid segments: ${validSegments.join(", ")}`);
+      process.exit(1);
+    }
+
+    const { toggleSegment, loadConfig } = require("./statusline/config");
+
+    try {
+      // Determine new state
+      let enabled: boolean;
+      if (state === "on" || state === "true" || state === "1") {
+        enabled = true;
+      } else if (state === "off" || state === "false" || state === "0") {
+        enabled = false;
+      } else if (state === undefined) {
+        // Toggle current state
+        const currentConfig = loadConfig();
+        enabled = !currentConfig.segments[segment]?.enabled;
+      } else {
+        console.log(`Invalid state: ${state}`);
+        console.log(`Valid states: on, off (or omit to toggle)`);
+        process.exit(1);
+      }
+
+      const config = toggleSegment(segment, enabled);
+      const newState = config.segments[segment]?.enabled ? "enabled" : "disabled";
+      console.log(`✓ Segment "${segment}" ${newState}`);
+    } catch (error) {
+      console.log(`✗ Failed to toggle segment: ${error}`);
+      process.exit(1);
     }
   });
 
@@ -1187,30 +1345,67 @@ program
         // Step 3: Create wrapper that combines ccline and oh-my-claude statusline
         console.log("Creating statusline wrapper...");
         try {
-          const wrapperPath = join(homedir(), ".claude", "oh-my-claude", "statusline-wrapper.sh");
-          const omcStatusline = "node ~/.claude/oh-my-claude/dist/statusline/statusline.js";
-          const wrapperContent = `#!/bin/bash
-# oh-my-claude + CCometixLine StatusLine Wrapper
-# Auto-generated - combines ccline and oh-my-claude statuslines
+          const wrapperPath = join(homedir(), ".claude", "oh-my-claude", "statusline-wrapper.js");
+          const omcStatusline = join(homedir(), ".claude", "oh-my-claude", "dist", "statusline", "statusline.js");
+          const wrapperContent = `#!/usr/bin/env node
+/**
+ * oh-my-claude + CCometixLine StatusLine Wrapper
+ * Auto-generated - combines ccline and oh-my-claude statuslines
+ */
 
-input=$(cat)
+const { execSync } = require("node:child_process");
+const { join } = require("node:path");
+const { homedir } = require("node:os");
 
-# Call ccline (CCometixLine)
-ccline_output=$(echo "$input" | ccline 2>/dev/null || echo "")
+const omcStatusline = ${JSON.stringify(omcStatusline)};
 
-# Call oh-my-claude statusline
-omc_output=$(echo "$input" | ${omcStatusline} 2>/dev/null || echo "omc")
+try {
+  // Read input from stdin
+  let input = "";
+  process.stdin.setEncoding("utf-8");
+  for await (const chunk of process.stdin) {
+    input += chunk;
+  }
 
-# Combine outputs - ccline first, omc second
-if [ -n "$ccline_output" ] && [ -n "$omc_output" ]; then
-  printf "%s\\n%s\\n" "$ccline_output" "$omc_output"
-elif [ -n "$ccline_output" ]; then
-  printf "%s\\n" "$ccline_output"
-elif [ -n "$omc_output" ]; then
-  printf "%s\\n" "$omc_output"
-else
-  echo ""
-fi
+  // Call ccline (CCometixLine)
+  let cclineOutput = "";
+  try {
+    cclineOutput = execSync("ccline", {
+      input,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: true,
+    }).trim();
+  } catch {
+    // Ignore errors
+  }
+
+  // Call oh-my-claude statusline
+  let omcOutput = "";
+  try {
+    omcOutput = execSync(\`node "\${omcStatusline}"\`, {
+      input,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: true,
+    }).trim();
+  } catch {
+    omcOutput = "omc";
+  }
+
+  // Combine outputs - ccline first, omc second
+  if (cclineOutput && omcOutput) {
+    console.log(cclineOutput);
+    console.log(omcOutput);
+  } else if (cclineOutput) {
+    console.log(cclineOutput);
+  } else if (omcOutput) {
+    console.log(omcOutput);
+  }
+} catch (error) {
+  // Silently fail
+  console.error(error);
+}
 `;
           writeFileSync(wrapperPath, wrapperContent);
           chmodSync(wrapperPath, 0o755);
