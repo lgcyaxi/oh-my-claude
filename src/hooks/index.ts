@@ -27,6 +27,20 @@ export const HOOKS = {
     matcher: "",
     source: "./memory-awareness.ts",
   },
+  "auto-memory": {
+    name: "auto-memory",
+    description: "Auto-captures session learnings via cheap external model at session end",
+    type: "Stop",
+    matcher: ".*",
+    source: "./auto-memory.ts",
+  },
+  "session-logger": {
+    name: "session-logger",
+    description: "Logs every tool usage as an observation for auto-memory summarization",
+    type: "PostToolUse",
+    matcher: ".*",
+    source: "./session-logger.ts",
+  },
 } as const;
 
 export type HookName = keyof typeof HOOKS;

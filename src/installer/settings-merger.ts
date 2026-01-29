@@ -296,6 +296,42 @@ export function installHooks(hooksDir: string, force = false): {
     skipped.push("task-tracker (already installed)");
   }
 
+  // Session logger hook (PostToolUse — logs all tool usage for auto-memory)
+  const sessionLoggerResult = addHook(
+    settings,
+    "PostToolUse",
+    ".*",
+    `${nodeCmd} ${hooksDir}/session-logger.js`,
+    force
+  );
+  if (sessionLoggerResult) {
+    if (force) {
+      updated.push("session-logger (PostToolUse:*)");
+    } else {
+      installed.push("session-logger (PostToolUse:*)");
+    }
+  } else {
+    skipped.push("session-logger (already installed)");
+  }
+
+  // Auto-memory hook (Stop — captures session learnings via external model)
+  const autoMemoryResult = addHook(
+    settings,
+    "Stop",
+    ".*",
+    `${nodeCmd} ${hooksDir}/auto-memory.js`,
+    force
+  );
+  if (autoMemoryResult) {
+    if (force) {
+      updated.push("auto-memory (Stop)");
+    } else {
+      installed.push("auto-memory (Stop)");
+    }
+  } else {
+    skipped.push("auto-memory (already installed)");
+  }
+
   // Memory awareness hook (UserPromptSubmit — nudges memory recall/remember)
   const memoryResult = addHook(
     settings,

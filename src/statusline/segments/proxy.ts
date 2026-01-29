@@ -56,7 +56,7 @@ async function collectProxyData(_context: SegmentContext): Promise<SegmentData |
     const providerAbbrev = PROVIDER_ABBREV[provider] ?? provider.slice(0, 2).toUpperCase();
     const modelAbbrev = abbreviateModel(model);
 
-    const remainingStr = remaining === 0 ? "∞" : `×${remaining}`;
+    const remainingStr = remaining < 0 ? "∞" : `×${remaining}`;
     const primary = `→${providerAbbrev}/${modelAbbrev} ${remainingStr}`;
 
     return {

@@ -19,21 +19,30 @@ The user wants to **switch models** in-conversation. This routes the next N Clau
 
 ### Step 1: Switch the model
 
+**Request count rules:**
+- **-1 = unlimited** (stay switched forever until manual `/omc-switch revert`). Pass `requests=-1` directly, do NOT add +1.
+- **N ≥ 1**: Add +1 to account for this confirmation response consuming one request.
+  - User asks for 1 → `switch_model(requests=2)`
+  - User asks for 3 → `switch_model(requests=4)`
+  - No count specified → `switch_model(requests=2)` [default 1 + 1]
+
 ```
 Use mcp__oh-my-claude-background__switch_model with:
 - provider: [resolved provider name]
 - model: [resolved model name]
-- requests: [number, default 1]
-- timeout_ms: [optional, default 600000]
+- requests: [-1 if unlimited, else number + 1]
+- timeout_ms: [optional, default 600000; omit for unlimited]
 ```
 
 ### Step 2: Confirm to the user
 
-Tell the user which provider/model is now active and how many requests remain.
+- **Unlimited (0)**: Tell user the model is switched permanently until they revert.
+- **Limited (N)**: Tell user how many **user-requested** requests remain (subtract 1 from actual count, since this confirmation uses one).
 
 ### Examples
 
 ```
+/omc-switch ds -1                         → Switch to DeepSeek Chat UNLIMITED (forever)
 /omc-switch deepseek deepseek-chat        → Switch 1 request to DeepSeek Chat
 /omc-switch ds                            → Switch 1 request to DeepSeek Chat (shortcut)
 /omc-switch ds-r 3                        → Switch 3 requests to DeepSeek Reasoner

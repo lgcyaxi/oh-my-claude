@@ -6,6 +6,7 @@
 
 import type { Segment, SegmentData, SegmentContext, SegmentConfig, StyleConfig } from "./types";
 import { wrapBrackets, applyColor } from "./index";
+import { readSwitchState, isTimedOut } from "../../proxy/state";
 
 // Model display names mapping
 const MODEL_DISPLAY: Record<string, string> = {
@@ -65,8 +66,30 @@ function getModelColor(modelId: string): SegmentData["color"] {
 
 /**
  * Collect model information from Claude Code input
+ *
+ * Proxy-aware: when the proxy is switched to an external provider,
+ * shows the switched model name instead of Claude's native model.
  */
 async function collectModelData(context: SegmentContext): Promise<SegmentData | null> {
+  // Check if proxy is actively switched
+  try {
+    const switchState = readSwitchState();
+    if (switchState.switched && !isTimedOut(switchState) && switchState.provider && switchState.model) {
+      const display = `→${switchState.model}`;
+      return {
+        primary: display,
+        metadata: {
+          modelId: switchState.model,
+          displayName: `${switchState.provider}/${switchState.model}`,
+          proxySwitched: "true",
+        },
+        color: "warning", // Yellow to indicate switched state
+      };
+    }
+  } catch {
+    // Proxy state unavailable — fall through to native model
+  }
+
   const { claudeCodeInput } = context;
 
   // Graceful degradation - no data available

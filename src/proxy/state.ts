@@ -95,8 +95,8 @@ export function decrementAndCheck(): boolean {
     return false;
   }
 
-  // requestsRemaining === 0 means unlimited (timeout-based only)
-  if (state.requestsRemaining === 0) {
+  // requestsRemaining < 0 means unlimited (manual revert only)
+  if (state.requestsRemaining < 0) {
     return true;
   }
 

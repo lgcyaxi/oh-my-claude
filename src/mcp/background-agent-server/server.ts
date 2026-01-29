@@ -432,7 +432,7 @@ This routes the next Claude Code response through DeepSeek's reasoner model.`,
         },
         requests: {
           type: "number",
-          description: "Number of requests to switch (default: 1, 0 = unlimited until timeout)",
+          description: "Number of requests to switch (default: 1, -1 = unlimited until manual revert)",
         },
         timeout_ms: {
           type: "number",
@@ -1055,7 +1055,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const now = Date.now();
         const reqCount = requests ?? DEFAULT_PROXY_CONFIG.defaultRequests;
-        const timeoutMs = timeout_ms ?? DEFAULT_PROXY_CONFIG.defaultTimeoutMs;
+        // If unlimited (-1 requests), no timeout unless explicitly set
+        const isUnlimited = reqCount < 0;
+        const timeoutMs = timeout_ms ?? (isUnlimited ? 0 : DEFAULT_PROXY_CONFIG.defaultTimeoutMs);
 
         const switchState: ProxySwitchState = {
           switched: true,
@@ -1063,7 +1065,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           model,
           requestsRemaining: reqCount,
           switchedAt: now,
-          timeoutAt: now + timeoutMs,
+          timeoutAt: timeoutMs > 0 ? now + timeoutMs : undefined,
         };
 
         writeSwitchState(switchState);
@@ -1079,6 +1081,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           // Control API not reachable — state file is the primary mechanism
         }
 
+        const timeoutInfo = switchState.timeoutAt
+          ? new Date(switchState.timeoutAt).toISOString()
+          : "none (unlimited)";
+
         return {
           content: [{
             type: "text",
@@ -1087,8 +1093,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               provider,
               model,
               requestsRemaining: reqCount,
-              timeoutAt: new Date(now + timeoutMs).toISOString(),
-              message: `Next ${reqCount === 0 ? "unlimited" : reqCount} request(s) will be routed to ${provider}/${model}`,
+              timeoutAt: timeoutInfo,
+              unlimited: isUnlimited,
+              message: isUnlimited
+                ? `All requests will be routed to ${provider}/${model} until manually reverted`
+                : `Next ${reqCount} request(s) will be routed to ${provider}/${model}`,
             }),
           }],
         };

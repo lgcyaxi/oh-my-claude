@@ -109,7 +109,8 @@ export async function handleControl(req: Request): Promise<Response> {
 
         const now = Date.now();
         const requests = body.requests ?? DEFAULT_PROXY_CONFIG.defaultRequests;
-        const timeoutMs = body.timeout_ms ?? DEFAULT_PROXY_CONFIG.defaultTimeoutMs;
+        const isUnlimited = requests < 0;
+        const timeoutMs = body.timeout_ms ?? (isUnlimited ? 0 : DEFAULT_PROXY_CONFIG.defaultTimeoutMs);
 
         const state: ProxySwitchState = {
           switched: true,
@@ -117,7 +118,7 @@ export async function handleControl(req: Request): Promise<Response> {
           model: body.model,
           requestsRemaining: requests,
           switchedAt: now,
-          timeoutAt: now + timeoutMs,
+          timeoutAt: timeoutMs > 0 ? now + timeoutMs : undefined,
         };
 
         writeSwitchState(state);
