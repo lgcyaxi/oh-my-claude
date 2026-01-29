@@ -4,13 +4,15 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.3.x](changelog/v1.3.x.md) - Current Development
 
-**Latest: v1.3.0-beta.0** (2026-01-29)
+**Latest: v1.3.0-beta.2** (2026-01-29)
 
 ### Highlights
 
 - **Output Style Manager** - CLI commands to list, set, show, reset, and create output styles
 - **5 Built-in Style Presets** - engineer-professional, agent, concise-coder, teaching, review
 - **Custom Style Support** - Create and manage custom output styles in `~/.claude/output-styles/`
+- **Memory System** - Markdown-first persistent memory with MCP tools and CLI
+- **Companion Tools** - UI UX Pro Max skill via `setup-tools`
 
 ---
 

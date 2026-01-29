@@ -30,6 +30,14 @@ import {
 } from "./task-manager";
 import { getProvidersStatus } from "../../providers/router";
 import { agents } from "../../agents";
+import {
+  createMemory,
+  getMemory,
+  deleteMemory,
+  listMemories,
+  getMemoryStats,
+  searchMemories,
+} from "../../memory";
 
 // Tool definitions
 const tools: Tool[] = [
@@ -227,6 +235,119 @@ For parallel execution of multiple agents, use launch_background_task + poll_tas
     name: "get_status",
     description:
       "Get system status including provider configuration and concurrency.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  // Memory tools
+  {
+    name: "remember",
+    description: `Store a memory for future recall. Memories persist across sessions as markdown files.
+
+Use this to save important context: decisions, patterns, conventions, or anything worth remembering.
+
+Examples:
+- "The team prefers functional components over class components"
+- "Auth uses JWT with 24h expiry, refresh token is 7 days"
+- "Project uses pnpm, not npm"`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        content: {
+          type: "string",
+          description: "The memory content to store (markdown supported)",
+        },
+        title: {
+          type: "string",
+          description: "Optional title (auto-generated from content if omitted)",
+        },
+        type: {
+          type: "string",
+          enum: ["note", "session"],
+          description: "Memory type: 'note' for persistent knowledge, 'session' for session summaries (default: note)",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tags for categorization and search (e.g., ['pattern', 'auth', 'convention'])",
+        },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "recall",
+    description: `Search and retrieve stored memories. Returns matching memories ranked by relevance.
+
+Use this to find previously saved knowledge, decisions, or session summaries.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Text query to search memories (matches title, content, tags)",
+        },
+        type: {
+          type: "string",
+          enum: ["note", "session"],
+          description: "Filter by memory type",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Filter by tags (any match)",
+        },
+        limit: {
+          type: "number",
+          description: "Max results to return (default: 10)",
+        },
+      },
+    },
+  },
+  {
+    name: "forget",
+    description: "Delete a specific memory by its ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "The memory ID to delete",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "list_memories",
+    description: "List stored memories with optional filtering by type and date range.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        type: {
+          type: "string",
+          enum: ["note", "session"],
+          description: "Filter by memory type",
+        },
+        limit: {
+          type: "number",
+          description: "Max results (default: 20)",
+        },
+        after: {
+          type: "string",
+          description: "Only show memories created after this date (ISO 8601)",
+        },
+        before: {
+          type: "string",
+          description: "Only show memories created before this date (ISO 8601)",
+        },
+      },
+    },
+  },
+  {
+    name: "memory_status",
+    description: "Get memory store statistics (total count, size, breakdown by type).",
     inputSchema: {
       type: "object",
       properties: {},
@@ -567,6 +688,149 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               }),
             },
           ],
+        };
+      }
+
+      // ---- Memory tools ----
+
+      case "remember": {
+        const { content, title, type, tags } = args as {
+          content: string;
+          title?: string;
+          type?: "note" | "session";
+          tags?: string[];
+        };
+
+        if (!content) {
+          return {
+            content: [{ type: "text", text: "Error: content is required" }],
+            isError: true,
+          };
+        }
+
+        const result = createMemory({ content, title, type, tags });
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `Error: ${result.error}` }],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              stored: true,
+              id: result.data!.id,
+              title: result.data!.title,
+              type: result.data!.type,
+              tags: result.data!.tags,
+            }),
+          }],
+        };
+      }
+
+      case "recall": {
+        const { query, type, tags, limit } = args as {
+          query?: string;
+          type?: "note" | "session";
+          tags?: string[];
+          limit?: number;
+        };
+
+        const results = searchMemories({
+          query,
+          type,
+          tags,
+          limit: limit ?? 10,
+          sort: "relevance",
+        });
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              count: results.length,
+              memories: results.map((r) => ({
+                id: r.entry.id,
+                title: r.entry.title,
+                type: r.entry.type,
+                tags: r.entry.tags,
+                score: r.score,
+                matchedFields: r.matchedFields,
+                content: r.entry.content,
+                createdAt: r.entry.createdAt,
+              })),
+            }),
+          }],
+        };
+      }
+
+      case "forget": {
+        const { id } = args as { id: string };
+
+        if (!id) {
+          return {
+            content: [{ type: "text", text: "Error: id is required" }],
+            isError: true,
+          };
+        }
+
+        const result = deleteMemory(id);
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              deleted: result.success,
+              ...(result.error && { error: result.error }),
+            }),
+          }],
+          ...(result.success ? {} : { isError: true }),
+        };
+      }
+
+      case "list_memories": {
+        const { type, limit, after, before } = args as {
+          type?: "note" | "session";
+          limit?: number;
+          after?: string;
+          before?: string;
+        };
+
+        const entries = listMemories({
+          type,
+          limit: limit ?? 20,
+          after,
+          before,
+        });
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              count: entries.length,
+              memories: entries.map((e) => ({
+                id: e.id,
+                title: e.title,
+                type: e.type,
+                tags: e.tags,
+                createdAt: e.createdAt,
+                updatedAt: e.updatedAt,
+                preview: e.content.slice(0, 200) + (e.content.length > 200 ? "..." : ""),
+              })),
+            }),
+          }],
+        };
+      }
+
+      case "memory_status": {
+        const stats = getMemoryStats();
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(stats),
+          }],
         };
       }
 

@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.3.0-beta.0");
+  .version("1.3.0-beta.2");
 
 // Install command
 program
@@ -1153,6 +1153,218 @@ styleCmd
       console.log(`  Path: ${c.cyan}${result.path}${c.reset}`);
       console.log(`\n${c.dim}Edit the file to customize your style, then run:${c.reset}`);
       console.log(`  oh-my-claude style set ${name}`);
+    } else {
+      console.log(`${c.red}✗${c.reset} ${result.error}`);
+      process.exit(1);
+    }
+  });
+
+// Memory command with subcommands
+const memoryCmd = program
+  .command("memory")
+  .description("Manage oh-my-claude memory system")
+  .action(() => {
+    const { getMemoryStats } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+
+    const stats = getMemoryStats();
+    console.log(`${c.bold}Memory System${c.reset}\n`);
+    console.log(`  Total memories: ${c.green}${stats.total}${c.reset}`);
+    console.log(`  Notes: ${stats.byType.note}  |  Sessions: ${stats.byType.session}`);
+    console.log(`  Storage: ${(stats.totalSizeBytes / 1024).toFixed(1)} KB`);
+    console.log(`  Path: ${c.dim}${stats.storagePath}${c.reset}`);
+    console.log(`\nUsage:`);
+    console.log(`  oh-my-claude memory status             ${c.dim}# Show memory stats${c.reset}`);
+    console.log(`  oh-my-claude memory search <query>     ${c.dim}# Search memories${c.reset}`);
+    console.log(`  oh-my-claude memory list [--type note]  ${c.dim}# List memories${c.reset}`);
+    console.log(`  oh-my-claude memory show <id>          ${c.dim}# Show memory content${c.reset}`);
+    console.log(`  oh-my-claude memory delete <id>        ${c.dim}# Delete a memory${c.reset}`);
+  });
+
+// Memory status subcommand
+memoryCmd
+  .command("status")
+  .description("Show memory store statistics")
+  .action(() => {
+    const { getMemoryStats } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      magenta: useColor ? "\x1b[35m" : "",
+    };
+
+    const stats = getMemoryStats();
+
+    console.log(`${c.bold}${c.magenta}Memory Status${c.reset}\n`);
+    console.log(`  Total memories:  ${c.green}${stats.total}${c.reset}`);
+    console.log(`  Notes:           ${stats.byType.note}`);
+    console.log(`  Sessions:        ${stats.byType.session}`);
+    console.log(`  Total size:      ${(stats.totalSizeBytes / 1024).toFixed(1)} KB`);
+    console.log(`  Storage path:    ${c.dim}${stats.storagePath}${c.reset}`);
+  });
+
+// Memory search subcommand
+memoryCmd
+  .command("search <query>")
+  .description("Search memories by text query")
+  .option("--type <type>", "Filter by type (note, session)")
+  .option("--limit <n>", "Max results (default: 10)", "10")
+  .action((query: string, options: { type?: string; limit: string }) => {
+    const { searchMemories } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      magenta: useColor ? "\x1b[35m" : "",
+    };
+
+    const results = searchMemories({
+      query,
+      type: options.type as any,
+      limit: parseInt(options.limit, 10) || 10,
+      sort: "relevance",
+    });
+
+    console.log(`${c.bold}${c.magenta}Memory Search${c.reset}: "${query}"\n`);
+
+    if (results.length === 0) {
+      console.log(`  ${c.dim}No memories found matching "${query}".${c.reset}`);
+      return;
+    }
+
+    console.log(`  ${c.green}${results.length}${c.reset} result(s):\n`);
+
+    for (const r of results) {
+      const typeTag = r.entry.type === "note" ? `${c.cyan}[note]${c.reset}` : `${c.yellow}[session]${c.reset}`;
+      const score = `${c.dim}(score: ${r.score})${c.reset}`;
+      console.log(`  ${c.bold}${r.entry.title}${c.reset} ${typeTag} ${score}`);
+      console.log(`    ID: ${c.dim}${r.entry.id}${c.reset}`);
+      if (r.entry.tags.length > 0) {
+        console.log(`    Tags: ${r.entry.tags.join(", ")}`);
+      }
+      // Show preview
+      const preview = r.entry.content.split("\n").slice(0, 2).join(" ").slice(0, 120);
+      console.log(`    ${c.dim}${preview}${preview.length >= 120 ? "..." : ""}${c.reset}`);
+      console.log();
+    }
+  });
+
+// Memory list subcommand
+memoryCmd
+  .command("list")
+  .description("List stored memories")
+  .option("--type <type>", "Filter by type (note, session)")
+  .option("--limit <n>", "Max results (default: 20)", "20")
+  .action((options: { type?: string; limit: string }) => {
+    const { listMemories } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      magenta: useColor ? "\x1b[35m" : "",
+    };
+
+    const entries = listMemories({
+      type: options.type as any,
+      limit: parseInt(options.limit, 10) || 20,
+    });
+
+    console.log(`${c.bold}${c.magenta}Stored Memories${c.reset}\n`);
+
+    if (entries.length === 0) {
+      console.log(`  ${c.dim}No memories found.${c.reset}`);
+      console.log(`  ${c.dim}Use MCP tool "remember" or create .md files in ~/.claude/oh-my-claude/memory/${c.reset}`);
+      return;
+    }
+
+    for (const entry of entries) {
+      const typeTag = entry.type === "note" ? `${c.cyan}[note]${c.reset}` : `${c.yellow}[session]${c.reset}`;
+      const date = entry.createdAt.slice(0, 10);
+      console.log(`  ${c.bold}${entry.title}${c.reset} ${typeTag}  ${c.dim}${date}${c.reset}`);
+      console.log(`    ID: ${c.dim}${entry.id}${c.reset}`);
+      if (entry.tags.length > 0) {
+        console.log(`    Tags: ${entry.tags.join(", ")}`);
+      }
+    }
+
+    console.log(`\n  ${c.dim}Total: ${entries.length} memor${entries.length === 1 ? "y" : "ies"}${c.reset}`);
+  });
+
+// Memory show subcommand
+memoryCmd
+  .command("show <id>")
+  .description("Show full content of a memory")
+  .action((id: string) => {
+    const { getMemory } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      red: useColor ? "\x1b[31m" : "",
+    };
+
+    const result = getMemory(id);
+    if (!result.success || !result.data) {
+      console.log(`${c.red}✗${c.reset} ${result.error || `Memory "${id}" not found`}`);
+      process.exit(1);
+    }
+
+    const entry = result.data;
+    console.log(`${c.bold}${entry.title}${c.reset} ${c.dim}[${entry.type}]${c.reset}`);
+    console.log(`ID: ${c.dim}${entry.id}${c.reset}`);
+    console.log(`Created: ${c.dim}${entry.createdAt}${c.reset}`);
+    console.log(`Updated: ${c.dim}${entry.updatedAt}${c.reset}`);
+    if (entry.tags.length > 0) {
+      console.log(`Tags: ${entry.tags.join(", ")}`);
+    }
+    console.log(`${"─".repeat(60)}`);
+    console.log(entry.content);
+  });
+
+// Memory delete subcommand
+memoryCmd
+  .command("delete <id>")
+  .description("Delete a memory by ID")
+  .action((id: string) => {
+    const { deleteMemory } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+    };
+
+    const result = deleteMemory(id);
+    if (result.success) {
+      console.log(`${c.green}✓${c.reset} Memory "${id}" deleted.`);
     } else {
       console.log(`${c.red}✗${c.reset} ${result.error}`);
       process.exit(1);

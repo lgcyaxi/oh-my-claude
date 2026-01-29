@@ -57,6 +57,7 @@ import { installHooks, installMcpServer, installStatusLine, uninstallFromSetting
 import { DEFAULT_CONFIG } from "../config/schema";
 import { ensureConfigExists as ensureStatusLineConfigExists } from "../statusline/config";
 import { deployBuiltInStyles } from "../styles";
+import { ensureMemoryDirs } from "../memory";
 
 /**
  * Get commands directory
@@ -361,6 +362,13 @@ process.exit(1);
       result.styles = deployBuiltInStyles(sourceDir);
     } catch (error) {
       result.errors.push(`Failed to deploy output styles: ${error}`);
+    }
+
+    // 5b. Create memory directories
+    try {
+      ensureMemoryDirs();
+    } catch (error) {
+      result.errors.push(`Failed to create memory directories: ${error}`);
     }
 
     // 6. Copy package.json for version detection

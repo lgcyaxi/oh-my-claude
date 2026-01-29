@@ -25,6 +25,7 @@ bun test             # Run tests
 - `src/generators/` - Agent .md file generators
 - `src/installer/` - CLI installer
 - `src/styles/` - Output style presets and manager
+- `src/memory/` - Markdown-first memory system (types, store, parser, search)
 - `src/statusline/` - StatusLine segments and configuration
 
 ## Architecture
@@ -87,6 +88,7 @@ npm publish --access public
 - `src/providers/router.ts` - Routes requests to providers
 - `src/mcp/background-agent-server/server.ts` - MCP server implementation
 - `src/styles/index.ts` - Output style manager (list, set, reset, create)
+- `src/memory/index.ts` - Memory system barrel export (store, parser, search)
 - `src/statusline/config.ts` - StatusLine config and segment management
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
 

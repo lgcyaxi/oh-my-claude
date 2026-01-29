@@ -17,6 +17,7 @@
 - **官方 MCP 一键安装** - 一条命令安装 Sequential Thinking、MiniMax 和 GLM MCP 服务
 - **Hook 集成** - 代码质量检查和待办追踪
 - **输出样式管理器** - 通过 CLI 在内置和自定义输出样式之间切换
+- **记忆系统** - 基于 Markdown 的持久化记忆，支持 MCP 工具（remember、recall、forget）
 - **配套工具** - 一键安装 UI UX Pro Max、CCometixLine 等工具
 
 ## 快速开始
@@ -283,6 +284,55 @@ description: 我的自定义输出样式
 在此定义样式指令...
 ```
 
+## 记忆系统
+
+oh-my-claude 内置基于 Markdown 的记忆系统，可跨会话持久化知识。记忆以人类可读的 `.md` 文件存储 — 支持 Git 版本控制、手动编辑，索引始终可从源文件重建。
+
+### 存储结构
+
+```
+~/.claude/oh-my-claude/memory/
+├── sessions/    # 自动归档的会话摘要
+└── notes/       # 用户创建的持久记忆
+```
+
+### MCP 工具
+
+| 工具 | 说明 |
+|------|------|
+| `remember` | 存储记忆，可选标题、类型和标签 |
+| `recall` | 按文本查询搜索记忆，支持相关度排序 |
+| `forget` | 按 ID 删除特定记忆 |
+| `list_memories` | 浏览记忆，支持类型和日期过滤 |
+| `memory_status` | 显示记忆存储统计信息 |
+
+### CLI 命令
+
+```bash
+oh-my-claude memory status              # 显示记忆统计
+oh-my-claude memory search <查询>       # 搜索记忆
+oh-my-claude memory list [--type note]  # 列出记忆
+oh-my-claude memory show <id>           # 查看记忆内容
+oh-my-claude memory delete <id>         # 删除记忆
+```
+
+### 记忆文件格式
+
+每个记忆都是带有 YAML 前言的 Markdown 文件：
+
+```markdown
+---
+title: 团队偏好函数式组件
+type: note
+tags: [pattern, react, convention]
+created: 2026-01-29T10:00:00.000Z
+updated: 2026-01-29T10:00:00.000Z
+---
+
+团队偏好使用 hooks 的函数式组件而非类组件。
+使用 `useState` 和 `useEffect` 替代类生命周期方法。
+```
+
 ## 智能体工作流
 
 oh-my-claude 提供两种类型的智能体：
@@ -371,6 +421,13 @@ npx @lgcyaxi/oh-my-claude style set <名称>      # 切换输出样式
 npx @lgcyaxi/oh-my-claude style show [名称]     # 查看样式内容
 npx @lgcyaxi/oh-my-claude style reset           # 重置为 Claude 默认
 npx @lgcyaxi/oh-my-claude style create <名称>   # 创建自定义样式
+
+# 记忆
+npx @lgcyaxi/oh-my-claude memory status          # 显示记忆统计
+npx @lgcyaxi/oh-my-claude memory search <查询>   # 搜索记忆
+npx @lgcyaxi/oh-my-claude memory list             # 列出所有记忆
+npx @lgcyaxi/oh-my-claude memory show <id>        # 查看记忆内容
+npx @lgcyaxi/oh-my-claude memory delete <id>      # 删除记忆
 ```
 
 ## 配置

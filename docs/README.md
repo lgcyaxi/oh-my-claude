@@ -17,6 +17,7 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) v
 - **Official MCP Setup** - One-command installation for Sequential Thinking, MiniMax, and GLM MCPs
 - **Hook Integration** - Code quality checks, todo tracking, and agent monitoring
 - **Output Style Manager** - Switch between built-in and custom output styles via CLI
+- **Memory System** - Persistent markdown-based memory with MCP tools (remember, recall, forget)
 - **Companion Tools** - One-command setup for UI UX Pro Max, CCometixLine, and more
 
 ## Quick Start
@@ -283,6 +284,55 @@ description: My custom output style
 Define your style instructions here...
 ```
 
+## Memory System
+
+oh-my-claude includes a markdown-first memory system that persists knowledge across sessions. Memories are stored as human-readable `.md` files — git-friendly, human-editable, and always rebuildable.
+
+### Storage Layout
+
+```
+~/.claude/oh-my-claude/memory/
+├── sessions/    # Auto-archived session summaries
+└── notes/       # User-created persistent memories
+```
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `remember` | Store a memory with optional title, type, and tags |
+| `recall` | Search memories by text query with relevance scoring |
+| `forget` | Delete a specific memory by ID |
+| `list_memories` | Browse memories with type and date filters |
+| `memory_status` | Show memory store statistics |
+
+### CLI Commands
+
+```bash
+oh-my-claude memory status              # Show memory stats
+oh-my-claude memory search <query>      # Search memories
+oh-my-claude memory list [--type note]  # List memories
+oh-my-claude memory show <id>           # Show memory content
+oh-my-claude memory delete <id>         # Delete a memory
+```
+
+### Memory File Format
+
+Each memory is a markdown file with YAML frontmatter:
+
+```markdown
+---
+title: Team prefers functional components
+type: note
+tags: [pattern, react, convention]
+created: 2026-01-29T10:00:00.000Z
+updated: 2026-01-29T10:00:00.000Z
+---
+
+The team prefers functional components with hooks over class components.
+Use `useState` and `useEffect` instead of class lifecycle methods.
+```
+
 ## Agent Workflows
 
 oh-my-claude provides two types of agents:
@@ -371,6 +421,13 @@ npx @lgcyaxi/oh-my-claude style set <name>      # Switch output style
 npx @lgcyaxi/oh-my-claude style show [name]     # Show style content
 npx @lgcyaxi/oh-my-claude style reset           # Reset to Claude default
 npx @lgcyaxi/oh-my-claude style create <name>   # Create custom style
+
+# Memory
+npx @lgcyaxi/oh-my-claude memory status          # Show memory stats
+npx @lgcyaxi/oh-my-claude memory search <query>  # Search memories
+npx @lgcyaxi/oh-my-claude memory list             # List all memories
+npx @lgcyaxi/oh-my-claude memory show <id>        # Show memory content
+npx @lgcyaxi/oh-my-claude memory delete <id>      # Delete a memory
 ```
 
 ## Configuration
