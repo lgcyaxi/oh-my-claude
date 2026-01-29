@@ -52,9 +52,10 @@ oh-my-claude doctor    # Verify configuration
 
 Commands are defined in `src/commands/`:
 
-- **Agent Commands (`/omc-*`)**: Activate specific agents (sisyphus, oracle, librarian, etc.)
+- **Agent Commands (`/omc-*`)**: Activate specific agents (sisyphus, oracle, librarian, switch, etc.)
 - **Action Commands (`/omcx-*`)**: Quick actions (commit, implement, refactor, docs)
 - **Mode Commands**: `/ulw` (Ultrawork - maximum performance, work until done)
+- **Switch Command**: `/omc-switch` switches models via proxy (shortcuts: ds, ds-r, zp, mm)
 
 When adding new commands:
 1. Create `.md` file in `src/commands/`
@@ -97,6 +98,9 @@ npm publish --access public
 - `src/proxy/handler.ts` - Proxy request handler (passthrough vs switched routing)
 - `src/proxy/control.ts` - Proxy control API (health, status, switch, revert)
 - `src/proxy/state.ts` - Signal file IPC (proxy-switch.json)
+- `src/proxy/auth.ts` - Proxy auth (dual mode: api-key / oauth)
+- `src/hooks/memory-awareness.ts` - UserPromptSubmit hook for proactive memory usage
+- `src/commands/omc-switch.md` - Slash command for model switching with aliases
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
 
 ## Documentation Convention

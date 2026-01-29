@@ -20,6 +20,13 @@ export const HOOKS = {
     matcher: ".*",
     source: "./todo-continuation.ts",
   },
+  "memory-awareness": {
+    name: "memory-awareness",
+    description: "Nudges Claude to use memory (recall/remember) during work",
+    type: "UserPromptSubmit",
+    matcher: "",
+    source: "./memory-awareness.ts",
+  },
 } as const;
 
 export type HookName = keyof typeof HOOKS;

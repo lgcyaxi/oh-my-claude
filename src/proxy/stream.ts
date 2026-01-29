@@ -67,12 +67,15 @@ export function createStreamingResponse(
 
 /**
  * Forward a request to an upstream server and return the response
+ *
+ * @param passthroughAuth - If true, forwards all original auth headers as-is (OAuth mode)
  */
 export async function forwardToUpstream(
   originalRequest: Request,
   targetUrl: string,
   apiKey: string,
-  bodyOverride?: Record<string, unknown>
+  bodyOverride?: Record<string, unknown>,
+  passthroughAuth?: boolean
 ): Promise<Response> {
   // Build forwarded headers
   const headers = new Headers();
@@ -92,8 +95,19 @@ export async function forwardToUpstream(
     }
   }
 
-  // Set the target API key
-  headers.set("x-api-key", apiKey);
+  if (passthroughAuth) {
+    // OAuth mode: forward all auth-related headers from Claude Code as-is
+    const authHeaders = ["authorization", "x-api-key"];
+    for (const name of authHeaders) {
+      const value = originalRequest.headers.get(name);
+      if (value) {
+        headers.set(name, value);
+      }
+    }
+  } else {
+    // API key mode: set the target API key explicitly
+    headers.set("x-api-key", apiKey);
+  }
 
   // Determine body
   let body: string | null = null;

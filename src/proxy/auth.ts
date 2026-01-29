@@ -34,8 +34,13 @@ export function readAuthConfig(): ProxyAuthConfig | null {
     const content = readFileSync(authPath, "utf-8");
     const parsed = JSON.parse(content) as ProxyAuthConfig;
 
-    if (!parsed.anthropicApiKey || !parsed.proxyToken) {
+    if (!parsed.proxyToken) {
       return null;
+    }
+
+    // Normalize legacy configs without authMode
+    if (!parsed.authMode) {
+      parsed.authMode = parsed.anthropicApiKey ? "api-key" : "oauth";
     }
 
     return parsed;
@@ -74,29 +79,28 @@ export function generateProxyToken(): string {
 
 /**
  * Initialize or update proxy auth
- * Captures ANTHROPIC_API_KEY from environment and generates proxy token
- * @returns The proxy token to set as ANTHROPIC_API_KEY for Claude Code
+ *
+ * Supports two auth modes:
+ * - "api-key": Captures ANTHROPIC_API_KEY from env (traditional API key auth)
+ * - "oauth": No API key needed — forwards original auth headers from Claude Code
+ *
+ * Auto-detects mode: if ANTHROPIC_API_KEY is set, uses api-key mode; otherwise oauth.
  */
 export function initializeAuth(): ProxyAuthConfig {
   const existing = readAuthConfig();
 
-  // Capture real Anthropic API key from environment
-  const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicApiKey) {
-    throw new Error(
-      "ANTHROPIC_API_KEY not set in environment. " +
-      "The proxy needs to capture this before replacing it with a proxy token."
-    );
-  }
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY ?? "";
+  const authMode = anthropicApiKey ? "api-key" : "oauth";
 
-  // Reuse existing proxy token if auth is already configured with the same key
-  if (existing && existing.anthropicApiKey === anthropicApiKey) {
+  // Reuse existing config if auth mode and key match
+  if (existing && existing.authMode === authMode && existing.anthropicApiKey === anthropicApiKey) {
     return existing;
   }
 
   const config: ProxyAuthConfig = {
     anthropicApiKey,
     proxyToken: existing?.proxyToken ?? generateProxyToken(),
+    authMode,
     configuredAt: new Date().toISOString(),
   };
 
@@ -105,11 +109,15 @@ export function initializeAuth(): ProxyAuthConfig {
 }
 
 /**
- * Get the passthrough auth (real Anthropic API key + base URL)
+ * Get the passthrough auth config
+ *
+ * In api-key mode: returns the captured API key
+ * In oauth mode: returns empty apiKey (caller must forward original headers)
  */
 export function getPassthroughAuth(): {
   apiKey: string;
   baseUrl: string;
+  authMode: "api-key" | "oauth";
 } {
   const authConfig = readAuthConfig();
   if (!authConfig) {
@@ -121,6 +129,7 @@ export function getPassthroughAuth(): {
   return {
     apiKey: authConfig.anthropicApiKey,
     baseUrl: "https://api.anthropic.com",
+    authMode: authConfig.authMode,
   };
 }
 

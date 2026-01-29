@@ -95,6 +95,7 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omc-plan` | Start strategic planning with Prometheus |
 | `/omc-start-work` | Begin work on an existing plan |
 | `/omc-status` | Display MCP background agent status dashboard |
+| `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r 3`) |
 
 ### Quick Action Commands (`/omcx-*`)
 
@@ -374,11 +375,27 @@ export ANTHROPIC_BASE_URL=http://localhost:18910
 
 ### Switching Models
 
-**Via MCP tool** (in a Claude Code conversation):
+**Via slash command** (easiest — in a Claude Code conversation):
+```
+/omc-switch ds-r 3          # 3 requests via DeepSeek Reasoner
+/omc-switch deepseek deepseek-chat
+/omc-switch zhipu glm-4.7 5
+/omc-switch revert           # switch back to native Claude
+```
+
+**Shortcut aliases:**
+
+| Shortcut | Provider | Model |
+|----------|----------|-------|
+| `ds` | deepseek | deepseek-chat |
+| `ds-r` | deepseek | deepseek-reasoner |
+| `zp` | zhipu | glm-4.7 |
+| `mm` | minimax | MiniMax-M2.1 |
+
+**Via MCP tool:**
 ```
 switch_model(provider="deepseek", model="deepseek-chat", requests=3)
 ```
-The next 3 requests will be routed to DeepSeek, then automatically revert to native Claude.
 
 **Via CLI:**
 ```bash

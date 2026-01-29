@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.4.0-beta.0");
+  .version("1.4.0-beta.1");
 
 // Install command
 program
@@ -2246,9 +2246,13 @@ proxyCmd
     try {
       const authConfig = initializeAuth();
 
+      const modeLabel = authConfig.authMode === "oauth"
+        ? `${c.cyan}OAuth${c.reset} (forwarding auth headers from Claude Code)`
+        : `${c.cyan}API Key${c.reset} (captured ANTHROPIC_API_KEY)`;
+
       console.log(ok("Proxy auth configured"));
+      console.log(`  Auth mode: ${modeLabel}`);
       console.log(`  Auth file: ${dimText(getAuthConfigPath())}`);
-      console.log(`  Proxy token: ${dimText(authConfig.proxyToken.slice(0, 20) + "...")}`);
 
       console.log(`\n${c.bold}Next steps:${c.reset}`);
       console.log(`  1. Start the proxy:   ${c.cyan}oh-my-claude proxy start${c.reset}`);

@@ -37,10 +37,12 @@ export interface ProxyConfig {
 
 /** Stored auth configuration for the proxy */
 export interface ProxyAuthConfig {
-  /** The real Anthropic API key (captured from env on enable) */
+  /** The real Anthropic API key (captured from env on enable, empty for OAuth) */
   anthropicApiKey: string;
   /** The proxy token used by Claude Code as ANTHROPIC_API_KEY */
   proxyToken: string;
+  /** Auth mode: "api-key" (traditional) or "oauth" (passthrough headers) */
+  authMode: "api-key" | "oauth";
   /** Timestamp when auth was configured */
   configuredAt: string;
 }

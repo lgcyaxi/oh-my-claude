@@ -95,6 +95,7 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omc-plan` | 使用 Prometheus 开始战略规划 |
 | `/omc-start-work` | 开始执行现有计划 |
 | `/omc-status` | 显示 MCP 后台智能体状态仪表板 |
+| `/omc-switch` | 切换到外部供应商模型（如 `/omc-switch ds-r 3`） |
 
 ### 快捷操作命令（`/omcx-*`）
 
@@ -374,11 +375,27 @@ export ANTHROPIC_BASE_URL=http://localhost:18910
 
 ### 切换模型
 
-**通过 MCP 工具**（在 Claude Code 对话中）：
+**通过斜杠命令**（最简单 — 在 Claude Code 对话中）：
+```
+/omc-switch ds-r 3          # 3 个请求通过 DeepSeek Reasoner
+/omc-switch deepseek deepseek-chat
+/omc-switch zhipu glm-4.7 5
+/omc-switch revert           # 切换回原生 Claude
+```
+
+**快捷别名：**
+
+| 快捷名 | 供应商 | 模型 |
+|--------|--------|------|
+| `ds` | deepseek | deepseek-chat |
+| `ds-r` | deepseek | deepseek-reasoner |
+| `zp` | zhipu | glm-4.7 |
+| `mm` | minimax | MiniMax-M2.1 |
+
+**通过 MCP 工具：**
 ```
 switch_model(provider="deepseek", model="deepseek-chat", requests=3)
 ```
-接下来的 3 个请求将路由到 DeepSeek，然后自动恢复为原生 Claude。
 
 **通过 CLI：**
 ```bash

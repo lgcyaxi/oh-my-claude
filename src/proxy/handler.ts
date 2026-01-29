@@ -64,17 +64,21 @@ export async function handleMessages(req: Request): Promise<Response> {
 
 /**
  * Passthrough request to Anthropic API
+ *
+ * In OAuth mode, forwards original auth headers as-is.
+ * In API key mode, substitutes the stored API key.
  */
 async function handlePassthrough(req: Request, reqId: number): Promise<Response> {
-  const { apiKey, baseUrl } = getPassthroughAuth();
+  const { apiKey, baseUrl, authMode } = getPassthroughAuth();
+  const isOAuth = authMode === "oauth";
 
   // Reconstruct the target URL preserving the path
   const url = new URL(req.url);
   const targetUrl = `${baseUrl}${url.pathname}${url.search}`;
 
-  console.error(`[proxy #${reqId}] → Anthropic (passthrough) ${url.pathname}`);
+  console.error(`[proxy #${reqId}] → Anthropic (passthrough${isOAuth ? "/oauth" : ""}) ${url.pathname}`);
 
-  const upstreamResponse = await forwardToUpstream(req, targetUrl, apiKey);
+  const upstreamResponse = await forwardToUpstream(req, targetUrl, apiKey, undefined, isOAuth);
   return createStreamingResponse(upstreamResponse);
 }
 
@@ -149,13 +153,14 @@ export async function handleOtherRequest(req: Request): Promise<Response> {
   const reqId = requestCount;
 
   try {
-    const { apiKey, baseUrl } = getPassthroughAuth();
+    const { apiKey, baseUrl, authMode } = getPassthroughAuth();
+    const isOAuth = authMode === "oauth";
     const url = new URL(req.url);
     const targetUrl = `${baseUrl}${url.pathname}${url.search}`;
 
-    console.error(`[proxy #${reqId}] → Anthropic (passthrough) ${url.pathname}`);
+    console.error(`[proxy #${reqId}] → Anthropic (passthrough${isOAuth ? "/oauth" : ""}) ${url.pathname}`);
 
-    const upstreamResponse = await forwardToUpstream(req, targetUrl, apiKey);
+    const upstreamResponse = await forwardToUpstream(req, targetUrl, apiKey, undefined, isOAuth);
     return createStreamingResponse(upstreamResponse);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

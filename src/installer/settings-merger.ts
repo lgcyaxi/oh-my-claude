@@ -23,6 +23,10 @@ interface ClaudeSettings {
       matcher: string;
       hooks: Array<{ type: string; command: string }>;
     }>;
+    UserPromptSubmit?: Array<{
+      matcher: string;
+      hooks: Array<{ type: string; command: string }>;
+    }>;
   };
   mcpServers?: Record<
     string,
@@ -86,7 +90,7 @@ export function saveSettings(settings: ClaudeSettings): void {
  */
 function addHook(
   settings: ClaudeSettings,
-  hookType: "PreToolUse" | "PostToolUse" | "Stop",
+  hookType: "PreToolUse" | "PostToolUse" | "Stop" | "UserPromptSubmit",
   matcher: string,
   command: string,
   force = false
@@ -128,7 +132,7 @@ function addHook(
  */
 function removeHook(
   settings: ClaudeSettings,
-  hookType: "PreToolUse" | "PostToolUse" | "Stop",
+  hookType: "PreToolUse" | "PostToolUse" | "Stop" | "UserPromptSubmit",
   identifier: string
 ): boolean {
   if (!settings.hooks?.[hookType]) {
@@ -292,6 +296,24 @@ export function installHooks(hooksDir: string, force = false): {
     skipped.push("task-tracker (already installed)");
   }
 
+  // Memory awareness hook (UserPromptSubmit — nudges memory recall/remember)
+  const memoryResult = addHook(
+    settings,
+    "UserPromptSubmit",
+    "",
+    `${nodeCmd} ${hooksDir}/memory-awareness.js`,
+    force
+  );
+  if (memoryResult) {
+    if (force) {
+      updated.push("memory-awareness (UserPromptSubmit)");
+    } else {
+      installed.push("memory-awareness (UserPromptSubmit)");
+    }
+  } else {
+    skipped.push("memory-awareness (already installed)");
+  }
+
   saveSettings(settings);
   return { installed, updated, skipped };
 }
@@ -394,6 +416,9 @@ export function uninstallFromSettings(): {
   }
   if (removeHook(settings, "Stop", "oh-my-claude")) {
     removedHooks.push("Stop");
+  }
+  if (removeHook(settings, "UserPromptSubmit", "oh-my-claude")) {
+    removedHooks.push("UserPromptSubmit");
   }
 
   saveSettings(settings);
