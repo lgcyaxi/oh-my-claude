@@ -24,6 +24,8 @@ bun test             # Run tests
 - `src/hooks/` - Claude Code hook scripts
 - `src/generators/` - Agent .md file generators
 - `src/installer/` - CLI installer
+- `src/styles/` - Output style presets and manager
+- `src/statusline/` - StatusLine segments and configuration
 
 ## Architecture
 
@@ -84,4 +86,15 @@ npm publish --access public
 - `src/config/loader.ts` - Config loading and provider resolution
 - `src/providers/router.ts` - Routes requests to providers
 - `src/mcp/background-agent-server/server.ts` - MCP server implementation
+- `src/styles/index.ts` - Output style manager (list, set, reset, create)
+- `src/statusline/config.ts` - StatusLine config and segment management
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
+
+## Documentation Convention
+
+When adding new features, always update ALL of these:
+- `docs/README.md` - English documentation
+- `docs/README.zh-CN.md` - Chinese documentation
+- `CLAUDE.md` - Project instructions (this file)
+- `docs/CHANGELOG.md` - Main changelog
+- `docs/changelog/v1.X.x.md` - Version-specific changelog

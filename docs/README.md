@@ -225,6 +225,62 @@ npx @lgcyaxi/oh-my-claude statusline toggle context off   # Disable context segm
 
 When you have an existing statusline (like CCometixLine), oh-my-claude automatically creates a wrapper that shows both on separate lines.
 
+## Output Styles
+
+oh-my-claude ships with built-in output style presets that customize Claude Code's response behavior.
+
+### Built-in Presets
+
+| Style | Description |
+|-------|-------------|
+| **engineer-professional** | SOLID/KISS/DRY/YAGNI principles, professional engineering output |
+| **agent** | Autonomous agent mode — minimal narration, maximum action |
+| **concise-coder** | Code-first, no explanations unless asked |
+| **teaching** | Educational — explains concepts, reasoning, and trade-offs |
+| **review** | Code review focused with severity levels |
+
+### CLI Commands
+
+```bash
+# List available styles
+npx @lgcyaxi/oh-my-claude style list
+
+# Switch output style
+npx @lgcyaxi/oh-my-claude style set agent
+
+# Show style content
+npx @lgcyaxi/oh-my-claude style show teaching
+
+# Reset to Claude default
+npx @lgcyaxi/oh-my-claude style reset
+
+# Create a custom style
+npx @lgcyaxi/oh-my-claude style create my-style
+```
+
+### Custom Styles
+
+Create your own styles in `~/.claude/output-styles/`:
+
+```bash
+oh-my-claude style create my-custom-style
+# Edit ~/.claude/output-styles/my-custom-style.md
+oh-my-claude style set my-custom-style
+```
+
+Style files use YAML frontmatter + markdown body:
+
+```markdown
+---
+name: my-custom-style
+description: My custom output style
+---
+
+# My Custom Style
+
+Define your style instructions here...
+```
+
 ## Agent Workflows
 
 oh-my-claude provides two types of agents:
@@ -306,6 +362,13 @@ npx @lgcyaxi/oh-my-claude statusline --enable   # Enable statusline
 npx @lgcyaxi/oh-my-claude statusline --disable  # Disable statusline
 npx @lgcyaxi/oh-my-claude statusline preset <name>     # Set preset (minimal/standard/full)
 npx @lgcyaxi/oh-my-claude statusline toggle <segment>  # Toggle segment on/off
+
+# Output Styles
+npx @lgcyaxi/oh-my-claude style list            # List available styles
+npx @lgcyaxi/oh-my-claude style set <name>      # Switch output style
+npx @lgcyaxi/oh-my-claude style show [name]     # Show style content
+npx @lgcyaxi/oh-my-claude style reset           # Reset to Claude default
+npx @lgcyaxi/oh-my-claude style create <name>   # Create custom style
 ```
 
 ## Configuration

@@ -2,6 +2,18 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [1.3.x](changelog/v1.3.x.md) - Current Development
+
+**Latest: v1.3.0-beta.0** (2026-01-29)
+
+### Highlights
+
+- **Output Style Manager** - CLI commands to list, set, show, reset, and create output styles
+- **5 Built-in Style Presets** - engineer-professional, agent, concise-coder, teaching, review
+- **Custom Style Support** - Create and manage custom output styles in `~/.claude/output-styles/`
+
+---
+
 ## [1.2.x](changelog/v1.2.x.md) - Current Stable
 
 **Latest: v1.2.2** (2026-01-29)
@@ -56,6 +68,7 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v1.3.0-beta.0 | 2026-01-29 | Beta | Output style manager with 5 built-in presets |
 | v1.2.2 | 2026-01-29 | Patch | Segment statusline, CLI commands, rich context, concurrent tasks, Windows fixes |
 | v1.2.1 | 2026-01-17 | Patch | Doctor improvements, beta channel |
 | v1.2.0 | 2026-01-17 | Minor | Removed fallback, analyst agent |
