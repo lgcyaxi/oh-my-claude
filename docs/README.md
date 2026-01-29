@@ -18,6 +18,7 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) v
 - **Hook Integration** - Code quality checks, todo tracking, and agent monitoring
 - **Output Style Manager** - Switch between built-in and custom output styles via CLI
 - **Memory System** - Persistent markdown-based memory with MCP tools (remember, recall, forget)
+- **Live Model Switching** - HTTP proxy for in-conversation model switching to external providers (DeepSeek, ZhiPu, MiniMax)
 - **Companion Tools** - One-command setup for UI UX Pro Max, CCometixLine, and more
 
 ## Quick Start
@@ -163,6 +164,7 @@ omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [�
 | **Output Style** | Current style | `[eng-pro]` |
 | **MCP** | Background tasks | `[⠙ Oracle: 32s]` |
 | **Memory** | Memory store count | `[mem:5]` |
+| **Proxy** | Model switch state | `[→DS/R ×2]` |
 
 ### Presets
 
@@ -172,7 +174,7 @@ Configure in `~/.config/oh-my-claude/statusline.json`:
 |--------|----------|
 | **minimal** | Git, Directory |
 | **standard** | Model, Git, Directory, Context, Session, MCP |
-| **full** | All segments (including Output Style, Memory) |
+| **full** | All segments (including Output Style, Memory, Proxy) |
 
 ```json
 {
@@ -223,7 +225,7 @@ npx @lgcyaxi/oh-my-claude statusline toggle output-style  # Toggle output-style
 npx @lgcyaxi/oh-my-claude statusline toggle context off   # Disable context segment
 ```
 
-**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mcp`
+**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mcp`, `memory`, `proxy`
 
 ### Multi-Line Support
 
@@ -334,6 +336,105 @@ The team prefers functional components with hooks over class components.
 Use `useState` and `useEffect` instead of class lifecycle methods.
 ```
 
+## Live Model Switching
+
+oh-my-claude includes an HTTP proxy that enables **in-conversation model switching** — temporarily route Claude Code's API calls to external providers (DeepSeek, ZhiPu, MiniMax) without losing conversation context.
+
+### How It Works
+
+```
+  Claude Code
+       │  ANTHROPIC_BASE_URL=http://localhost:18910
+       ▼
+  ┌─────────────────────────────────────────────┐
+  │  oh-my-claude Proxy (localhost:18910)        │
+  │                                              │
+  │  switched=false?  → Passthrough to Anthropic │
+  │  switched=true?   → Forward to provider      │
+  │                     (DeepSeek/ZhiPu/MiniMax) │
+  └─────────────────────────────────────────────┘
+```
+
+All target providers use **Anthropic-compatible** `/v1/messages` endpoints. The proxy only rewrites: target host, API key header, and model field — no format translation needed.
+
+### Quick Start
+
+```bash
+# 1. Enable proxy
+oh-my-claude proxy enable
+
+# 2. Start proxy server
+oh-my-claude proxy start
+
+# 3. Set environment variable (printed by proxy start)
+export ANTHROPIC_BASE_URL=http://localhost:18910
+
+# 4. Use Claude Code normally — all requests pass through to Anthropic
+```
+
+### Switching Models
+
+**Via MCP tool** (in a Claude Code conversation):
+```
+switch_model(provider="deepseek", model="deepseek-chat", requests=3)
+```
+The next 3 requests will be routed to DeepSeek, then automatically revert to native Claude.
+
+**Via CLI:**
+```bash
+oh-my-claude proxy switch deepseek deepseek-chat
+```
+
+**Via Control API:**
+```bash
+curl -X POST http://localhost:18911/switch \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"deepseek","model":"deepseek-chat","requests":3}'
+```
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `switch_model` | Switch next N requests to external provider |
+| `switch_status` | Query current proxy switch state |
+| `switch_revert` | Immediately revert to native Claude |
+
+### Safety Features
+
+- **Auto-Revert**: After N requests (default: 1), automatically returns to native Claude
+- **Timeout**: Switch expires after timeout (default: 10 minutes)
+- **Graceful Fallback**: If provider API key is missing, silently falls back to native Claude
+- **Error Recovery**: Provider request failures fall back to native Claude
+- **Opt-In**: Proxy is disabled by default, must explicitly enable
+
+### Proxy CLI Commands
+
+```bash
+oh-my-claude proxy start                          # Start proxy daemon
+oh-my-claude proxy stop                           # Stop proxy daemon
+oh-my-claude proxy status                         # Show proxy state
+oh-my-claude proxy enable                         # Enable in config
+oh-my-claude proxy disable                        # Disable in config
+oh-my-claude proxy switch <provider> <model>      # Manual model switch
+```
+
+### Configuration
+
+Add to `~/.claude/oh-my-claude.json`:
+
+```json
+{
+  "proxy": {
+    "port": 18910,
+    "controlPort": 18911,
+    "defaultRequests": 1,
+    "defaultTimeoutMs": 600000,
+    "enabled": false
+  }
+}
+```
+
 ## Agent Workflows
 
 oh-my-claude provides two types of agents:
@@ -431,6 +532,14 @@ npx @lgcyaxi/oh-my-claude memory search <query>  # Search memories
 npx @lgcyaxi/oh-my-claude memory list             # List all memories
 npx @lgcyaxi/oh-my-claude memory show <id>        # Show memory content
 npx @lgcyaxi/oh-my-claude memory delete <id>      # Delete a memory
+
+# Proxy (Live Model Switching)
+npx @lgcyaxi/oh-my-claude proxy start             # Start proxy daemon
+npx @lgcyaxi/oh-my-claude proxy stop              # Stop proxy daemon
+npx @lgcyaxi/oh-my-claude proxy status            # Show proxy state
+npx @lgcyaxi/oh-my-claude proxy enable            # Enable proxy in config
+npx @lgcyaxi/oh-my-claude proxy disable           # Disable proxy in config
+npx @lgcyaxi/oh-my-claude proxy switch <p> <m>    # Switch to provider/model
 ```
 
 ## Configuration
@@ -493,19 +602,20 @@ When limits are reached, new tasks queue and start automatically when slots free
 ├──────────────────────────────────────────────────────────────────────────┤
 │  Primary Agent (Claude via Subscription)                                  │
 │         │                                                                 │
-│    ┌────┴────┬─────────────────┐                                         │
-│    ▼         ▼                 ▼                                         │
-│  Task Tool   MCP Server     Hooks                                        │
-│  (sync)      (async)        (lifecycle)                                  │
-│    │           │                │                                        │
-│    ▼           ▼                ▼                                        │
-│  Claude      Multi-Provider  settings.json                               │
-│  Subagents   Router          scripts                                     │
-│                │                                                         │
-│                ├── DeepSeek (Anthropic-compatible)                       │
-│                ├── ZhiPu GLM (Anthropic-compatible)                      │
-│                ├── MiniMax (Anthropic-compatible)                        │
-│                └── OpenRouter (OpenAI-compatible, optional)              │
+│    ┌────┴────┬─────────────────┬──────────────┐                          │
+│    ▼         ▼                 ▼              ▼                          │
+│  Task Tool   MCP Server     Hooks          Proxy                         │
+│  (sync)      (async)        (lifecycle)    (intercept)                   │
+│    │           │                │              │                          │
+│    ▼           ▼                ▼              ▼                          │
+│  Claude      Multi-Provider  settings.json  API Request Router           │
+│  Subagents   Router          scripts          │                          │
+│                │                         ┌────┴────┐                     │
+│                │                         ▼         ▼                     │
+│                ├── DeepSeek          Anthropic   External                 │
+│                ├── ZhiPu GLM        (default)   Provider                 │
+│                ├── MiniMax                       (switched)               │
+│                └── OpenRouter                                            │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -513,6 +623,7 @@ When limits are reached, new tasks queue and start automatically when slots free
 
 - **Task Tool (sync)**: Claude subscription agents run via Claude Code's native Task tool
 - **MCP Server (async)**: External API agents run via MCP for parallel background execution
+- **Proxy (intercept)**: HTTP proxy intercepts Claude Code's native API calls for live model switching
 
 ## Development
 

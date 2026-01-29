@@ -357,6 +357,22 @@ process.exit(1);
       }
     }
 
+    // 4b. Install proxy server
+    try {
+      const proxyDir = join(installDir, "dist", "proxy");
+      if (!existsSync(proxyDir)) {
+        mkdirSync(proxyDir, { recursive: true });
+      }
+
+      const builtProxyDir = join(sourceDir, "dist", "proxy");
+      if (existsSync(builtProxyDir)) {
+        cpSync(builtProxyDir, proxyDir, { recursive: true });
+      }
+    } catch (error) {
+      // Non-critical — proxy is opt-in
+      if (debug) console.log(`[DEBUG] Failed to install proxy: ${error}`);
+    }
+
     // 5. Deploy output style presets
     try {
       result.styles = deployBuiltInStyles(sourceDir);

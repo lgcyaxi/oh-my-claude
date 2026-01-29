@@ -38,6 +38,14 @@ import {
   getMemoryStats,
   searchMemories,
 } from "../../memory";
+import {
+  readSwitchState,
+  writeSwitchState,
+  resetSwitchState,
+} from "../../proxy/state";
+import { DEFAULT_PROXY_CONFIG } from "../../proxy/types";
+import type { ProxySwitchState } from "../../proxy/types";
+import { loadConfig, isProviderConfigured } from "../../config";
 
 // Tool definitions
 const tools: Tool[] = [
@@ -390,6 +398,61 @@ Use this to find previously saved knowledge, decisions, or session summaries.`,
   {
     name: "memory_status",
     description: "Get memory store statistics (total count, size, breakdown by type).",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  // Proxy switch tools
+  {
+    name: "switch_model",
+    description: `Switch Claude Code's next N requests to an external provider via the proxy.
+
+Requires the oh-my-claude proxy to be running (oh-my-claude proxy start).
+After the specified number of requests, automatically reverts to native Claude.
+
+**Available Providers** (must have API key configured):
+- deepseek: deepseek-reasoner, deepseek-chat
+- zhipu: glm-4.7, glm-4v-flash
+- minimax: MiniMax-M2.1
+- openrouter: (any model via OpenRouter)
+
+**Example**: switch_model(provider="deepseek", model="deepseek-reasoner", requests=1)
+This routes the next Claude Code response through DeepSeek's reasoner model.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: {
+          type: "string",
+          description: "Provider name (deepseek, zhipu, minimax, openrouter)",
+        },
+        model: {
+          type: "string",
+          description: "Model name (e.g., deepseek-reasoner, glm-4.7, MiniMax-M2.1)",
+        },
+        requests: {
+          type: "number",
+          description: "Number of requests to switch (default: 1, 0 = unlimited until timeout)",
+        },
+        timeout_ms: {
+          type: "number",
+          description: "Timeout in ms before auto-revert (default: 600000 = 10 min)",
+        },
+      },
+      required: ["provider", "model"],
+    },
+  },
+  {
+    name: "switch_status",
+    description: "Get the current proxy switch status. Shows whether requests are being routed to an external provider.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "switch_revert",
+    description: "Immediately revert the proxy to passthrough mode (route to native Claude).",
     inputSchema: {
       type: "object",
       properties: {},
@@ -934,6 +997,142 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{
             type: "text",
             text: JSON.stringify(stats),
+          }],
+        };
+      }
+
+      // ---- Proxy switch tools ----
+
+      case "switch_model": {
+        const { provider, model, requests, timeout_ms } = args as {
+          provider: string;
+          model: string;
+          requests?: number;
+          timeout_ms?: number;
+        };
+
+        if (!provider || !model) {
+          return {
+            content: [{ type: "text", text: "Error: provider and model are required" }],
+            isError: true,
+          };
+        }
+
+        // Validate provider exists and is not claude-subscription
+        const omcConfig = loadConfig();
+        const providerConfig = omcConfig.providers[provider];
+        if (!providerConfig) {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: Unknown provider "${provider}". Available: ${Object.keys(omcConfig.providers).join(", ")}`,
+            }],
+            isError: true,
+          };
+        }
+
+        if (providerConfig.type === "claude-subscription") {
+          return {
+            content: [{
+              type: "text",
+              text: `Error: Cannot switch to "${provider}" — it uses Claude subscription. Choose an external provider.`,
+            }],
+            isError: true,
+          };
+        }
+
+        // Check provider is configured (API key set)
+        if (!isProviderConfigured(omcConfig, provider)) {
+          const envVar = providerConfig.api_key_env ?? `${provider.toUpperCase()}_API_KEY`;
+          return {
+            content: [{
+              type: "text",
+              text: `Error: Provider "${provider}" is not configured. Set ${envVar} environment variable.`,
+            }],
+            isError: true,
+          };
+        }
+
+        const now = Date.now();
+        const reqCount = requests ?? DEFAULT_PROXY_CONFIG.defaultRequests;
+        const timeoutMs = timeout_ms ?? DEFAULT_PROXY_CONFIG.defaultTimeoutMs;
+
+        const switchState: ProxySwitchState = {
+          switched: true,
+          provider,
+          model,
+          requestsRemaining: reqCount,
+          switchedAt: now,
+          timeoutAt: now + timeoutMs,
+        };
+
+        writeSwitchState(switchState);
+
+        // Also try to notify the control API for immediate effect
+        try {
+          await fetch(`http://localhost:${DEFAULT_PROXY_CONFIG.controlPort}/switch`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ provider, model, requests: reqCount, timeout_ms: timeoutMs }),
+          });
+        } catch {
+          // Control API not reachable — state file is the primary mechanism
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              switched: true,
+              provider,
+              model,
+              requestsRemaining: reqCount,
+              timeoutAt: new Date(now + timeoutMs).toISOString(),
+              message: `Next ${reqCount === 0 ? "unlimited" : reqCount} request(s) will be routed to ${provider}/${model}`,
+            }),
+          }],
+        };
+      }
+
+      case "switch_status": {
+        const switchState = readSwitchState();
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              ...switchState,
+              ...(switchState.switchedAt && {
+                switchedAtHuman: new Date(switchState.switchedAt).toISOString(),
+              }),
+              ...(switchState.timeoutAt && {
+                timeoutAtHuman: new Date(switchState.timeoutAt).toISOString(),
+                timeoutIn: Math.max(0, switchState.timeoutAt - Date.now()),
+              }),
+            }),
+          }],
+        };
+      }
+
+      case "switch_revert": {
+        resetSwitchState();
+
+        // Also try to notify the control API
+        try {
+          await fetch(`http://localhost:${DEFAULT_PROXY_CONFIG.controlPort}/revert`, {
+            method: "POST",
+          });
+        } catch {
+          // Control API not reachable — state file is the primary mechanism
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              switched: false,
+              message: "Reverted to passthrough (native Claude)",
+            }),
           }],
         };
       }

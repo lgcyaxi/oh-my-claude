@@ -2,7 +2,22 @@
 
 All notable changes to oh-my-claude are documented here.
 
-## [1.3.x](changelog/v1.3.x.md) - Current Development
+## [1.4.x](changelog/v1.4.x.md) - Current Development
+
+**Latest: v1.4.0-beta.0** (2026-01-29)
+
+### Highlights
+
+- **Live Model Switching** - HTTP proxy for in-conversation model switching to external providers
+- **Proxy MCP Tools** - `switch_model`, `switch_status`, `switch_revert` for seamless switching
+- **Proxy CLI** - `proxy start/stop/status/enable/disable/switch` commands
+- **Proxy StatusLine** - `[→DS/R ×2]` segment shows active switch state
+- **Auto-Revert Safety** - Request counter + timeout ensure automatic return to native Claude
+- **Graceful Fallback** - Missing API keys silently fall back to native Claude
+
+---
+
+## [1.3.x](changelog/v1.3.x.md)
 
 **Latest: v1.3.0-beta.3** (2026-01-29)
 
@@ -18,7 +33,7 @@ All notable changes to oh-my-claude are documented here.
 
 ---
 
-## [1.2.x](changelog/v1.2.x.md) - Current Stable
+## [1.2.x](changelog/v1.2.x.md) - Stable
 
 **Latest: v1.2.2** (2026-01-29)
 
@@ -72,6 +87,7 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v1.4.0-beta.0 | 2026-01-29 | Beta | Live model switching proxy with MCP tools and CLI |
 | v1.3.0-beta.3 | 2026-01-29 | Beta | execute_with_model tool, memory statusline segment |
 | v1.3.0-beta.0 | 2026-01-29 | Beta | Output style manager with 5 built-in presets |
 | v1.2.2 | 2026-01-29 | Patch | Segment statusline, CLI commands, rich context, concurrent tasks, Windows fixes |

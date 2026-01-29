@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.3.0-beta.3");
+  .version("1.4.0-beta.0");
 
 // Install command
 program
@@ -935,9 +935,9 @@ statuslineCmd
 // Statusline toggle subcommand
 statuslineCmd
   .command("toggle <segment> [state]")
-  .description("Toggle a segment on/off (model, git, directory, context, session, output-style, mcp, memory)")
+  .description("Toggle a segment on/off (model, git, directory, context, session, output-style, mcp, memory, proxy)")
   .action((segment: string, state?: string) => {
-    const validSegments = ["model", "git", "directory", "context", "session", "output-style", "mcp", "memory"];
+    const validSegments = ["model", "git", "directory", "context", "session", "output-style", "mcp", "memory", "proxy"];
     if (!validSegments.includes(segment)) {
       console.log(`Invalid segment: ${segment}`);
       console.log(`Valid segments: ${validSegments.join(", ")}`);
@@ -1955,6 +1955,432 @@ try {
 
     console.log();
     console.log(warn("Please restart Claude Code to activate changes."));
+  });
+
+// Proxy command with subcommands
+const proxyCmd = program
+  .command("proxy")
+  .description("Manage the live model switching proxy")
+  .action(() => {
+    const { readSwitchState } = require("./proxy/state");
+    const { readAuthConfig } = require("./proxy/auth");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+
+    const state = readSwitchState();
+    const auth = readAuthConfig();
+
+    console.log(`${c.bold}Proxy Status${c.reset}\n`);
+    console.log(`  Auth configured: ${auth ? `${c.green}Yes${c.reset}` : `${c.red}No${c.reset}`}`);
+    console.log(`  Switch state:    ${state.switched ? `${c.yellow}Switched → ${state.provider}/${state.model}${c.reset}` : `${c.green}Passthrough (native Claude)${c.reset}`}`);
+
+    if (state.switched) {
+      console.log(`  Remaining:       ${state.requestsRemaining === 0 ? "unlimited" : state.requestsRemaining}`);
+      if (state.timeoutAt) {
+        const remaining = Math.max(0, state.timeoutAt - Date.now());
+        const seconds = Math.floor(remaining / 1000);
+        console.log(`  Timeout in:      ${seconds}s`);
+      }
+    }
+
+    console.log(`\nUsage:`);
+    console.log(`  oh-my-claude proxy start              ${c.dim}# Start proxy server${c.reset}`);
+    console.log(`  oh-my-claude proxy stop               ${c.dim}# Stop proxy server${c.reset}`);
+    console.log(`  oh-my-claude proxy status             ${c.dim}# Show proxy state${c.reset}`);
+    console.log(`  oh-my-claude proxy enable             ${c.dim}# Enable proxy, configure auth${c.reset}`);
+    console.log(`  oh-my-claude proxy disable            ${c.dim}# Disable proxy${c.reset}`);
+  });
+
+// Proxy start subcommand
+proxyCmd
+  .command("start")
+  .description("Start the proxy server as a background daemon")
+  .option("--port <port>", "Proxy port (default: 18910)")
+  .option("--control-port <port>", "Control API port (default: 18911)")
+  .option("--foreground", "Run in foreground (for debugging)")
+  .action((options) => {
+    const { execSync, spawn } = require("node:child_process");
+    const { existsSync } = require("node:fs");
+    const { join } = require("node:path");
+    const { homedir } = require("node:os");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+    const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
+
+    // Find proxy server script
+    const installDir = join(homedir(), ".claude", "oh-my-claude");
+    const proxyScript = join(installDir, "dist", "proxy", "server.js");
+
+    if (!existsSync(proxyScript)) {
+      console.log(fail("Proxy server script not found."));
+      console.log(dimText("Run 'oh-my-claude install' first to deploy proxy server."));
+      process.exit(1);
+    }
+
+    const port = options.port ?? "18910";
+    const controlPort = options.controlPort ?? "18911";
+
+    // Check if already running
+    try {
+      const health = execSync(`curl -s http://localhost:${controlPort}/health`, {
+        encoding: "utf-8",
+        timeout: 2000,
+      });
+      const parsed = JSON.parse(health);
+      if (parsed.status === "ok") {
+        console.log(ok(`Proxy already running (uptime: ${parsed.uptimeHuman})`));
+        return;
+      }
+    } catch {
+      // Not running — continue to start
+    }
+
+    if (options.foreground) {
+      // Run in foreground
+      console.log(`Starting proxy in foreground...`);
+      console.log(dimText(`Port: ${port}, Control: ${controlPort}\n`));
+      try {
+        execSync(`bun run "${proxyScript}" --port ${port} --control-port ${controlPort}`, {
+          stdio: "inherit",
+        });
+      } catch {
+        // Process exited
+      }
+    } else {
+      // Run as background daemon
+      const logFile = join(installDir, "proxy.log");
+      const child = spawn("bun", ["run", proxyScript, "--port", port, "--control-port", controlPort], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+        env: { ...process.env },
+      });
+      child.unref();
+
+      // Wait briefly and check if it started
+      setTimeout(() => {
+        try {
+          const health = execSync(`curl -s http://localhost:${controlPort}/health`, {
+            encoding: "utf-8",
+            timeout: 3000,
+          });
+          const parsed = JSON.parse(health);
+          if (parsed.status === "ok") {
+            console.log(ok("Proxy server started"));
+            console.log(`  Proxy:   ${c.cyan}http://localhost:${port}${c.reset}`);
+            console.log(`  Control: ${c.cyan}http://localhost:${controlPort}${c.reset}`);
+            console.log(`  PID:     ${child.pid}`);
+            console.log(`\n${dimText("Set in your shell:")}`);
+            console.log(`  ${c.cyan}export ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
+          } else {
+            console.log(fail("Proxy started but health check failed"));
+          }
+        } catch {
+          // May just need more time
+          console.log(ok(`Proxy server starting (PID: ${child.pid})`));
+          console.log(`  Proxy:   ${c.cyan}http://localhost:${port}${c.reset}`);
+          console.log(`  Control: ${c.cyan}http://localhost:${controlPort}${c.reset}`);
+          console.log(`\n${dimText("Set in your shell:")}`);
+          console.log(`  ${c.cyan}export ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
+        }
+      }, 1500);
+    }
+  });
+
+// Proxy stop subcommand
+proxyCmd
+  .command("stop")
+  .description("Stop the proxy server")
+  .action(() => {
+    const { execSync } = require("node:child_process");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+
+    try {
+      // Find and kill the proxy process
+      const pids = execSync("pgrep -f 'proxy/server.js'", {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+
+      if (pids) {
+        for (const pid of pids.split("\n")) {
+          try {
+            process.kill(parseInt(pid, 10), "SIGTERM");
+          } catch {
+            // Process may have already exited
+          }
+        }
+        console.log(ok("Proxy server stopped"));
+      } else {
+        console.log(fail("No proxy server process found"));
+      }
+    } catch {
+      console.log(fail("No proxy server process found"));
+    }
+
+    // Also reset switch state
+    try {
+      const { resetSwitchState } = require("./proxy/state");
+      resetSwitchState();
+    } catch {
+      // State module may not be available
+    }
+  });
+
+// Proxy status subcommand
+proxyCmd
+  .command("status")
+  .description("Show proxy server and switch state")
+  .action(() => {
+    const { execSync } = require("node:child_process");
+    const { readSwitchState } = require("./proxy/state");
+    const { readAuthConfig } = require("./proxy/auth");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+
+    console.log(`${c.bold}Proxy Status${c.reset}\n`);
+
+    // Check if server is running
+    let serverRunning = false;
+    try {
+      const health = execSync("curl -s http://localhost:18911/health", {
+        encoding: "utf-8",
+        timeout: 2000,
+      });
+      const parsed = JSON.parse(health);
+      if (parsed.status === "ok") {
+        serverRunning = true;
+        console.log(ok(`Server running (uptime: ${parsed.uptimeHuman}, requests: ${parsed.requestCount})`));
+      }
+    } catch {
+      console.log(fail("Server not running"));
+    }
+
+    // Auth status
+    const auth = readAuthConfig();
+    console.log(`  Auth: ${auth ? ok("Configured") : fail("Not configured")}`);
+
+    // Switch state
+    const state = readSwitchState();
+    if (state.switched) {
+      console.log(`  Mode: ${c.yellow}Switched → ${state.provider}/${state.model}${c.reset}`);
+      console.log(`    Remaining: ${state.requestsRemaining === 0 ? "unlimited" : state.requestsRemaining}`);
+      if (state.timeoutAt) {
+        const remaining = Math.max(0, state.timeoutAt - Date.now());
+        console.log(`    Timeout in: ${Math.floor(remaining / 1000)}s`);
+      }
+    } else {
+      console.log(`  Mode: ${c.green}Passthrough (native Claude)${c.reset}`);
+    }
+
+    // Environment check
+    const baseUrl = process.env.ANTHROPIC_BASE_URL;
+    if (baseUrl?.includes("localhost:18910")) {
+      console.log(`  Env: ${ok("ANTHROPIC_BASE_URL set correctly")}`);
+    } else if (baseUrl) {
+      console.log(`  Env: ${c.yellow}ANTHROPIC_BASE_URL=${baseUrl}${c.reset} (not pointing to proxy)`);
+    } else {
+      console.log(`  Env: ${c.dim}ANTHROPIC_BASE_URL not set${c.reset}`);
+    }
+  });
+
+// Proxy enable subcommand
+proxyCmd
+  .command("enable")
+  .description("Enable proxy and configure auth tokens")
+  .action(() => {
+    const { initializeAuth, getAuthConfigPath } = require("./proxy/auth");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+    const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
+
+    try {
+      const authConfig = initializeAuth();
+
+      console.log(ok("Proxy auth configured"));
+      console.log(`  Auth file: ${dimText(getAuthConfigPath())}`);
+      console.log(`  Proxy token: ${dimText(authConfig.proxyToken.slice(0, 20) + "...")}`);
+
+      console.log(`\n${c.bold}Next steps:${c.reset}`);
+      console.log(`  1. Start the proxy:   ${c.cyan}oh-my-claude proxy start${c.reset}`);
+      console.log(`  2. Set env variable:  ${c.cyan}export ANTHROPIC_BASE_URL=http://localhost:18910${c.reset}`);
+      console.log(`  3. Start Claude Code — it will connect through the proxy`);
+      console.log(`  4. Use MCP tool ${c.cyan}switch_model${c.reset} to switch providers in-conversation`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.log(fail(msg));
+      process.exit(1);
+    }
+  });
+
+// Proxy disable subcommand
+proxyCmd
+  .command("disable")
+  .description("Disable proxy and revert environment")
+  .action(() => {
+    const { resetSwitchState } = require("./proxy/state");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
+
+    // Reset switch state
+    resetSwitchState();
+
+    // Stop the server
+    try {
+      const { execSync } = require("node:child_process");
+      const pids = execSync("pgrep -f 'proxy/server.js'", {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+
+      if (pids) {
+        for (const pid of pids.split("\n")) {
+          try { process.kill(parseInt(pid, 10), "SIGTERM"); } catch { /* */ }
+        }
+      }
+    } catch {
+      // No proxy running
+    }
+
+    console.log(ok("Proxy disabled"));
+    console.log(`\n${dimText("Remove the environment variable:")}`);
+    console.log(`  ${c.cyan}unset ANTHROPIC_BASE_URL${c.reset}`);
+  });
+
+// Proxy switch subcommand — manual model switching
+proxyCmd
+  .command("switch <provider> <model>")
+  .description("Switch next N requests to a provider/model (e.g., proxy switch deepseek deepseek-reasoner)")
+  .option("--requests <n>", "Number of requests to switch (default: 1, 0 = unlimited)", "1")
+  .option("--timeout <ms>", "Timeout in ms before auto-revert (default: 600000)", "600000")
+  .action((provider: string, model: string, options: { requests: string; timeout: string }) => {
+    const { loadConfig, isProviderConfigured } = require("./config");
+    const { writeSwitchState } = require("./proxy/state");
+    const { DEFAULT_PROXY_CONFIG } = require("./proxy/types");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+    const warn = (text: string) => `${c.yellow}⚠${c.reset} ${text}`;
+    const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
+
+    // Validate provider
+    const config = loadConfig();
+    const providerConfig = config.providers[provider];
+
+    if (!providerConfig) {
+      console.log(fail(`Unknown provider: "${provider}"`));
+      console.log(`Available: ${Object.keys(config.providers).join(", ")}`);
+      process.exit(1);
+    }
+
+    if (providerConfig.type === "claude-subscription") {
+      console.log(fail(`Cannot switch to "${provider}" — it uses Claude subscription.`));
+      console.log(dimText("Choose an external provider: deepseek, zhipu, minimax, openrouter"));
+      process.exit(1);
+    }
+
+    if (!isProviderConfigured(config, provider)) {
+      const envVar = providerConfig.api_key_env ?? `${provider.toUpperCase()}_API_KEY`;
+      console.log(warn(`Provider "${provider}" API key not set (${envVar}). Requests will fallback to native Claude.`));
+    }
+
+    const requests = parseInt(options.requests, 10) || 1;
+    const timeoutMs = parseInt(options.timeout, 10) || DEFAULT_PROXY_CONFIG.defaultTimeoutMs;
+    const now = Date.now();
+
+    writeSwitchState({
+      switched: true,
+      provider,
+      model,
+      requestsRemaining: requests,
+      switchedAt: now,
+      timeoutAt: now + timeoutMs,
+    });
+
+    // Also notify control API if running
+    try {
+      const { execSync } = require("node:child_process");
+      execSync(
+        `curl -s -X POST http://localhost:${DEFAULT_PROXY_CONFIG.controlPort}/switch ` +
+        `-H "Content-Type: application/json" ` +
+        `-d '${JSON.stringify({ provider, model, requests, timeout_ms: timeoutMs })}'`,
+        { stdio: "pipe", timeout: 2000 }
+      );
+    } catch {
+      // Control API may not be running — state file is primary
+    }
+
+    console.log(ok(`Switched to ${c.cyan}${provider}/${model}${c.reset}`));
+    console.log(`  Requests: ${requests === 0 ? "unlimited" : requests}`);
+    console.log(`  Timeout:  ${timeoutMs / 1000}s`);
+    console.log(`\n${dimText("Next request(s) through the proxy will use this provider.")}`);
   });
 
 // Cleanup command

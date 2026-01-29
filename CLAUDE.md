@@ -27,6 +27,7 @@ bun test             # Run tests
 - `src/styles/` - Output style presets and manager
 - `src/memory/` - Markdown-first memory system (types, store, parser, search)
 - `src/statusline/` - StatusLine segments and configuration
+- `src/proxy/` - Live model switching HTTP proxy (server, handler, control, state, auth, stream)
 
 ## Architecture
 
@@ -89,8 +90,13 @@ npm publish --access public
 - `src/mcp/background-agent-server/server.ts` - MCP server implementation
 - `src/styles/index.ts` - Output style manager (list, set, reset, create)
 - `src/memory/index.ts` - Memory system barrel export (store, parser, search)
-- `src/statusline/config.ts` - StatusLine config and segment management (8 segments)
+- `src/statusline/config.ts` - StatusLine config and segment management (9 segments)
 - `src/statusline/segments/memory.ts` - Memory statusline segment
+- `src/statusline/segments/proxy.ts` - Proxy statusline segment
+- `src/proxy/server.ts` - Proxy server entry point (Bun.serve dual server)
+- `src/proxy/handler.ts` - Proxy request handler (passthrough vs switched routing)
+- `src/proxy/control.ts` - Proxy control API (health, status, switch, revert)
+- `src/proxy/state.ts` - Signal file IPC (proxy-switch.json)
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
 
 ## Documentation Convention
