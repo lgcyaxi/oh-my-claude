@@ -368,10 +368,13 @@ oh-my-claude proxy enable
 oh-my-claude proxy start
 
 # 3. Set environment variable (printed by proxy start)
-export ANTHROPIC_BASE_URL=http://localhost:18910
+export ANTHROPIC_BASE_URL=http://localhost:18910   # Linux/macOS
+set ANTHROPIC_BASE_URL=http://localhost:18910      # Windows
 
 # 4. Use Claude Code normally — all requests pass through to Anthropic
 ```
+
+> **Windows**: Proxy CLI is fully cross-platform. Health checks use Node's `http` module (no `curl` dependency), and process management uses PID files with `wmic` fallback (no `pgrep` dependency).
 
 ### Switching Models
 

@@ -2007,11 +2007,12 @@ proxyCmd
   .option("--port <port>", "Proxy port (default: 18910)")
   .option("--control-port <port>", "Control API port (default: 18911)")
   .option("--foreground", "Run in foreground (for debugging)")
-  .action((options) => {
+  .action(async (options) => {
     const { execSync, spawn } = require("node:child_process");
-    const { existsSync } = require("node:fs");
+    const { existsSync, writeFileSync } = require("node:fs");
     const { join } = require("node:path");
     const { homedir } = require("node:os");
+    const http = require("node:http");
 
     const useColor = process.stdout.isTTY;
     const c = {
@@ -2027,9 +2028,25 @@ proxyCmd
     const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
     const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
 
+    // Cross-platform health check via Node http module
+    const checkHealth = (controlPort: string): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        const req = http.get(`http://localhost:${controlPort}/health`, { timeout: 2000 }, (res: any) => {
+          let data = "";
+          res.on("data", (chunk: string) => { data += chunk; });
+          res.on("end", () => {
+            try { resolve(JSON.parse(data)); } catch { reject(new Error("Invalid JSON")); }
+          });
+        });
+        req.on("error", reject);
+        req.on("timeout", () => { req.destroy(); reject(new Error("Timeout")); });
+      });
+    };
+
     // Find proxy server script
     const installDir = join(homedir(), ".claude", "oh-my-claude");
     const proxyScript = join(installDir, "dist", "proxy", "server.js");
+    const pidFile = join(installDir, "proxy.pid");
 
     if (!existsSync(proxyScript)) {
       console.log(fail("Proxy server script not found."));
@@ -2042,11 +2059,7 @@ proxyCmd
 
     // Check if already running
     try {
-      const health = execSync(`curl -s http://localhost:${controlPort}/health`, {
-        encoding: "utf-8",
-        timeout: 2000,
-      });
-      const parsed = JSON.parse(health);
+      const parsed = await checkHealth(controlPort);
       if (parsed.status === "ok") {
         console.log(ok(`Proxy already running (uptime: ${parsed.uptimeHuman})`));
         return;
@@ -2068,41 +2081,50 @@ proxyCmd
       }
     } else {
       // Run as background daemon
-      const logFile = join(installDir, "proxy.log");
+      const isWindows = process.platform === "win32";
       const child = spawn("bun", ["run", proxyScript, "--port", port, "--control-port", controlPort], {
         detached: true,
         stdio: ["ignore", "ignore", "ignore"],
         env: { ...process.env },
+        ...(isWindows ? { shell: true, windowsHide: true } : {}),
       });
       child.unref();
 
+      // Save PID for cross-platform stop
+      if (child.pid) {
+        try { writeFileSync(pidFile, String(child.pid), "utf-8"); } catch {}
+      }
+
       // Wait briefly and check if it started
-      setTimeout(() => {
-        try {
-          const health = execSync(`curl -s http://localhost:${controlPort}/health`, {
-            encoding: "utf-8",
-            timeout: 3000,
-          });
-          const parsed = JSON.parse(health);
-          if (parsed.status === "ok") {
-            console.log(ok("Proxy server started"));
-            console.log(`  Proxy:   ${c.cyan}http://localhost:${port}${c.reset}`);
-            console.log(`  Control: ${c.cyan}http://localhost:${controlPort}${c.reset}`);
-            console.log(`  PID:     ${child.pid}`);
-            console.log(`\n${dimText("Set in your shell:")}`);
-            console.log(`  ${c.cyan}export ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
-          } else {
-            console.log(fail("Proxy started but health check failed"));
-          }
-        } catch {
-          // May just need more time
-          console.log(ok(`Proxy server starting (PID: ${child.pid})`));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      try {
+        const parsed = await checkHealth(controlPort);
+        if (parsed.status === "ok") {
+          console.log(ok("Proxy server started"));
           console.log(`  Proxy:   ${c.cyan}http://localhost:${port}${c.reset}`);
           console.log(`  Control: ${c.cyan}http://localhost:${controlPort}${c.reset}`);
+          console.log(`  PID:     ${child.pid}`);
           console.log(`\n${dimText("Set in your shell:")}`);
+          if (isWindows) {
+            console.log(`  ${c.cyan}set ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
+          } else {
+            console.log(`  ${c.cyan}export ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
+          }
+        } else {
+          console.log(fail("Proxy started but health check failed"));
+        }
+      } catch {
+        // May just need more time
+        console.log(ok(`Proxy server starting (PID: ${child.pid})`));
+        console.log(`  Proxy:   ${c.cyan}http://localhost:${port}${c.reset}`);
+        console.log(`  Control: ${c.cyan}http://localhost:${controlPort}${c.reset}`);
+        console.log(`\n${dimText("Set in your shell:")}`);
+        if (isWindows) {
+          console.log(`  ${c.cyan}set ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
+        } else {
           console.log(`  ${c.cyan}export ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
         }
-      }, 1500);
+      }
     }
   });
 
@@ -2112,6 +2134,9 @@ proxyCmd
   .description("Stop the proxy server")
   .action(() => {
     const { execSync } = require("node:child_process");
+    const { existsSync, readFileSync, unlinkSync } = require("node:fs");
+    const { join } = require("node:path");
+    const { homedir } = require("node:os");
 
     const useColor = process.stdout.isTTY;
     const c = {
@@ -2123,26 +2148,68 @@ proxyCmd
     const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
     const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
 
-    try {
-      // Find and kill the proxy process
-      const pids = execSync("pgrep -f 'proxy/server.js'", {
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
+    const installDir = join(homedir(), ".claude", "oh-my-claude");
+    const pidFile = join(installDir, "proxy.pid");
+    const isWindows = process.platform === "win32";
+    let killed = false;
 
-      if (pids) {
-        for (const pid of pids.split("\n")) {
+    // 1. Try PID file first (cross-platform)
+    if (existsSync(pidFile)) {
+      try {
+        const pid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
+        if (pid) {
           try {
-            process.kill(parseInt(pid, 10), "SIGTERM");
+            process.kill(pid, "SIGTERM");
+            killed = true;
           } catch {
             // Process may have already exited
           }
         }
-        console.log(ok("Proxy server stopped"));
-      } else {
-        console.log(fail("No proxy server process found"));
+      } catch {}
+      try { unlinkSync(pidFile); } catch {}
+    }
+
+    // 2. Fallback: platform-specific process discovery
+    if (!killed) {
+      try {
+        if (isWindows) {
+          // On Windows, use wmic/tasklist to find bun processes running proxy/server.js
+          const output = execSync(
+            'wmic process where "CommandLine like \'%proxy/server.js%\' and Name like \'%bun%\'" get ProcessId /format:list',
+            { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+          ).trim();
+          const pids = output.match(/ProcessId=(\d+)/g);
+          if (pids && pids.length > 0) {
+            for (const match of pids) {
+              const pid = parseInt(match.replace("ProcessId=", ""), 10);
+              try {
+                process.kill(pid, "SIGTERM");
+                killed = true;
+              } catch {}
+            }
+          }
+        } else {
+          const pids = execSync("pgrep -f 'proxy/server.js'", {
+            encoding: "utf-8",
+            stdio: ["pipe", "pipe", "pipe"],
+          }).trim();
+          if (pids) {
+            for (const pid of pids.split("\n")) {
+              try {
+                process.kill(parseInt(pid, 10), "SIGTERM");
+                killed = true;
+              } catch {}
+            }
+          }
+        }
+      } catch {
+        // No process found via platform-specific method
       }
-    } catch {
+    }
+
+    if (killed) {
+      console.log(ok("Proxy server stopped"));
+    } else {
       console.log(fail("No proxy server process found"));
     }
 
@@ -2159,10 +2226,10 @@ proxyCmd
 proxyCmd
   .command("status")
   .description("Show proxy server and switch state")
-  .action(() => {
-    const { execSync } = require("node:child_process");
+  .action(async () => {
     const { readSwitchState } = require("./proxy/state");
     const { readAuthConfig } = require("./proxy/auth");
+    const http = require("node:http");
 
     const useColor = process.stdout.isTTY;
     const c = {
@@ -2179,14 +2246,25 @@ proxyCmd
 
     console.log(`${c.bold}Proxy Status${c.reset}\n`);
 
+    // Cross-platform health check via Node http module
+    const checkHealth = (): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        const req = http.get("http://localhost:18911/health", { timeout: 2000 }, (res: any) => {
+          let data = "";
+          res.on("data", (chunk: string) => { data += chunk; });
+          res.on("end", () => {
+            try { resolve(JSON.parse(data)); } catch { reject(new Error("Invalid JSON")); }
+          });
+        });
+        req.on("error", reject);
+        req.on("timeout", () => { req.destroy(); reject(new Error("Timeout")); });
+      });
+    };
+
     // Check if server is running
     let serverRunning = false;
     try {
-      const health = execSync("curl -s http://localhost:18911/health", {
-        encoding: "utf-8",
-        timeout: 2000,
-      });
-      const parsed = JSON.parse(health);
+      const parsed = await checkHealth();
       if (parsed.status === "ok") {
         serverRunning = true;
         console.log(ok(`Server running (uptime: ${parsed.uptimeHuman}, requests: ${parsed.requestCount})`));

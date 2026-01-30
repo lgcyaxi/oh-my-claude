@@ -368,10 +368,13 @@ oh-my-claude proxy enable
 oh-my-claude proxy start
 
 # 3. 设置环境变量（代理启动时会打印）
-export ANTHROPIC_BASE_URL=http://localhost:18910
+export ANTHROPIC_BASE_URL=http://localhost:18910   # Linux/macOS
+set ANTHROPIC_BASE_URL=http://localhost:18910      # Windows
 
 # 4. 正常使用 Claude Code — 所有请求透传到 Anthropic
 ```
+
+> **Windows**：代理 CLI 完全跨平台。健康检查使用 Node 的 `http` 模块（无需 `curl`），进程管理使用 PID 文件和 `wmic` 回退（无需 `pgrep`）。
 
 ### 切换模型
 

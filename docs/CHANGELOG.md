@@ -4,12 +4,14 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.4.x](changelog/v1.4.x.md) - Current Development
 
-**Latest: v1.4.0-beta.2** (2026-01-29)
+**Latest: v1.4.0-beta.3** (2026-01-29)
 
 ### Highlights
 
 - **Live Model Switching** - HTTP proxy for in-conversation model switching to external providers
 - **`/omc-switch` Command** - Switch models via slash command with shortcut aliases (`ds`, `ds-r`, `zp`, `mm`)
+- **Windows Proxy Support** - Cross-platform proxy CLI (no curl/pgrep dependency)
+- **Statusline Segment Backfill** - Existing configs auto-upgrade with new segments (memory, proxy)
 - **Slash Command Overhead Skip** - `skipInitialRequests` ensures accurate request counting
 - **OAuth Support** - Proxy works with Claude Code OAuth sessions (no API key needed)
 - **Enhanced Memory Awareness** - Session prompt logging and assertive remember triggers on task completion
