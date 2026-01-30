@@ -69,13 +69,15 @@ export function createStreamingResponse(
  * Forward a request to an upstream server and return the response
  *
  * @param passthroughAuth - If true, forwards all original auth headers as-is (OAuth mode)
+ * @param rawBodyText - Pre-read body text to avoid double-consuming the request stream
  */
 export async function forwardToUpstream(
   originalRequest: Request,
   targetUrl: string,
   apiKey: string,
   bodyOverride?: Record<string, unknown>,
-  passthroughAuth?: boolean
+  passthroughAuth?: boolean,
+  rawBodyText?: string
 ): Promise<Response> {
   // Build forwarded headers
   const headers = new Headers();
@@ -109,11 +111,14 @@ export async function forwardToUpstream(
     headers.set("x-api-key", apiKey);
   }
 
-  // Determine body
+  // Determine body — priority: bodyOverride > rawBodyText > originalRequest.body
   let body: string | null = null;
   if (bodyOverride) {
     body = JSON.stringify(bodyOverride);
     headers.set("content-type", "application/json");
+  } else if (rawBodyText !== undefined) {
+    // Use pre-read body text (avoids double-consumption of request stream)
+    body = rawBodyText;
   } else if (originalRequest.body) {
     body = await originalRequest.text();
   }
