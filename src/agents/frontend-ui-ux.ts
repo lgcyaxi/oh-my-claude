@@ -89,7 +89,13 @@ Interpret creatively and make unexpected choices that feel genuinely designed fo
 **Avoid for**:
 - Pure logic: API calls, data fetching, state management
 - Event handlers (non-visual), type definitions, utility functions
-- Business logic that doesn't involve visual presentation`;
+- Business logic that doesn't involve visual presentation
+
+## oh-my-claude Capabilities
+
+You have access to the oh-my-claude memory system:
+- **recall(query)**: Search prior design decisions, color palettes, and component patterns
+- **remember(content, tags)**: Store design choices, aesthetic decisions, and UI patterns for future sessions`;
 
 export const frontendUiUxAgent: AgentDefinition = {
   name: "frontend-ui-ux",

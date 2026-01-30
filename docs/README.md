@@ -45,7 +45,7 @@ bun run install-local
 ### Set API Keys
 
 ```bash
-# DeepSeek (for Oracle, Analyst agents)
+# DeepSeek (for Analyst agent)
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 
 # ZhiPu GLM (for Librarian, Frontend-UI-UX agents)
@@ -420,6 +420,7 @@ curl -X POST http://localhost:18911/switch \
 ### Safety Features
 
 - **Auto-Revert**: After N requests (default: 1), automatically returns to native Claude
+- **Slash Command Overhead Skip**: First 2 requests after switch are not counted (accounts for slash command internal API calls)
 - **Timeout**: Switch expires after timeout (default: 10 minutes)
 - **Graceful Fallback**: If provider API key is missing, silently falls back to native Claude
 - **Error Recovery**: Provider request failures fall back to native Claude
@@ -474,7 +475,7 @@ These agents run via oh-my-claude's MCP server using external API providers. **W
 
 | Agent | Provider | Model | Role |
 |-------|----------|-------|------|
-| **Oracle** | DeepSeek | deepseek-reasoner | Deep reasoning |
+| **Oracle** | Claude | claude-sonnet-4.5 | Deep reasoning |
 | **Analyst** | DeepSeek | deepseek-chat | Quick code analysis |
 | **Librarian** | ZhiPu | glm-4.7 | External research |
 | **Frontend-UI-UX** | ZhiPu | glm-4v-flash | Visual/UI design |
@@ -588,7 +589,7 @@ Configuration file: `~/.claude/oh-my-claude.json`
   },
   "agents": {
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
-    "oracle": { "provider": "deepseek", "model": "deepseek-reasoner" },
+    "oracle": { "provider": "claude", "model": "claude-sonnet-4.5" },
     "librarian": { "provider": "zhipu", "model": "glm-4.7" }
   },
   "concurrency": {

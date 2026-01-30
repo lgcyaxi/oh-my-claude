@@ -45,6 +45,7 @@ export function readSwitchState(): ProxySwitchState {
       requestsRemaining: parsed.requestsRemaining ?? 0,
       switchedAt: parsed.switchedAt,
       timeoutAt: parsed.timeoutAt,
+      skipInitialRequests: parsed.skipInitialRequests,
     };
   } catch {
     return { ...DEFAULT_SWITCH_STATE };
@@ -79,7 +80,12 @@ export function resetSwitchState(): void {
 }
 
 /**
- * Decrement the request counter and auto-reset if exhausted or timed out
+ * Decrement the request counter and auto-reset if exhausted or timed out.
+ *
+ * Respects skipInitialRequests: when > 0, the first N requests after switch
+ * activation are "free" (not counted). This accounts for slash command
+ * overhead (MCP tool call cycle + confirmation response).
+ *
  * @returns true if still switched, false if reverted to passthrough
  */
 export function decrementAndCheck(): boolean {
@@ -93,6 +99,13 @@ export function decrementAndCheck(): boolean {
   if (state.timeoutAt && Date.now() > state.timeoutAt) {
     resetSwitchState();
     return false;
+  }
+
+  // Skip initial requests (slash command overhead)
+  if (state.skipInitialRequests && state.skipInitialRequests > 0) {
+    state.skipInitialRequests -= 1;
+    writeSwitchState(state);
+    return true;
   }
 
   // requestsRemaining < 0 means unlimited (manual revert only)

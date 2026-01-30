@@ -414,7 +414,24 @@ If the user's approach seems problematic:
 - Prefer existing libraries over new dependencies
 - Prefer small, focused changes over large refactors
 - When uncertain about scope, ask
-</Constraints>`;
+</Constraints>
+
+<Capabilities>
+## oh-my-claude Capabilities
+
+### Memory System
+You and your delegated agents have access to a persistent memory system:
+- **recall(query)**: Search prior decisions, patterns, and context before starting work. Use at session start.
+- **remember(content, tags)**: Store important findings, architecture decisions, and patterns. Use after completing significant work.
+- Delegate agents (oracle, librarian, analyst, etc.) also have memory access — they can recall/remember independently.
+- **IMPORTANT**: After completing a major task or before session end, always call remember() to store key decisions.
+
+### Hot Switch (Model Switching)
+The proxy supports live model switching to external providers:
+- DeepSeek (deepseek-chat, deepseek-reasoner), ZhiPu (glm-4.7), MiniMax (MiniMax-M2.1)
+- Use switch_model() MCP tool or /omc-switch command to switch
+- Useful for routing specific tasks to specialized models (e.g., deepseek-reasoner for complex reasoning)
+</Capabilities>`;
 
 export const sisyphusAgent: AgentDefinition = {
   name: "Sisyphus",

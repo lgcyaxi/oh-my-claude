@@ -20,34 +20,34 @@ The user wants to **switch models** in-conversation. This routes the next N Clau
 ### Step 1: Switch the model
 
 **Request count rules:**
-- **-1 = unlimited** (stay switched forever until manual `/omc-switch revert`). Pass `requests=-1` directly, do NOT add +1.
-- **N ≥ 1**: Add +1 to account for this confirmation response consuming one request.
-  - User asks for 1 → `switch_model(requests=2)`
-  - User asks for 3 → `switch_model(requests=4)`
-  - No count specified → `switch_model(requests=2)` [default 1 + 1]
+- **-1 = unlimited** (stay switched forever until manual `/omc-switch revert`). Pass `requests=-1` directly.
+- **N ≥ 1**: Pass the exact count. The proxy automatically skips initial overhead requests (MCP tool + confirmation).
+  - User asks for 1 → `switch_model(requests=1)`
+  - User asks for 3 → `switch_model(requests=3)`
+  - No count specified → `switch_model(requests=1)` [default]
 
 ```
 Use mcp__oh-my-claude-background__switch_model with:
 - provider: [resolved provider name]
 - model: [resolved model name]
-- requests: [-1 if unlimited, else number + 1]
+- requests: [-1 if unlimited, else exact user-requested count]
 - timeout_ms: [optional, default 600000; omit for unlimited]
 ```
 
 ### Step 2: Confirm to the user
 
-- **Unlimited (0)**: Tell user the model is switched permanently until they revert.
-- **Limited (N)**: Tell user how many **user-requested** requests remain (subtract 1 from actual count, since this confirmation uses one).
+- **Unlimited**: Tell user the model is switched permanently until they revert.
+- **Limited (N)**: Tell user the exact number of user-requested requests remaining.
 
 ### Examples
 
 ```
-/omc-switch ds -1                         → Switch to DeepSeek Chat UNLIMITED (forever)
-/omc-switch deepseek deepseek-chat        → Switch 1 request to DeepSeek Chat
-/omc-switch ds                            → Switch 1 request to DeepSeek Chat (shortcut)
-/omc-switch ds-r 3                        → Switch 3 requests to DeepSeek Reasoner
-/omc-switch zhipu glm-4.7 5              → Switch 5 requests to ZhiPu GLM-4.7
-/omc-switch minimax MiniMax-M2.1          → Switch 1 request to MiniMax
+/omc-switch ds -1                         → switch_model(requests=-1)  UNLIMITED
+/omc-switch deepseek deepseek-chat        → switch_model(requests=1)   1 request
+/omc-switch ds                            → switch_model(requests=1)   1 request
+/omc-switch ds-r 3                        → switch_model(requests=3)   3 requests
+/omc-switch zhipu glm-4.7 5              → switch_model(requests=5)   5 requests
+/omc-switch minimax MiniMax-M2.1          → switch_model(requests=1)   1 request
 ```
 
 ### Revert

@@ -4,14 +4,17 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.4.x](changelog/v1.4.x.md) - Current Development
 
-**Latest: v1.4.0-beta.1** (2026-01-29)
+**Latest: v1.4.0-beta.2** (2026-01-29)
 
 ### Highlights
 
 - **Live Model Switching** - HTTP proxy for in-conversation model switching to external providers
 - **`/omc-switch` Command** - Switch models via slash command with shortcut aliases (`ds`, `ds-r`, `zp`, `mm`)
+- **Slash Command Overhead Skip** - `skipInitialRequests` ensures accurate request counting
 - **OAuth Support** - Proxy works with Claude Code OAuth sessions (no API key needed)
-- **Memory Awareness** - Hook nudges Claude to proactively recall/remember during work sessions
+- **Enhanced Memory Awareness** - Session prompt logging and assertive remember triggers on task completion
+- **Agent Capability Awareness** - All agents now know about memory tools and hot-switch
+- **Oracle on Claude Sonnet** - Oracle agent upgraded from DeepSeek Reasoner to Claude Sonnet 4.5
 - **Proxy MCP Tools** - `switch_model`, `switch_status`, `switch_revert` for seamless switching
 - **Proxy CLI** - `proxy start/stop/status/enable/disable/switch` commands
 - **Auto-Revert Safety** - Request counter + timeout ensure automatic return to native Claude
@@ -88,6 +91,7 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v1.4.0-beta.2 | 2026-01-29 | Beta | skipInitialRequests, enhanced memory, agent capabilities, Oracle on Sonnet |
 | v1.4.0-beta.1 | 2026-01-29 | Beta | /omc-switch command, OAuth proxy, memory awareness hook |
 | v1.4.0-beta.0 | 2026-01-29 | Beta | Live model switching proxy with MCP tools and CLI |
 | v1.3.0-beta.3 | 2026-01-29 | Beta | execute_with_model tool, memory statusline segment |

@@ -1059,6 +1059,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const isUnlimited = reqCount < 0;
         const timeoutMs = timeout_ms ?? (isUnlimited ? 0 : DEFAULT_PROXY_CONFIG.defaultTimeoutMs);
 
+        // Skip first 2 requests to account for slash command overhead:
+        // 1. The MCP tool result processing (Claude reads switch_model response)
+        // 2. The confirmation response to the user
+        const SLASH_COMMAND_OVERHEAD = 2;
+
         const switchState: ProxySwitchState = {
           switched: true,
           provider,
@@ -1066,6 +1071,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           requestsRemaining: reqCount,
           switchedAt: now,
           timeoutAt: timeoutMs > 0 ? now + timeoutMs : undefined,
+          skipInitialRequests: SLASH_COMMAND_OVERHEAD,
         };
 
         writeSwitchState(switchState);

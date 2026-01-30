@@ -19,7 +19,7 @@
  * }
  */
 
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -36,6 +36,30 @@ interface HookResponse {
     hookEventName: "UserPromptSubmit";
     additionalContext?: string;
   };
+}
+
+/**
+ * Log user prompt to session log for richer auto-memory context.
+ * Appends a JSONL observation to the same session log used by session-logger.
+ */
+function logUserPrompt(prompt: string): void {
+  if (!prompt || prompt.length < 5) return;
+  try {
+    const logDir = join(homedir(), ".claude", "oh-my-claude", "memory", "sessions");
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true });
+    }
+    const logPath = join(logDir, "active-session.jsonl");
+    const truncated = prompt.length > 200 ? prompt.slice(0, 200) + "..." : prompt;
+    const observation = {
+      ts: new Date().toISOString(),
+      tool: "UserPrompt",
+      summary: `user: ${truncated}`,
+    };
+    appendFileSync(logPath, JSON.stringify(observation) + "\n", "utf-8");
+  } catch {
+    // Silently fail — never block
+  }
 }
 
 /**
@@ -85,9 +109,13 @@ async function main() {
 
   const memoryCount = getMemoryCount();
 
+  // Log user prompt to session log for richer auto-memory context
+  const prompt = input.prompt?.toLowerCase() ?? "";
+  const rawPrompt = input.prompt ?? "";
+  logUserPrompt(rawPrompt);
+
   // Only inject memory context if there are stored memories
   // or if the prompt looks like a significant work request
-  const prompt = input.prompt?.toLowerCase() ?? "";
   const isSignificantWork =
     prompt.length > 50 ||
     prompt.includes("implement") ||
@@ -98,6 +126,33 @@ async function main() {
     prompt.includes("create") ||
     prompt.includes("debug") ||
     prompt.includes("plan");
+
+  // Detect completion/commit triggers for assertive memory save prompt
+  const isCompletionTrigger =
+    prompt.includes("commit") ||
+    prompt.includes("/commit") ||
+    prompt.includes("done") ||
+    prompt.includes("finish") ||
+    prompt.includes("complete") ||
+    prompt.includes("ship it") ||
+    prompt.includes("session-end") ||
+    prompt.includes("/session-end");
+
+  if (isCompletionTrigger) {
+    const response: HookResponse = {
+      decision: "approve",
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext:
+          `[omc-memory] Task completion detected. ` +
+          `IMPORTANT: Before finishing, call remember() to store key decisions, patterns, or findings from this session. ` +
+          `This ensures cross-session continuity.` +
+          (memoryCount > 0 ? ` (${memoryCount} existing memories)` : ""),
+      },
+    };
+    console.log(JSON.stringify(response));
+    return;
+  }
 
   if (memoryCount > 0 && isSignificantWork) {
     const response: HookResponse = {

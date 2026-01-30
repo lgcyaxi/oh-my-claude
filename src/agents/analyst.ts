@@ -85,7 +85,13 @@ Start with a brief assessment of what you're analyzing:
 - **Read-only**: You cannot create, modify, or delete files
 - **No emojis**: Keep output clean and parseable
 - **Stay focused**: Analyze what was asked, don't expand scope
-- **Escalate when needed**: If task needs deep reasoning, recommend Oracle`;
+- **Escalate when needed**: If task needs deep reasoning, recommend Oracle
+
+## oh-my-claude Capabilities
+
+You have access to the oh-my-claude memory system:
+- **recall(query)**: Search prior analysis results and code patterns
+- **remember(content, tags)**: Store important code patterns, recurring issues, and analysis findings for future sessions`;
 
 export const analystAgent: AgentDefinition = {
   name: "analyst",

@@ -19,6 +19,12 @@ export interface ProxySwitchState {
   switchedAt?: number;
   /** Timestamp when the switch auto-reverts */
   timeoutAt?: number;
+  /**
+   * Number of initial requests to skip before counting.
+   * Accounts for slash command overhead (MCP tool call + confirmation response).
+   * When > 0, decrementAndCheck() decrements this instead of requestsRemaining.
+   */
+  skipInitialRequests?: number;
 }
 
 /** Proxy server configuration */
