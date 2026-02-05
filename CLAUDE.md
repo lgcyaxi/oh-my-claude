@@ -106,7 +106,7 @@ npm publish --access public
 ## Documentation Convention
 
 When adding new features, always update ALL of these:
-- `docs/README.md` - English documentation
+- `README.md` - English documentation (root for npm visibility)
 - `docs/README.zh-CN.md` - Chinese documentation
 - `CLAUDE.md` - Project instructions (this file)
 - `docs/CHANGELOG.md` - Main changelog
