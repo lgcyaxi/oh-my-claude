@@ -291,13 +291,13 @@ function saveSessionMemory(summary: string, providerUsed: string, logSizeKB: num
   // Check for project root (.git)
   let projectRoot: string | null = null;
   let dir = process.cwd();
-  while (dir !== "/") {
+  while (true) {
     if (existsSync(join(dir, ".git"))) {
       projectRoot = dir;
       break;
     }
     const parent = join(dir, "..");
-    if (parent === dir) break;
+    if (parent === dir) break; // Reached filesystem root (works on both Unix and Windows)
     dir = parent;
   }
 

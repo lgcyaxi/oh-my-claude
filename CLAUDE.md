@@ -84,6 +84,11 @@ npm publish --access public
 
 - `.sisyphus/` directory at project root should NOT be committed (session state files)
 - Always check `git status` before committing to avoid staging unwanted files
+- **Before every commit**: Update changelogs first, then commit all changes together
+  1. Update `docs/changelog/v1.X.x.md` with the specific changes
+  2. Update `docs/CHANGELOG.md` if the highlights section needs updating
+  3. Stage changelog files along with code changes
+  4. Commit everything in a single commit
 
 ## Key Files
 

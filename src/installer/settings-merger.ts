@@ -105,7 +105,8 @@ function addHook(
 
   // Extract the hook script filename for precise matching
   // e.g., "node /path/to/oh-my-claude/hooks/auto-memory.js" → "auto-memory.js"
-  const scriptFile = command.split("/").pop() ?? command;
+  // Split on both / and \ to support Windows and Unix paths
+  const scriptFile = command.split(/[/\\]/).pop() ?? command;
 
   // Check if this SPECIFIC hook already exists (match by script filename, not generic path)
   const existingIndex = settings.hooks[hookType]!.findIndex(
@@ -222,7 +223,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PreToolUse",
     "Edit|Write",
-    `${nodeCmd} ${hooksDir}/comment-checker.js`,
+    `${nodeCmd} "${join(hooksDir, "comment-checker.js")}"`,
     force
   );
   if (commentCheckerResult) {
@@ -250,7 +251,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "Stop",
     ".*",
-    `${nodeCmd} ${hooksDir}/todo-continuation.js`,
+    `${nodeCmd} "${join(hooksDir, "todo-continuation.js")}"`,
     force
   );
   if (todoResult) {
@@ -268,7 +269,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PreToolUse",
     "Task",
-    `${nodeCmd} ${hooksDir}/task-tracker.js`,
+    `${nodeCmd} "${join(hooksDir, "task-tracker.js")}"`,
     force
   );
   if (taskPreResult) {
@@ -286,7 +287,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PostToolUse",
     "Task",
-    `${nodeCmd} ${hooksDir}/task-tracker.js`,
+    `${nodeCmd} "${join(hooksDir, "task-tracker.js")}"`,
     force
   );
   if (taskPostResult) {
@@ -304,7 +305,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PostToolUse",
     ".*",
-    `${nodeCmd} ${hooksDir}/session-logger.js`,
+    `${nodeCmd} "${join(hooksDir, "session-logger.js")}"`,
     force
   );
   if (sessionLoggerResult) {
@@ -322,7 +323,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "Stop",
     ".*",
-    `${nodeCmd} ${hooksDir}/auto-memory.js`,
+    `${nodeCmd} "${join(hooksDir, "auto-memory.js")}"`,
     force
   );
   if (autoMemoryResult) {
@@ -340,7 +341,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PostToolUse",
     ".*",
-    `${nodeCmd} ${hooksDir}/context-memory.js`,
+    `${nodeCmd} "${join(hooksDir, "context-memory.js")}"`,
     force
   );
   if (contextMemoryResult) {
@@ -358,7 +359,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "UserPromptSubmit",
     "",
-    `${nodeCmd} ${hooksDir}/memory-awareness.js`,
+    `${nodeCmd} "${join(hooksDir, "memory-awareness.js")}"`,
     force
   );
   if (memoryResult) {

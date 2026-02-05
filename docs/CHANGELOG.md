@@ -4,10 +4,12 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.4.x](changelog/v1.4.x.md) - Stable
 
-**Latest: v1.4.2-beta.0** (2026-02-05)
+**Latest: v1.4.2-beta.1** (2026-02-05)
 
 ### Highlights
 
+- **npm Package Fix** - `dist/` now included in published package via `"files"` field (MCP server was deploying as placeholder)
+- **Windows Compatibility** - Fixed `which`→`where`, root traversal, path separators, and hook command quoting
 - **Project-Scoped Memory** - Per-project memories stored in `.claude/mem/` with auto-detection
 - **Memory Compaction (`/omc-compact`)** - AI-assisted grouping and merging via ZhiPu/MiniMax/DeepSeek
 - **Context Auto-Save** - PostToolUse hook auto-saves session memory at configurable context threshold
@@ -91,6 +93,7 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v1.4.2-beta.1 | 2026-02-05 | Beta | npm package fix (dist/ included), Windows compatibility fixes |
 | v1.4.2-beta.0 | 2026-02-05 | Beta | Project-scoped memory, AI compaction, context auto-save, scope-aware MCP tools |
 | v1.4.1 | 2026-02-05 | Patch | README moved to root for npm visibility |
 | v1.4.0 | 2026-02-05 | Minor | Live model switching proxy, /omc-switch command, OAuth support, Windows proxy fixes |

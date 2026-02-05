@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.4.2-beta.0");
+  .version("1.4.2-beta.1");
 
 // Install command
 program
@@ -444,7 +444,7 @@ program
       // Check CCometixLine
       let cclineInstalled = false;
       try {
-        require("node:child_process").execSync("which ccline", { stdio: "pipe" });
+        require("node:child_process").execSync(process.platform === "win32" ? "where ccline" : "which ccline", { stdio: "pipe" });
         cclineInstalled = true;
       } catch { /* not installed */ }
       console.log(`  ${cclineInstalled ? ok("CCometixLine") : dimText("○ CCometixLine (not installed)")}`);
@@ -1837,7 +1837,7 @@ program
         // Check if already installed
         let alreadyInstalled = false;
         try {
-          execSync("which ccline", { stdio: "pipe" });
+          execSync(process.platform === "win32" ? "where ccline" : "which ccline", { stdio: "pipe" });
           alreadyInstalled = true;
         } catch {
           // Not installed
