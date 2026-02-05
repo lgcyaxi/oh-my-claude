@@ -24,6 +24,10 @@ bun test             # Run tests
 - `src/hooks/` - Claude Code hook scripts
 - `src/generators/` - Agent .md file generators
 - `src/installer/` - CLI installer
+- `src/styles/` - Output style presets and manager
+- `src/memory/` - Markdown-first memory system (types, store, parser, search)
+- `src/statusline/` - StatusLine segments and configuration
+- `src/proxy/` - Live model switching HTTP proxy (server, handler, control, state, auth, stream)
 
 ## Architecture
 
@@ -48,9 +52,10 @@ oh-my-claude doctor    # Verify configuration
 
 Commands are defined in `src/commands/`:
 
-- **Agent Commands (`/omc-*`)**: Activate specific agents (sisyphus, oracle, librarian, etc.)
+- **Agent Commands (`/omc-*`)**: Activate specific agents (sisyphus, oracle, librarian, switch, etc.)
 - **Action Commands (`/omcx-*`)**: Quick actions (commit, implement, refactor, docs)
 - **Mode Commands**: `/ulw` (Ultrawork - maximum performance, work until done)
+- **Switch Command**: `/omc-switch` switches models via proxy (shortcuts: ds, ds-r, zp, mm)
 
 When adding new commands:
 1. Create `.md` file in `src/commands/`
@@ -82,6 +87,27 @@ npm publish --access public
 ## Key Files
 
 - `src/config/loader.ts` - Config loading and provider resolution
-- `src/providers/router.ts` - Routes requests to providers
+- `src/providers/router.ts` - Routes requests to providers (routeByAgent, routeByCategory, routeByModel)
 - `src/mcp/background-agent-server/server.ts` - MCP server implementation
+- `src/styles/index.ts` - Output style manager (list, set, reset, create)
+- `src/memory/index.ts` - Memory system barrel export (store, parser, search)
+- `src/statusline/config.ts` - StatusLine config and segment management (9 segments)
+- `src/statusline/segments/memory.ts` - Memory statusline segment
+- `src/statusline/segments/proxy.ts` - Proxy statusline segment
+- `src/proxy/server.ts` - Proxy server entry point (Bun.serve dual server)
+- `src/proxy/handler.ts` - Proxy request handler (passthrough vs switched routing)
+- `src/proxy/control.ts` - Proxy control API (health, status, switch, revert)
+- `src/proxy/state.ts` - Signal file IPC (proxy-switch.json)
+- `src/proxy/auth.ts` - Proxy auth (dual mode: api-key / oauth)
+- `src/hooks/memory-awareness.ts` - UserPromptSubmit hook for proactive memory usage
+- `src/commands/omc-switch.md` - Slash command for model switching with aliases
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
+
+## Documentation Convention
+
+When adding new features, always update ALL of these:
+- `docs/README.md` - English documentation
+- `docs/README.zh-CN.md` - Chinese documentation
+- `CLAUDE.md` - Project instructions (this file)
+- `docs/CHANGELOG.md` - Main changelog
+- `docs/changelog/v1.X.x.md` - Version-specific changelog

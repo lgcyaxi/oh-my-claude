@@ -166,6 +166,54 @@ export async function routeByCategory(
 }
 
 /**
+ * Route a request to an explicit provider and model (no agent/category lookup).
+ * Used by execute_with_model MCP tool for direct provider access.
+ */
+export async function routeByModel(
+  providerName: string,
+  modelName: string,
+  messages: ChatCompletionRequest["messages"],
+  options?: {
+    temperature?: number;
+    maxTokens?: number;
+  }
+): Promise<ChatCompletionResponse> {
+  const config = loadConfig();
+
+  // Validate provider exists
+  const providerDetails = getProviderDetails(config, providerName);
+  if (!providerDetails) {
+    throw new Error(`Unknown provider: "${providerName}"`);
+  }
+
+  // Block claude-subscription providers
+  if (providerDetails.type === "claude-subscription") {
+    throw new Error(
+      `Provider "${providerName}" uses Claude subscription. Use Claude Code's Task tool instead.`
+    );
+  }
+
+  // Check if provider is configured
+  if (!isProviderConfigured(config, providerName)) {
+    const envVar = providerDetails.apiKeyEnv ?? `${providerName.toUpperCase()}_API_KEY`;
+    throw new Error(
+      `Provider "${providerName}" is not configured. Set ${envVar} environment variable.`
+    );
+  }
+
+  const client = getProviderClient(providerName, config);
+
+  const request: ChatCompletionRequest = {
+    model: modelName,
+    messages,
+    temperature: options?.temperature,
+    max_tokens: options?.maxTokens,
+  };
+
+  return client.createChatCompletion(request);
+}
+
+/**
  * Get configured providers status
  */
 export function getProvidersStatus(): Record<

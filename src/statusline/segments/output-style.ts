@@ -13,8 +13,13 @@ const STYLE_ABBREV: Record<string, string> = {
   concise: "concise",
   explanatory: "explain",
   "formal": "formal",
-  // Custom styles
+  // oh-my-claude built-in styles
   "engineer-professional": "eng-pro",
+  "agent": "agent",
+  "concise-coder": "coder",
+  "teaching": "teach",
+  "review": "review",
+  // Legacy custom styles
   "code-focused": "code",
   "documentation": "docs",
   // Plan mode indicator
@@ -66,8 +71,8 @@ async function collectOutputStyleData(context: SegmentContext): Promise<SegmentD
   const lower = styleName.toLowerCase();
   if (lower.includes("plan")) {
     color = "warning"; // Plan mode - attention needed
-  } else if (lower.includes("concise") || lower.includes("code")) {
-    color = "good"; // Efficient modes
+  } else if (lower.includes("concise") || lower.includes("code") || lower.includes("agent")) {
+    color = "good"; // Efficient / action-oriented modes
   }
 
   return {

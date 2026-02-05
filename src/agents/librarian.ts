@@ -198,7 +198,13 @@ https://github.com/tanstack/query/blob/abc123def/packages/react-query/src/useQue
 
 **Avoid Librarian for**:
 - Internal codebase questions (use Explore instead)
-- Questions about your own project's code`;
+- Questions about your own project's code
+
+## oh-my-claude Capabilities
+
+You have access to the oh-my-claude memory system:
+- **recall(query)**: Search prior research findings and documentation references
+- **remember(content, tags)**: Store important library discoveries, API patterns, and documentation links for future sessions`;
 
 export const librarianAgent: AgentDefinition = {
   name: "librarian",

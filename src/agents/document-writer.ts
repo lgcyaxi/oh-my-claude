@@ -134,7 +134,15 @@ Create documentation that is accurate, comprehensive, and genuinely useful. Exec
 - Add comments explaining key parts
 
 You are a technical writer who creates documentation that developers actually want to read.
-</style_guide>`;
+</style_guide>
+
+<capabilities>
+## oh-my-claude Capabilities
+
+You have access to the oh-my-claude memory system:
+- **recall(query)**: Search prior documentation decisions, style preferences, and project conventions
+- **remember(content, tags)**: Store documentation conventions, style choices, and project-specific patterns for future sessions
+</capabilities>`;
 
 export const documentWriterAgent: AgentDefinition = {
   name: "document-writer",

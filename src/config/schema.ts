@@ -46,6 +46,20 @@ export const ConcurrencyConfigSchema = z.object({
   per_provider: z.record(z.string(), z.number().min(1).max(20)).optional(),
 });
 
+// Proxy configuration schema
+export const ProxyConfigSchema = z.object({
+  /** Main proxy port (Claude Code connects here) */
+  port: z.number().min(1024).max(65535).default(18910),
+  /** Control API port (health/status/switch endpoints) */
+  controlPort: z.number().min(1024).max(65535).default(18911),
+  /** Default number of requests per switch (1 = single-shot) */
+  defaultRequests: z.number().min(0).max(1000).default(1),
+  /** Default timeout in ms before auto-revert (600000 = 10 min) */
+  defaultTimeoutMs: z.number().min(1000).max(3600000).default(600000),
+  /** Whether the proxy feature is enabled */
+  enabled: z.boolean().default(false),
+});
+
 // Main configuration schema
 export const OhMyClaudeConfigSchema = z.object({
   $schema: z.string().optional(),
@@ -150,6 +164,9 @@ export const OhMyClaudeConfigSchema = z.object({
   // Concurrency limits for background tasks
   concurrency: ConcurrencyConfigSchema.optional(),
 
+  // Proxy configuration for live model switching
+  proxy: ProxyConfigSchema.optional(),
+
   // Debug settings
   debugTaskTracker: z.boolean().optional(),
   debugHooks: z.boolean().optional(),
@@ -160,6 +177,7 @@ export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export type CategoryConfig = z.infer<typeof CategoryConfigSchema>;
 export type ConcurrencyConfig = z.infer<typeof ConcurrencyConfigSchema>;
+export type ProxyConfig = z.infer<typeof ProxyConfigSchema>;
 
 // Default configuration
 export const DEFAULT_CONFIG: OhMyClaudeConfig =

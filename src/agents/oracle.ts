@@ -71,6 +71,13 @@ Organize your final answer in three tiers:
 
 Your response goes directly to the user with no intermediate processing. Make your final message self-contained: a clear recommendation they can act on immediately, covering both what to do and why.
 
+## oh-my-claude Capabilities
+
+You have access to the oh-my-claude memory system. Use it to maintain cross-session context:
+- **recall(query)**: Search prior decisions, patterns, and context before starting work
+- **remember(content, tags)**: Store important findings, architecture decisions, and patterns after completing work
+- Always recall relevant context at the start of a consultation, and remember key decisions at the end.
+
 ## When to Use Oracle
 
 **Use Oracle for**:
@@ -93,8 +100,8 @@ export const oracleAgent: AgentDefinition = {
   description:
     "Read-only consultation agent. High-IQ reasoning specialist for debugging hard problems and high-difficulty architecture design.",
   prompt: ORACLE_PROMPT,
-  defaultProvider: "deepseek",
-  defaultModel: "deepseek-reasoner",
+  defaultProvider: "claude",
+  defaultModel: "claude-sonnet-4.5",
   defaultTemperature: 0.1,
   executionMode: "mcp",
   restrictedTools: ["Edit", "Write", "Task"],

@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.2.2");
+  .version("1.4.0");
 
 // Install command
 program
@@ -85,6 +85,14 @@ program
         console.log("\n✓ MCP server updated");
       } else {
         console.log("\n✓ MCP server configured");
+      }
+    }
+
+    // Report styles
+    if (result.styles.deployed.length > 0) {
+      console.log("\n✓ Deployed output styles:");
+      for (const style of result.styles.deployed) {
+        console.log(`  - ${style}`);
       }
     }
 
@@ -408,6 +416,39 @@ program
         console.log(`\n  Overall: ${validation.valid ? `${c.green}✓ Healthy${c.reset}` : `${c.red}✗ Issues detected${c.reset}`}`);
       } catch (error) {
         console.log(`  ${fail("Failed to validate StatusLine:")} ${error}`);
+      }
+    }
+
+    // Check companion tools
+    if (detail) {
+      console.log(`\n${header("Companion Tools:")}`);
+
+      // Check UI UX Pro Max
+      const skillDir = join(homedir(), ".claude", "skills", "ui-ux-pro-max");
+      const skillExists = existsSync(skillDir);
+      console.log(`  ${skillExists ? ok("UI UX Pro Max skill") : dimText("○ UI UX Pro Max (not installed)")}`);
+      if (skillExists) {
+        const skillMd = join(skillDir, "SKILL.md");
+        console.log(`    Path: ${dimText(skillDir)}`);
+        console.log(`    SKILL.md: ${existsSync(skillMd) ? `${c.green}found${c.reset}` : `${c.red}missing${c.reset}`}`);
+      }
+
+      // Check CCometixLine
+      let cclineInstalled = false;
+      try {
+        require("node:child_process").execSync("which ccline", { stdio: "pipe" });
+        cclineInstalled = true;
+      } catch { /* not installed */ }
+      console.log(`  ${cclineInstalled ? ok("CCometixLine") : dimText("○ CCometixLine (not installed)")}`);
+
+      // Check output styles
+      const stylesDir = join(homedir(), ".claude", "output-styles");
+      const stylesExist = existsSync(stylesDir);
+      if (stylesExist) {
+        const styleCount = require("node:fs").readdirSync(stylesDir).filter((f: string) => f.endsWith(".md")).length;
+        console.log(`  ${ok(`Output styles: ${styleCount} style(s)`)}`);
+      } else {
+        console.log(`  ${dimText("○ Output styles (not deployed)")}`);
       }
     }
 
@@ -894,9 +935,9 @@ statuslineCmd
 // Statusline toggle subcommand
 statuslineCmd
   .command("toggle <segment> [state]")
-  .description("Toggle a segment on/off (model, git, directory, context, session, output-style, mcp)")
+  .description("Toggle a segment on/off (model, git, directory, context, session, output-style, mcp, memory, proxy)")
   .action((segment: string, state?: string) => {
-    const validSegments = ["model", "git", "directory", "context", "session", "output-style", "mcp"];
+    const validSegments = ["model", "git", "directory", "context", "session", "output-style", "mcp", "memory", "proxy"];
     if (!validSegments.includes(segment)) {
       console.log(`Invalid segment: ${segment}`);
       console.log(`Valid segments: ${validSegments.join(", ")}`);
@@ -927,6 +968,405 @@ statuslineCmd
       console.log(`✓ Segment "${segment}" ${newState}`);
     } catch (error) {
       console.log(`✗ Failed to toggle segment: ${error}`);
+      process.exit(1);
+    }
+  });
+
+// Style command with subcommands
+const styleCmd = program
+  .command("style")
+  .description("Manage output styles for Claude Code")
+  .action(() => {
+    // No subcommand - show usage
+    const { getActiveStyle, listStyles } = require("./styles");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+    };
+
+    const active = getActiveStyle();
+    console.log(`${c.bold}Output Style Manager${c.reset}\n`);
+    console.log(`Active style: ${active ? `${c.green}${active}${c.reset}` : `${c.dim}(default)${c.reset}`}`);
+    console.log(`\nUsage:`);
+    console.log(`  oh-my-claude style list              ${c.dim}# List available styles${c.reset}`);
+    console.log(`  oh-my-claude style set <name>        ${c.dim}# Switch output style${c.reset}`);
+    console.log(`  oh-my-claude style show [name]       ${c.dim}# Show style content${c.reset}`);
+    console.log(`  oh-my-claude style reset             ${c.dim}# Reset to Claude default${c.reset}`);
+    console.log(`  oh-my-claude style create <name>     ${c.dim}# Create a custom style${c.reset}`);
+  });
+
+// Style list subcommand
+styleCmd
+  .command("list")
+  .description("List all available output styles")
+  .action(() => {
+    const { listStyles, getActiveStyle } = require("./styles");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      magenta: useColor ? "\x1b[35m" : "",
+    };
+
+    const styles = listStyles();
+    const active = getActiveStyle();
+
+    console.log(`${c.bold}${c.magenta}Available Output Styles${c.reset}\n`);
+
+    if (styles.length === 0) {
+      console.log(`  ${c.dim}No styles found. Run 'oh-my-claude install' to deploy built-in styles.${c.reset}`);
+      return;
+    }
+
+    for (const style of styles) {
+      const isActive = style.name === active;
+      const marker = isActive ? `${c.green}● ` : "  ";
+      const tag = style.source === "built-in" ? `${c.cyan}[built-in]${c.reset}` : `${c.yellow}[custom]${c.reset}`;
+      const activeLabel = isActive ? ` ${c.green}(active)${c.reset}` : "";
+
+      console.log(`${marker}${c.bold}${style.name}${c.reset}${activeLabel} ${tag}`);
+      if (style.description) {
+        console.log(`    ${c.dim}${style.description}${c.reset}`);
+      }
+    }
+
+    console.log(`\n${c.dim}Use 'oh-my-claude style set <name>' to switch styles.${c.reset}`);
+  });
+
+// Style set subcommand
+styleCmd
+  .command("set <name>")
+  .description("Set the active output style")
+  .action((name: string) => {
+    const { setActiveStyle } = require("./styles");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+    };
+
+    const result = setActiveStyle(name);
+    if (result.success) {
+      console.log(`${c.green}✓${c.reset} Output style set to: ${name}`);
+      console.log(`\n${c.dim}Restart Claude Code for the change to take effect.${c.reset}`);
+    } else {
+      console.log(`${c.red}✗${c.reset} ${result.error}`);
+      process.exit(1);
+    }
+  });
+
+// Style show subcommand
+styleCmd
+  .command("show [name]")
+  .description("Show the content of an output style")
+  .action((name?: string) => {
+    const { getStyle, getActiveStyle } = require("./styles");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+
+    // Default to active style
+    const styleName = name || getActiveStyle();
+    if (!styleName) {
+      console.log(`${c.red}✗${c.reset} No style specified and no active style set.`);
+      console.log(`${c.dim}Usage: oh-my-claude style show <name>${c.reset}`);
+      process.exit(1);
+    }
+
+    const style = getStyle(styleName);
+    if (!style) {
+      console.log(`${c.red}✗${c.reset} Style "${styleName}" not found.`);
+      process.exit(1);
+    }
+
+    console.log(`${c.bold}${style.name}${c.reset} ${c.dim}[${style.source}]${c.reset}`);
+    console.log(`${c.cyan}${style.description}${c.reset}`);
+    console.log(`${c.dim}Path: ${style.path}${c.reset}`);
+    console.log(`${"─".repeat(60)}`);
+    console.log(style.body);
+  });
+
+// Style reset subcommand
+styleCmd
+  .command("reset")
+  .description("Reset to Claude Code's default output style")
+  .action(() => {
+    const { resetStyle } = require("./styles");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+    };
+
+    const result = resetStyle();
+    if (result.success) {
+      console.log(`${c.green}✓${c.reset} Output style reset to Claude Code default.`);
+      console.log(`\n${c.dim}Restart Claude Code for the change to take effect.${c.reset}`);
+    } else {
+      console.log(`${c.red}✗${c.reset} ${result.error}`);
+      process.exit(1);
+    }
+  });
+
+// Style create subcommand
+styleCmd
+  .command("create <name>")
+  .description("Create a new custom output style from template")
+  .action((name: string) => {
+    const { createStyle } = require("./styles");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+
+    const result = createStyle(name);
+    if (result.success) {
+      console.log(`${c.green}✓${c.reset} Custom style "${name}" created.`);
+      console.log(`  Path: ${c.cyan}${result.path}${c.reset}`);
+      console.log(`\n${c.dim}Edit the file to customize your style, then run:${c.reset}`);
+      console.log(`  oh-my-claude style set ${name}`);
+    } else {
+      console.log(`${c.red}✗${c.reset} ${result.error}`);
+      process.exit(1);
+    }
+  });
+
+// Memory command with subcommands
+const memoryCmd = program
+  .command("memory")
+  .description("Manage oh-my-claude memory system")
+  .action(() => {
+    const { getMemoryStats } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+
+    const stats = getMemoryStats();
+    console.log(`${c.bold}Memory System${c.reset}\n`);
+    console.log(`  Total memories: ${c.green}${stats.total}${c.reset}`);
+    console.log(`  Notes: ${stats.byType.note}  |  Sessions: ${stats.byType.session}`);
+    console.log(`  Storage: ${(stats.totalSizeBytes / 1024).toFixed(1)} KB`);
+    console.log(`  Path: ${c.dim}${stats.storagePath}${c.reset}`);
+    console.log(`\nUsage:`);
+    console.log(`  oh-my-claude memory status             ${c.dim}# Show memory stats${c.reset}`);
+    console.log(`  oh-my-claude memory search <query>     ${c.dim}# Search memories${c.reset}`);
+    console.log(`  oh-my-claude memory list [--type note]  ${c.dim}# List memories${c.reset}`);
+    console.log(`  oh-my-claude memory show <id>          ${c.dim}# Show memory content${c.reset}`);
+    console.log(`  oh-my-claude memory delete <id>        ${c.dim}# Delete a memory${c.reset}`);
+  });
+
+// Memory status subcommand
+memoryCmd
+  .command("status")
+  .description("Show memory store statistics")
+  .action(() => {
+    const { getMemoryStats } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      magenta: useColor ? "\x1b[35m" : "",
+    };
+
+    const stats = getMemoryStats();
+
+    console.log(`${c.bold}${c.magenta}Memory Status${c.reset}\n`);
+    console.log(`  Total memories:  ${c.green}${stats.total}${c.reset}`);
+    console.log(`  Notes:           ${stats.byType.note}`);
+    console.log(`  Sessions:        ${stats.byType.session}`);
+    console.log(`  Total size:      ${(stats.totalSizeBytes / 1024).toFixed(1)} KB`);
+    console.log(`  Storage path:    ${c.dim}${stats.storagePath}${c.reset}`);
+  });
+
+// Memory search subcommand
+memoryCmd
+  .command("search <query>")
+  .description("Search memories by text query")
+  .option("--type <type>", "Filter by type (note, session)")
+  .option("--limit <n>", "Max results (default: 10)", "10")
+  .action((query: string, options: { type?: string; limit: string }) => {
+    const { searchMemories } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      magenta: useColor ? "\x1b[35m" : "",
+    };
+
+    const results = searchMemories({
+      query,
+      type: options.type as any,
+      limit: parseInt(options.limit, 10) || 10,
+      sort: "relevance",
+    });
+
+    console.log(`${c.bold}${c.magenta}Memory Search${c.reset}: "${query}"\n`);
+
+    if (results.length === 0) {
+      console.log(`  ${c.dim}No memories found matching "${query}".${c.reset}`);
+      return;
+    }
+
+    console.log(`  ${c.green}${results.length}${c.reset} result(s):\n`);
+
+    for (const r of results) {
+      const typeTag = r.entry.type === "note" ? `${c.cyan}[note]${c.reset}` : `${c.yellow}[session]${c.reset}`;
+      const score = `${c.dim}(score: ${r.score})${c.reset}`;
+      console.log(`  ${c.bold}${r.entry.title}${c.reset} ${typeTag} ${score}`);
+      console.log(`    ID: ${c.dim}${r.entry.id}${c.reset}`);
+      if (r.entry.tags.length > 0) {
+        console.log(`    Tags: ${r.entry.tags.join(", ")}`);
+      }
+      // Show preview
+      const preview = r.entry.content.split("\n").slice(0, 2).join(" ").slice(0, 120);
+      console.log(`    ${c.dim}${preview}${preview.length >= 120 ? "..." : ""}${c.reset}`);
+      console.log();
+    }
+  });
+
+// Memory list subcommand
+memoryCmd
+  .command("list")
+  .description("List stored memories")
+  .option("--type <type>", "Filter by type (note, session)")
+  .option("--limit <n>", "Max results (default: 20)", "20")
+  .action((options: { type?: string; limit: string }) => {
+    const { listMemories } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      magenta: useColor ? "\x1b[35m" : "",
+    };
+
+    const entries = listMemories({
+      type: options.type as any,
+      limit: parseInt(options.limit, 10) || 20,
+    });
+
+    console.log(`${c.bold}${c.magenta}Stored Memories${c.reset}\n`);
+
+    if (entries.length === 0) {
+      console.log(`  ${c.dim}No memories found.${c.reset}`);
+      console.log(`  ${c.dim}Use MCP tool "remember" or create .md files in ~/.claude/oh-my-claude/memory/${c.reset}`);
+      return;
+    }
+
+    for (const entry of entries) {
+      const typeTag = entry.type === "note" ? `${c.cyan}[note]${c.reset}` : `${c.yellow}[session]${c.reset}`;
+      const date = entry.createdAt.slice(0, 10);
+      console.log(`  ${c.bold}${entry.title}${c.reset} ${typeTag}  ${c.dim}${date}${c.reset}`);
+      console.log(`    ID: ${c.dim}${entry.id}${c.reset}`);
+      if (entry.tags.length > 0) {
+        console.log(`    Tags: ${entry.tags.join(", ")}`);
+      }
+    }
+
+    console.log(`\n  ${c.dim}Total: ${entries.length} memor${entries.length === 1 ? "y" : "ies"}${c.reset}`);
+  });
+
+// Memory show subcommand
+memoryCmd
+  .command("show <id>")
+  .description("Show full content of a memory")
+  .action((id: string) => {
+    const { getMemory } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+      red: useColor ? "\x1b[31m" : "",
+    };
+
+    const result = getMemory(id);
+    if (!result.success || !result.data) {
+      console.log(`${c.red}✗${c.reset} ${result.error || `Memory "${id}" not found`}`);
+      process.exit(1);
+    }
+
+    const entry = result.data;
+    console.log(`${c.bold}${entry.title}${c.reset} ${c.dim}[${entry.type}]${c.reset}`);
+    console.log(`ID: ${c.dim}${entry.id}${c.reset}`);
+    console.log(`Created: ${c.dim}${entry.createdAt}${c.reset}`);
+    console.log(`Updated: ${c.dim}${entry.updatedAt}${c.reset}`);
+    if (entry.tags.length > 0) {
+      console.log(`Tags: ${entry.tags.join(", ")}`);
+    }
+    console.log(`${"─".repeat(60)}`);
+    console.log(entry.content);
+  });
+
+// Memory delete subcommand
+memoryCmd
+  .command("delete <id>")
+  .description("Delete a memory by ID")
+  .action((id: string) => {
+    const { deleteMemory } = require("./memory");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+    };
+
+    const result = deleteMemory(id);
+    if (result.success) {
+      console.log(`${c.green}✓${c.reset} Memory "${id}" deleted.`);
+    } else {
+      console.log(`${c.red}✗${c.reset} ${result.error}`);
       process.exit(1);
     }
   });
@@ -1264,6 +1704,11 @@ program
         value: "ccline",
         description: "Enhanced statusline for Claude Code",
       },
+      {
+        name: "UI UX Pro Max",
+        value: "uipro",
+        description: "AI design intelligence skill - 67 styles, 96 palettes, 57 font pairings",
+      },
     ];
 
     // List mode
@@ -1430,10 +1875,594 @@ try {
         console.log();
         console.log(ok("CCometixLine installed successfully!"));
       }
+
+      if (toolValue === "uipro") {
+        const { existsSync } = await import("node:fs");
+
+        // Check prerequisites
+        let hasPython = false;
+        try {
+          execSync("python3 --version", { stdio: "pipe" });
+          hasPython = true;
+        } catch {
+          try {
+            execSync("python --version", { stdio: "pipe" });
+            hasPython = true;
+          } catch {
+            // No Python
+          }
+        }
+
+        if (!hasPython) {
+          console.log(fail("Python 3 is required for UI UX Pro Max"));
+          console.log(dimText("Install Python 3 from https://python.org/ and try again."));
+          continue;
+        }
+
+        // Check if already installed
+        let alreadyInstalled = false;
+        try {
+          execSync("npx uipro-cli --help", { stdio: "pipe", timeout: 15000 });
+          alreadyInstalled = true;
+        } catch {
+          // Not installed
+        }
+
+        // Also check if skill files exist
+        const skillDir = join(homedir(), ".claude", "skills", "ui-ux-pro-max");
+        const skillExists = existsSync(skillDir);
+
+        if (alreadyInstalled || skillExists) {
+          const reinstall = await confirm({
+            message: "UI UX Pro Max already installed. Reinstall?",
+            default: false,
+          });
+
+          if (!reinstall) {
+            console.log(dimText("Keeping existing UI UX Pro Max installation."));
+            continue;
+          }
+        }
+
+        // Step 1: Install uipro-cli globally
+        console.log("Installing UI UX Pro Max CLI...");
+        try {
+          execSync("npm install -g uipro-cli", { stdio: "inherit", timeout: 60000 });
+          console.log(ok("uipro-cli installed"));
+        } catch (error) {
+          console.log(fail("Failed to install uipro-cli"));
+          console.log(dimText("Try manually: npm install -g uipro-cli"));
+          continue;
+        }
+
+        // Step 2: Initialize for Claude Code
+        console.log("Initializing UI UX Pro Max for Claude Code...");
+        try {
+          execSync("npx uipro-cli init --ai claude", { stdio: "inherit", timeout: 60000 });
+          console.log(ok("UI UX Pro Max initialized for Claude Code"));
+        } catch (error) {
+          console.log(fail("Failed to initialize UI UX Pro Max"));
+          console.log(dimText("Try manually: npx uipro-cli init --ai claude"));
+          continue;
+        }
+
+        console.log();
+        console.log(ok("UI UX Pro Max installed successfully!"));
+        console.log(dimText("Skills installed to ~/.claude/skills/ui-ux-pro-max/"));
+        console.log(dimText("Use it by asking Claude about UI/UX design, styles, or color palettes."));
+      }
     }
 
     console.log();
     console.log(warn("Please restart Claude Code to activate changes."));
+  });
+
+// Proxy command with subcommands
+const proxyCmd = program
+  .command("proxy")
+  .description("Manage the live model switching proxy")
+  .action(() => {
+    const { readSwitchState } = require("./proxy/state");
+    const { readAuthConfig } = require("./proxy/auth");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+
+    const state = readSwitchState();
+    const auth = readAuthConfig();
+
+    console.log(`${c.bold}Proxy Status${c.reset}\n`);
+    console.log(`  Auth configured: ${auth ? `${c.green}Yes${c.reset}` : `${c.red}No${c.reset}`}`);
+    console.log(`  Switch state:    ${state.switched ? `${c.yellow}Switched → ${state.provider}/${state.model}${c.reset}` : `${c.green}Passthrough (native Claude)${c.reset}`}`);
+
+    if (state.switched) {
+      console.log(`  Remaining:       ${state.requestsRemaining === 0 ? "unlimited" : state.requestsRemaining}`);
+      if (state.timeoutAt) {
+        const remaining = Math.max(0, state.timeoutAt - Date.now());
+        const seconds = Math.floor(remaining / 1000);
+        console.log(`  Timeout in:      ${seconds}s`);
+      }
+    }
+
+    console.log(`\nUsage:`);
+    console.log(`  oh-my-claude proxy start              ${c.dim}# Start proxy server${c.reset}`);
+    console.log(`  oh-my-claude proxy stop               ${c.dim}# Stop proxy server${c.reset}`);
+    console.log(`  oh-my-claude proxy status             ${c.dim}# Show proxy state${c.reset}`);
+    console.log(`  oh-my-claude proxy enable             ${c.dim}# Enable proxy, configure auth${c.reset}`);
+    console.log(`  oh-my-claude proxy disable            ${c.dim}# Disable proxy${c.reset}`);
+  });
+
+// Proxy start subcommand
+proxyCmd
+  .command("start")
+  .description("Start the proxy server as a background daemon")
+  .option("--port <port>", "Proxy port (default: 18910)")
+  .option("--control-port <port>", "Control API port (default: 18911)")
+  .option("--foreground", "Run in foreground (for debugging)")
+  .action(async (options) => {
+    const { execSync, spawn } = require("node:child_process");
+    const { existsSync, writeFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const { homedir } = require("node:os");
+    const http = require("node:http");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+    const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
+
+    // Cross-platform health check via Node http module
+    const checkHealth = (controlPort: string): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        const req = http.get(`http://localhost:${controlPort}/health`, { timeout: 2000 }, (res: any) => {
+          let data = "";
+          res.on("data", (chunk: string) => { data += chunk; });
+          res.on("end", () => {
+            try { resolve(JSON.parse(data)); } catch { reject(new Error("Invalid JSON")); }
+          });
+        });
+        req.on("error", reject);
+        req.on("timeout", () => { req.destroy(); reject(new Error("Timeout")); });
+      });
+    };
+
+    // Find proxy server script
+    const installDir = join(homedir(), ".claude", "oh-my-claude");
+    const proxyScript = join(installDir, "dist", "proxy", "server.js");
+    const pidFile = join(installDir, "proxy.pid");
+
+    if (!existsSync(proxyScript)) {
+      console.log(fail("Proxy server script not found."));
+      console.log(dimText("Run 'oh-my-claude install' first to deploy proxy server."));
+      process.exit(1);
+    }
+
+    const port = options.port ?? "18910";
+    const controlPort = options.controlPort ?? "18911";
+
+    // Check if already running
+    try {
+      const parsed = await checkHealth(controlPort);
+      if (parsed.status === "ok") {
+        console.log(ok(`Proxy already running (uptime: ${parsed.uptimeHuman})`));
+        return;
+      }
+    } catch {
+      // Not running — continue to start
+    }
+
+    if (options.foreground) {
+      // Run in foreground
+      console.log(`Starting proxy in foreground...`);
+      console.log(dimText(`Port: ${port}, Control: ${controlPort}\n`));
+      try {
+        execSync(`bun run "${proxyScript}" --port ${port} --control-port ${controlPort}`, {
+          stdio: "inherit",
+        });
+      } catch {
+        // Process exited
+      }
+    } else {
+      // Run as background daemon
+      const isWindows = process.platform === "win32";
+      const child = spawn("bun", ["run", proxyScript, "--port", port, "--control-port", controlPort], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+        env: { ...process.env },
+        ...(isWindows ? { shell: true, windowsHide: true } : {}),
+      });
+      child.unref();
+
+      // Save PID for cross-platform stop
+      if (child.pid) {
+        try { writeFileSync(pidFile, String(child.pid), "utf-8"); } catch {}
+      }
+
+      // Wait briefly and check if it started
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      try {
+        const parsed = await checkHealth(controlPort);
+        if (parsed.status === "ok") {
+          console.log(ok("Proxy server started"));
+          console.log(`  Proxy:   ${c.cyan}http://localhost:${port}${c.reset}`);
+          console.log(`  Control: ${c.cyan}http://localhost:${controlPort}${c.reset}`);
+          console.log(`  PID:     ${child.pid}`);
+          console.log(`\n${dimText("Set in your shell:")}`);
+          if (isWindows) {
+            console.log(`  ${c.cyan}set ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
+          } else {
+            console.log(`  ${c.cyan}export ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
+          }
+        } else {
+          console.log(fail("Proxy started but health check failed"));
+        }
+      } catch {
+        // May just need more time
+        console.log(ok(`Proxy server starting (PID: ${child.pid})`));
+        console.log(`  Proxy:   ${c.cyan}http://localhost:${port}${c.reset}`);
+        console.log(`  Control: ${c.cyan}http://localhost:${controlPort}${c.reset}`);
+        console.log(`\n${dimText("Set in your shell:")}`);
+        if (isWindows) {
+          console.log(`  ${c.cyan}set ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
+        } else {
+          console.log(`  ${c.cyan}export ANTHROPIC_BASE_URL=http://localhost:${port}${c.reset}`);
+        }
+      }
+    }
+  });
+
+// Proxy stop subcommand
+proxyCmd
+  .command("stop")
+  .description("Stop the proxy server")
+  .action(() => {
+    const { execSync } = require("node:child_process");
+    const { existsSync, readFileSync, unlinkSync } = require("node:fs");
+    const { join } = require("node:path");
+    const { homedir } = require("node:os");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+
+    const installDir = join(homedir(), ".claude", "oh-my-claude");
+    const pidFile = join(installDir, "proxy.pid");
+    const isWindows = process.platform === "win32";
+    let killed = false;
+
+    // 1. Try PID file first (cross-platform)
+    if (existsSync(pidFile)) {
+      try {
+        const pid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
+        if (pid) {
+          try {
+            process.kill(pid, "SIGTERM");
+            killed = true;
+          } catch {
+            // Process may have already exited
+          }
+        }
+      } catch {}
+      try { unlinkSync(pidFile); } catch {}
+    }
+
+    // 2. Fallback: platform-specific process discovery
+    if (!killed) {
+      try {
+        if (isWindows) {
+          // On Windows, use wmic/tasklist to find bun processes running proxy/server.js
+          const output = execSync(
+            'wmic process where "CommandLine like \'%proxy/server.js%\' and Name like \'%bun%\'" get ProcessId /format:list',
+            { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+          ).trim();
+          const pids = output.match(/ProcessId=(\d+)/g);
+          if (pids && pids.length > 0) {
+            for (const match of pids) {
+              const pid = parseInt(match.replace("ProcessId=", ""), 10);
+              try {
+                process.kill(pid, "SIGTERM");
+                killed = true;
+              } catch {}
+            }
+          }
+        } else {
+          const pids = execSync("pgrep -f 'proxy/server.js'", {
+            encoding: "utf-8",
+            stdio: ["pipe", "pipe", "pipe"],
+          }).trim();
+          if (pids) {
+            for (const pid of pids.split("\n")) {
+              try {
+                process.kill(parseInt(pid, 10), "SIGTERM");
+                killed = true;
+              } catch {}
+            }
+          }
+        }
+      } catch {
+        // No process found via platform-specific method
+      }
+    }
+
+    if (killed) {
+      console.log(ok("Proxy server stopped"));
+    } else {
+      console.log(fail("No proxy server process found"));
+    }
+
+    // Also reset switch state
+    try {
+      const { resetSwitchState } = require("./proxy/state");
+      resetSwitchState();
+    } catch {
+      // State module may not be available
+    }
+  });
+
+// Proxy status subcommand
+proxyCmd
+  .command("status")
+  .description("Show proxy server and switch state")
+  .action(async () => {
+    const { readSwitchState } = require("./proxy/state");
+    const { readAuthConfig } = require("./proxy/auth");
+    const http = require("node:http");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+
+    console.log(`${c.bold}Proxy Status${c.reset}\n`);
+
+    // Cross-platform health check via Node http module
+    const checkHealth = (): Promise<any> => {
+      return new Promise((resolve, reject) => {
+        const req = http.get("http://localhost:18911/health", { timeout: 2000 }, (res: any) => {
+          let data = "";
+          res.on("data", (chunk: string) => { data += chunk; });
+          res.on("end", () => {
+            try { resolve(JSON.parse(data)); } catch { reject(new Error("Invalid JSON")); }
+          });
+        });
+        req.on("error", reject);
+        req.on("timeout", () => { req.destroy(); reject(new Error("Timeout")); });
+      });
+    };
+
+    // Check if server is running
+    let serverRunning = false;
+    try {
+      const parsed = await checkHealth();
+      if (parsed.status === "ok") {
+        serverRunning = true;
+        console.log(ok(`Server running (uptime: ${parsed.uptimeHuman}, requests: ${parsed.requestCount})`));
+      }
+    } catch {
+      console.log(fail("Server not running"));
+    }
+
+    // Auth status
+    const auth = readAuthConfig();
+    console.log(`  Auth: ${auth ? ok("Configured") : fail("Not configured")}`);
+
+    // Switch state
+    const state = readSwitchState();
+    if (state.switched) {
+      console.log(`  Mode: ${c.yellow}Switched → ${state.provider}/${state.model}${c.reset}`);
+      console.log(`    Remaining: ${state.requestsRemaining === 0 ? "unlimited" : state.requestsRemaining}`);
+      if (state.timeoutAt) {
+        const remaining = Math.max(0, state.timeoutAt - Date.now());
+        console.log(`    Timeout in: ${Math.floor(remaining / 1000)}s`);
+      }
+    } else {
+      console.log(`  Mode: ${c.green}Passthrough (native Claude)${c.reset}`);
+    }
+
+    // Environment check
+    const baseUrl = process.env.ANTHROPIC_BASE_URL;
+    if (baseUrl?.includes("localhost:18910")) {
+      console.log(`  Env: ${ok("ANTHROPIC_BASE_URL set correctly")}`);
+    } else if (baseUrl) {
+      console.log(`  Env: ${c.yellow}ANTHROPIC_BASE_URL=${baseUrl}${c.reset} (not pointing to proxy)`);
+    } else {
+      console.log(`  Env: ${c.dim}ANTHROPIC_BASE_URL not set${c.reset}`);
+    }
+  });
+
+// Proxy enable subcommand
+proxyCmd
+  .command("enable")
+  .description("Enable proxy and configure auth tokens")
+  .action(() => {
+    const { initializeAuth, getAuthConfigPath } = require("./proxy/auth");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+    const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
+
+    try {
+      const authConfig = initializeAuth();
+
+      const modeLabel = authConfig.authMode === "oauth"
+        ? `${c.cyan}OAuth${c.reset} (forwarding auth headers from Claude Code)`
+        : `${c.cyan}API Key${c.reset} (captured ANTHROPIC_API_KEY)`;
+
+      console.log(ok("Proxy auth configured"));
+      console.log(`  Auth mode: ${modeLabel}`);
+      console.log(`  Auth file: ${dimText(getAuthConfigPath())}`);
+
+      console.log(`\n${c.bold}Next steps:${c.reset}`);
+      console.log(`  1. Start the proxy:   ${c.cyan}oh-my-claude proxy start${c.reset}`);
+      console.log(`  2. Set env variable:  ${c.cyan}export ANTHROPIC_BASE_URL=http://localhost:18910${c.reset}`);
+      console.log(`  3. Start Claude Code — it will connect through the proxy`);
+      console.log(`  4. Use MCP tool ${c.cyan}switch_model${c.reset} to switch providers in-conversation`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.log(fail(msg));
+      process.exit(1);
+    }
+  });
+
+// Proxy disable subcommand
+proxyCmd
+  .command("disable")
+  .description("Disable proxy and revert environment")
+  .action(() => {
+    const { resetSwitchState } = require("./proxy/state");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
+
+    // Reset switch state
+    resetSwitchState();
+
+    // Stop the server
+    try {
+      const { execSync } = require("node:child_process");
+      const pids = execSync("pgrep -f 'proxy/server.js'", {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+
+      if (pids) {
+        for (const pid of pids.split("\n")) {
+          try { process.kill(parseInt(pid, 10), "SIGTERM"); } catch { /* */ }
+        }
+      }
+    } catch {
+      // No proxy running
+    }
+
+    console.log(ok("Proxy disabled"));
+    console.log(`\n${dimText("Remove the environment variable:")}`);
+    console.log(`  ${c.cyan}unset ANTHROPIC_BASE_URL${c.reset}`);
+  });
+
+// Proxy switch subcommand — manual model switching
+proxyCmd
+  .command("switch <provider> <model>")
+  .description("Switch next N requests to a provider/model (e.g., proxy switch deepseek deepseek-reasoner)")
+  .option("--requests <n>", "Number of requests to switch (default: 1, 0 = unlimited)", "1")
+  .option("--timeout <ms>", "Timeout in ms before auto-revert (default: 600000)", "600000")
+  .action((provider: string, model: string, options: { requests: string; timeout: string }) => {
+    const { loadConfig, isProviderConfigured } = require("./config");
+    const { writeSwitchState } = require("./proxy/state");
+    const { DEFAULT_PROXY_CONFIG } = require("./proxy/types");
+
+    const useColor = process.stdout.isTTY;
+    const c = {
+      reset: useColor ? "\x1b[0m" : "",
+      bold: useColor ? "\x1b[1m" : "",
+      dim: useColor ? "\x1b[2m" : "",
+      green: useColor ? "\x1b[32m" : "",
+      red: useColor ? "\x1b[31m" : "",
+      yellow: useColor ? "\x1b[33m" : "",
+      cyan: useColor ? "\x1b[36m" : "",
+    };
+    const ok = (text: string) => `${c.green}✓${c.reset} ${text}`;
+    const fail = (text: string) => `${c.red}✗${c.reset} ${text}`;
+    const warn = (text: string) => `${c.yellow}⚠${c.reset} ${text}`;
+    const dimText = (text: string) => `${c.dim}${text}${c.reset}`;
+
+    // Validate provider
+    const config = loadConfig();
+    const providerConfig = config.providers[provider];
+
+    if (!providerConfig) {
+      console.log(fail(`Unknown provider: "${provider}"`));
+      console.log(`Available: ${Object.keys(config.providers).join(", ")}`);
+      process.exit(1);
+    }
+
+    if (providerConfig.type === "claude-subscription") {
+      console.log(fail(`Cannot switch to "${provider}" — it uses Claude subscription.`));
+      console.log(dimText("Choose an external provider: deepseek, zhipu, minimax, openrouter"));
+      process.exit(1);
+    }
+
+    if (!isProviderConfigured(config, provider)) {
+      const envVar = providerConfig.api_key_env ?? `${provider.toUpperCase()}_API_KEY`;
+      console.log(warn(`Provider "${provider}" API key not set (${envVar}). Requests will fallback to native Claude.`));
+    }
+
+    const requests = parseInt(options.requests, 10) || 1;
+    const timeoutMs = parseInt(options.timeout, 10) || DEFAULT_PROXY_CONFIG.defaultTimeoutMs;
+    const now = Date.now();
+
+    writeSwitchState({
+      switched: true,
+      provider,
+      model,
+      requestsRemaining: requests,
+      switchedAt: now,
+      timeoutAt: now + timeoutMs,
+    });
+
+    // Also notify control API if running
+    try {
+      const { execSync } = require("node:child_process");
+      execSync(
+        `curl -s -X POST http://localhost:${DEFAULT_PROXY_CONFIG.controlPort}/switch ` +
+        `-H "Content-Type: application/json" ` +
+        `-d '${JSON.stringify({ provider, model, requests, timeout_ms: timeoutMs })}'`,
+        { stdio: "pipe", timeout: 2000 }
+      );
+    } catch {
+      // Control API may not be running — state file is primary
+    }
+
+    console.log(ok(`Switched to ${c.cyan}${provider}/${model}${c.reset}`));
+    console.log(`  Requests: ${requests === 0 ? "unlimited" : requests}`);
+    console.log(`  Timeout:  ${timeoutMs / 1000}s`);
+    console.log(`\n${dimText("Next request(s) through the proxy will use this provider.")}`);
   });
 
 // Cleanup command

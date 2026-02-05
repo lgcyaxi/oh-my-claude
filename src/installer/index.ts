@@ -56,6 +56,8 @@ import { generateAllAgentFiles, removeAgentFiles } from "../generators/agent-gen
 import { installHooks, installMcpServer, installStatusLine, uninstallFromSettings, uninstallStatusLine } from "./settings-merger";
 import { DEFAULT_CONFIG } from "../config/schema";
 import { ensureConfigExists as ensureStatusLineConfigExists } from "../statusline/config";
+import { deployBuiltInStyles } from "../styles";
+import { ensureMemoryDirs } from "../memory";
 
 /**
  * Get commands directory
@@ -116,6 +118,7 @@ export interface InstallResult {
       warnings: string[];
     };
   };
+  styles: { deployed: string[]; skipped: string[] };
   config: { created: boolean };
   errors: string[];
   warnings: string[];
@@ -147,6 +150,7 @@ export async function install(options?: {
     hooks: { installed: [], updated: [], skipped: [] },
     mcp: { installed: false, updated: false },
     statusLine: { installed: false, wrapperCreated: false, updated: false, configCreated: false },
+    styles: { deployed: [], skipped: [] },
     config: { created: false },
     errors: [],
     warnings: [],
@@ -353,7 +357,37 @@ process.exit(1);
       }
     }
 
-    // 5. Copy package.json for version detection
+    // 4b. Install proxy server
+    try {
+      const proxyDir = join(installDir, "dist", "proxy");
+      if (!existsSync(proxyDir)) {
+        mkdirSync(proxyDir, { recursive: true });
+      }
+
+      const builtProxyDir = join(sourceDir, "dist", "proxy");
+      if (existsSync(builtProxyDir)) {
+        cpSync(builtProxyDir, proxyDir, { recursive: true });
+      }
+    } catch (error) {
+      // Non-critical — proxy is opt-in
+      if (debug) console.log(`[DEBUG] Failed to install proxy: ${error}`);
+    }
+
+    // 5. Deploy output style presets
+    try {
+      result.styles = deployBuiltInStyles(sourceDir);
+    } catch (error) {
+      result.errors.push(`Failed to deploy output styles: ${error}`);
+    }
+
+    // 5b. Create memory directories
+    try {
+      ensureMemoryDirs();
+    } catch (error) {
+      result.errors.push(`Failed to create memory directories: ${error}`);
+    }
+
+    // 6. Copy package.json for version detection
     try {
       const srcPkgPath = join(sourceDir, "package.json");
       const destPkgPath = join(installDir, "package.json");
@@ -365,7 +399,7 @@ process.exit(1);
       if (debug) console.log(`[DEBUG] Failed to copy package.json: ${error}`);
     }
 
-    // 5b. Check if installing from git dev branch and create beta marker
+    // 6b. Check if installing from git dev branch and create beta marker
     try {
       const gitDir = join(sourceDir, ".git");
       if (existsSync(gitDir)) {
@@ -402,7 +436,7 @@ process.exit(1);
       if (debug) console.log(`[DEBUG] Git check failed: ${error}`);
     }
 
-    // 6. Create default config if not exists
+    // 7. Create default config if not exists
     const configPath = getConfigPath();
     if (!existsSync(configPath) || options?.force) {
       try {

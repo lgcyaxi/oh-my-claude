@@ -37,6 +37,8 @@ export const StatusLineConfigSchema = z.object({
       session: SegmentConfigSchema.default({ enabled: true, position: 5 }),
       "output-style": SegmentConfigSchema.default({ enabled: false, position: 6 }),
       mcp: SegmentConfigSchema.default({ enabled: true, position: 7 }),
+      memory: SegmentConfigSchema.default({ enabled: false, position: 8 }),
+      proxy: SegmentConfigSchema.default({ enabled: true, position: 9 }),
     })
     .default({}),
   style: StyleConfigSchema.default({}),
@@ -59,6 +61,8 @@ export function getDefaultConfig(preset: StatusLineConfig["preset"] = "standard"
     "session",
     "output-style",
     "mcp",
+    "memory",
+    "proxy",
   ];
 
   const segments: Record<SegmentId, { enabled: boolean; position: number }> = {} as any;
@@ -93,10 +97,16 @@ export function loadConfig(): StatusLineConfig {
 
     const content = readFileSync(CONFIG_PATH, "utf-8");
     const parsed = JSON.parse(content);
+
+    // Capture which segment keys the file actually contains (before Zod fills defaults)
+    const rawSegmentKeys = new Set<string>(
+      parsed.segments ? Object.keys(parsed.segments) : []
+    );
+
     const validated = StatusLineConfigSchema.parse(parsed);
 
-    // Apply preset overrides if preset is specified but segments aren't fully customized
-    return applyPresetToConfig(validated as StatusLineConfig);
+    // Backfill segments that were missing from the file with preset-aware defaults
+    return applyPresetToConfig(validated as StatusLineConfig, rawSegmentKeys);
   } catch {
     // Return default on any error - graceful degradation
     return getDefaultConfig("standard");
@@ -104,11 +114,35 @@ export function loadConfig(): StatusLineConfig {
 }
 
 /**
- * Apply preset to config - enables segments based on preset
+ * Apply preset to config - backfill missing segments from defaults
+ * This ensures configs created before new segments were added get them automatically.
+ * Zod fills missing keys with schema defaults (enabled: false), so we compare against
+ * the raw file keys to detect truly missing segments and apply preset-aware defaults.
  */
-function applyPresetToConfig(config: StatusLineConfig): StatusLineConfig {
-  // If user has explicitly set segment enabled states, respect them
-  // Otherwise, apply preset defaults
+function applyPresetToConfig(config: StatusLineConfig, rawSegmentKeys: Set<string>): StatusLineConfig {
+  const presetSegments = PRESETS[config.preset] ?? PRESETS.standard;
+  const allSegmentIds: SegmentId[] = [
+    "model", "git", "directory", "context", "session",
+    "output-style", "mcp", "memory", "proxy",
+  ];
+
+  let modified = false;
+  for (const id of allSegmentIds) {
+    if (!rawSegmentKeys.has(id)) {
+      // Segment was NOT in the original file — override Zod default with preset-aware value
+      config.segments[id] = {
+        enabled: presetSegments.includes(id),
+        position: DEFAULT_SEGMENT_POSITIONS[id],
+      };
+      modified = true;
+    }
+  }
+
+  // Persist backfilled config so next load won't repeat this
+  if (modified) {
+    saveConfig(config);
+  }
+
   return config;
 }
 

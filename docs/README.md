@@ -16,6 +16,10 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) v
 - **Planning System** - Strategic planning with Prometheus agent and boulder-state tracking
 - **Official MCP Setup** - One-command installation for Sequential Thinking, MiniMax, and GLM MCPs
 - **Hook Integration** - Code quality checks, todo tracking, and agent monitoring
+- **Output Style Manager** - Switch between built-in and custom output styles via CLI
+- **Memory System** - Persistent markdown-based memory with MCP tools (remember, recall, forget)
+- **Live Model Switching** - HTTP proxy for in-conversation model switching to external providers (DeepSeek, ZhiPu, MiniMax)
+- **Companion Tools** - One-command setup for UI UX Pro Max, CCometixLine, and more
 
 ## Quick Start
 
@@ -41,7 +45,7 @@ bun run install-local
 ### Set API Keys
 
 ```bash
-# DeepSeek (for Oracle, Analyst agents)
+# DeepSeek (for Analyst agent)
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 
 # ZhiPu GLM (for Librarian, Frontend-UI-UX agents)
@@ -91,6 +95,7 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omc-plan` | Start strategic planning with Prometheus |
 | `/omc-start-work` | Begin work on an existing plan |
 | `/omc-status` | Display MCP background agent status dashboard |
+| `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r 3`) |
 
 ### Quick Action Commands (`/omcx-*`)
 
@@ -159,6 +164,8 @@ omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [�
 | **Session** | API quota usage | `[79% 7d:4%]` (5-hour/7-day) |
 | **Output Style** | Current style | `[eng-pro]` |
 | **MCP** | Background tasks | `[⠙ Oracle: 32s]` |
+| **Memory** | Memory store count | `[mem:5]` |
+| **Proxy** | Model switch state | `[→DS/R ×2]` |
 
 ### Presets
 
@@ -168,7 +175,7 @@ Configure in `~/.config/oh-my-claude/statusline.json`:
 |--------|----------|
 | **minimal** | Git, Directory |
 | **standard** | Model, Git, Directory, Context, Session, MCP |
-| **full** | All segments (including Output Style) |
+| **full** | All segments (including Output Style, Memory, Proxy) |
 
 ```json
 {
@@ -219,11 +226,235 @@ npx @lgcyaxi/oh-my-claude statusline toggle output-style  # Toggle output-style
 npx @lgcyaxi/oh-my-claude statusline toggle context off   # Disable context segment
 ```
 
-**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mcp`
+**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mcp`, `memory`, `proxy`
 
 ### Multi-Line Support
 
 When you have an existing statusline (like CCometixLine), oh-my-claude automatically creates a wrapper that shows both on separate lines.
+
+## Output Styles
+
+oh-my-claude ships with built-in output style presets that customize Claude Code's response behavior.
+
+### Built-in Presets
+
+| Style | Description |
+|-------|-------------|
+| **engineer-professional** | SOLID/KISS/DRY/YAGNI principles, professional engineering output |
+| **agent** | Autonomous agent mode — minimal narration, maximum action |
+| **concise-coder** | Code-first, no explanations unless asked |
+| **teaching** | Educational — explains concepts, reasoning, and trade-offs |
+| **review** | Code review focused with severity levels |
+
+### CLI Commands
+
+```bash
+# List available styles
+npx @lgcyaxi/oh-my-claude style list
+
+# Switch output style
+npx @lgcyaxi/oh-my-claude style set agent
+
+# Show style content
+npx @lgcyaxi/oh-my-claude style show teaching
+
+# Reset to Claude default
+npx @lgcyaxi/oh-my-claude style reset
+
+# Create a custom style
+npx @lgcyaxi/oh-my-claude style create my-style
+```
+
+### Custom Styles
+
+Create your own styles in `~/.claude/output-styles/`:
+
+```bash
+oh-my-claude style create my-custom-style
+# Edit ~/.claude/output-styles/my-custom-style.md
+oh-my-claude style set my-custom-style
+```
+
+Style files use YAML frontmatter + markdown body:
+
+```markdown
+---
+name: my-custom-style
+description: My custom output style
+---
+
+# My Custom Style
+
+Define your style instructions here...
+```
+
+## Memory System
+
+oh-my-claude includes a markdown-first memory system that persists knowledge across sessions. Memories are stored as human-readable `.md` files — git-friendly, human-editable, and always rebuildable.
+
+### Storage Layout
+
+```
+~/.claude/oh-my-claude/memory/
+├── sessions/    # Auto-archived session summaries
+└── notes/       # User-created persistent memories
+```
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `remember` | Store a memory with optional title, type, and tags |
+| `recall` | Search memories by text query with relevance scoring |
+| `forget` | Delete a specific memory by ID |
+| `list_memories` | Browse memories with type and date filters |
+| `memory_status` | Show memory store statistics |
+
+### CLI Commands
+
+```bash
+oh-my-claude memory status              # Show memory stats
+oh-my-claude memory search <query>      # Search memories
+oh-my-claude memory list [--type note]  # List memories
+oh-my-claude memory show <id>           # Show memory content
+oh-my-claude memory delete <id>         # Delete a memory
+```
+
+### Memory File Format
+
+Each memory is a markdown file with YAML frontmatter:
+
+```markdown
+---
+title: Team prefers functional components
+type: note
+tags: [pattern, react, convention]
+created: 2026-01-29T10:00:00.000Z
+updated: 2026-01-29T10:00:00.000Z
+---
+
+The team prefers functional components with hooks over class components.
+Use `useState` and `useEffect` instead of class lifecycle methods.
+```
+
+## Live Model Switching
+
+oh-my-claude includes an HTTP proxy that enables **in-conversation model switching** — temporarily route Claude Code's API calls to external providers (DeepSeek, ZhiPu, MiniMax) without losing conversation context.
+
+### How It Works
+
+```
+  Claude Code
+       │  ANTHROPIC_BASE_URL=http://localhost:18910
+       ▼
+  ┌─────────────────────────────────────────────┐
+  │  oh-my-claude Proxy (localhost:18910)        │
+  │                                              │
+  │  switched=false?  → Passthrough to Anthropic │
+  │  switched=true?   → Forward to provider      │
+  │                     (DeepSeek/ZhiPu/MiniMax) │
+  └─────────────────────────────────────────────┘
+```
+
+All target providers use **Anthropic-compatible** `/v1/messages` endpoints. The proxy only rewrites: target host, API key header, and model field — no format translation needed.
+
+### Quick Start
+
+```bash
+# 1. Enable proxy
+oh-my-claude proxy enable
+
+# 2. Start proxy server
+oh-my-claude proxy start
+
+# 3. Set environment variable (printed by proxy start)
+export ANTHROPIC_BASE_URL=http://localhost:18910   # Linux/macOS
+set ANTHROPIC_BASE_URL=http://localhost:18910      # Windows
+
+# 4. Use Claude Code normally — all requests pass through to Anthropic
+```
+
+> **Windows**: Proxy CLI is fully cross-platform. Health checks use Node's `http` module (no `curl` dependency), and process management uses PID files with `wmic` fallback (no `pgrep` dependency).
+
+### Switching Models
+
+**Via slash command** (easiest — in a Claude Code conversation):
+```
+/omc-switch ds-r 3          # 3 requests via DeepSeek Reasoner
+/omc-switch deepseek deepseek-chat
+/omc-switch zhipu glm-4.7 5
+/omc-switch revert           # switch back to native Claude
+```
+
+**Shortcut aliases:**
+
+| Shortcut | Provider | Model |
+|----------|----------|-------|
+| `ds` | deepseek | deepseek-chat |
+| `ds-r` | deepseek | deepseek-reasoner |
+| `zp` | zhipu | glm-4.7 |
+| `mm` | minimax | MiniMax-M2.1 |
+
+**Via MCP tool:**
+```
+switch_model(provider="deepseek", model="deepseek-chat", requests=3)
+```
+
+**Via CLI:**
+```bash
+oh-my-claude proxy switch deepseek deepseek-chat
+```
+
+**Via Control API:**
+```bash
+curl -X POST http://localhost:18911/switch \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"deepseek","model":"deepseek-chat","requests":3}'
+```
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `switch_model` | Switch next N requests to external provider |
+| `switch_status` | Query current proxy switch state |
+| `switch_revert` | Immediately revert to native Claude |
+
+### Safety Features
+
+- **Auto-Revert**: After N requests (default: 1), automatically returns to native Claude
+- **Slash Command Overhead Skip**: First 2 requests after switch are not counted (accounts for slash command internal API calls)
+- **Timeout**: Switch expires after timeout (default: 10 minutes)
+- **Graceful Fallback**: If provider API key is missing, silently falls back to native Claude
+- **Error Recovery**: Provider request failures fall back to native Claude
+- **Opt-In**: Proxy is disabled by default, must explicitly enable
+
+### Proxy CLI Commands
+
+```bash
+oh-my-claude proxy start                          # Start proxy daemon
+oh-my-claude proxy stop                           # Stop proxy daemon
+oh-my-claude proxy status                         # Show proxy state
+oh-my-claude proxy enable                         # Enable in config
+oh-my-claude proxy disable                        # Disable in config
+oh-my-claude proxy switch <provider> <model>      # Manual model switch
+```
+
+### Configuration
+
+Add to `~/.claude/oh-my-claude.json`:
+
+```json
+{
+  "proxy": {
+    "port": 18910,
+    "controlPort": 18911,
+    "defaultRequests": 1,
+    "defaultTimeoutMs": 600000,
+    "enabled": false
+  }
+}
+```
 
 ## Agent Workflows
 
@@ -247,13 +478,15 @@ These agents run via oh-my-claude's MCP server using external API providers. **W
 
 | Agent | Provider | Model | Role |
 |-------|----------|-------|------|
-| **Oracle** | DeepSeek | deepseek-reasoner | Deep reasoning |
+| **Oracle** | Claude | claude-sonnet-4.5 | Deep reasoning |
 | **Analyst** | DeepSeek | deepseek-chat | Quick code analysis |
 | **Librarian** | ZhiPu | glm-4.7 | External research |
 | **Frontend-UI-UX** | ZhiPu | glm-4v-flash | Visual/UI design |
 | **Document-Writer** | MiniMax | MiniMax-M2.1 | Documentation |
 
 **Invocation:** `launch_background_task(agent="oracle", prompt="...")` or `execute_agent(agent="oracle", prompt="...")`
+
+**Direct Model Access:** `execute_with_model(provider="deepseek", model="deepseek-reasoner", prompt="...")` — bypasses agent routing for token-efficient direct model calls.
 
 > **Note:** If a provider's API key is not configured, tasks using that provider will fail. Set the required environment variable (e.g., `DEEPSEEK_API_KEY`) before using agents that depend on it.
 
@@ -306,6 +539,28 @@ npx @lgcyaxi/oh-my-claude statusline --enable   # Enable statusline
 npx @lgcyaxi/oh-my-claude statusline --disable  # Disable statusline
 npx @lgcyaxi/oh-my-claude statusline preset <name>     # Set preset (minimal/standard/full)
 npx @lgcyaxi/oh-my-claude statusline toggle <segment>  # Toggle segment on/off
+
+# Output Styles
+npx @lgcyaxi/oh-my-claude style list            # List available styles
+npx @lgcyaxi/oh-my-claude style set <name>      # Switch output style
+npx @lgcyaxi/oh-my-claude style show [name]     # Show style content
+npx @lgcyaxi/oh-my-claude style reset           # Reset to Claude default
+npx @lgcyaxi/oh-my-claude style create <name>   # Create custom style
+
+# Memory
+npx @lgcyaxi/oh-my-claude memory status          # Show memory stats
+npx @lgcyaxi/oh-my-claude memory search <query>  # Search memories
+npx @lgcyaxi/oh-my-claude memory list             # List all memories
+npx @lgcyaxi/oh-my-claude memory show <id>        # Show memory content
+npx @lgcyaxi/oh-my-claude memory delete <id>      # Delete a memory
+
+# Proxy (Live Model Switching)
+npx @lgcyaxi/oh-my-claude proxy start             # Start proxy daemon
+npx @lgcyaxi/oh-my-claude proxy stop              # Stop proxy daemon
+npx @lgcyaxi/oh-my-claude proxy status            # Show proxy state
+npx @lgcyaxi/oh-my-claude proxy enable            # Enable proxy in config
+npx @lgcyaxi/oh-my-claude proxy disable           # Disable proxy in config
+npx @lgcyaxi/oh-my-claude proxy switch <p> <m>    # Switch to provider/model
 ```
 
 ## Configuration
@@ -337,7 +592,7 @@ Configuration file: `~/.claude/oh-my-claude.json`
   },
   "agents": {
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
-    "oracle": { "provider": "deepseek", "model": "deepseek-reasoner" },
+    "oracle": { "provider": "claude", "model": "claude-sonnet-4.5" },
     "librarian": { "provider": "zhipu", "model": "glm-4.7" }
   },
   "concurrency": {
@@ -368,19 +623,20 @@ When limits are reached, new tasks queue and start automatically when slots free
 ├──────────────────────────────────────────────────────────────────────────┤
 │  Primary Agent (Claude via Subscription)                                  │
 │         │                                                                 │
-│    ┌────┴────┬─────────────────┐                                         │
-│    ▼         ▼                 ▼                                         │
-│  Task Tool   MCP Server     Hooks                                        │
-│  (sync)      (async)        (lifecycle)                                  │
-│    │           │                │                                        │
-│    ▼           ▼                ▼                                        │
-│  Claude      Multi-Provider  settings.json                               │
-│  Subagents   Router          scripts                                     │
-│                │                                                         │
-│                ├── DeepSeek (Anthropic-compatible)                       │
-│                ├── ZhiPu GLM (Anthropic-compatible)                      │
-│                ├── MiniMax (Anthropic-compatible)                        │
-│                └── OpenRouter (OpenAI-compatible, optional)              │
+│    ┌────┴────┬─────────────────┬──────────────┐                          │
+│    ▼         ▼                 ▼              ▼                          │
+│  Task Tool   MCP Server     Hooks          Proxy                         │
+│  (sync)      (async)        (lifecycle)    (intercept)                   │
+│    │           │                │              │                          │
+│    ▼           ▼                ▼              ▼                          │
+│  Claude      Multi-Provider  settings.json  API Request Router           │
+│  Subagents   Router          scripts          │                          │
+│                │                         ┌────┴────┐                     │
+│                │                         ▼         ▼                     │
+│                ├── DeepSeek          Anthropic   External                 │
+│                ├── ZhiPu GLM        (default)   Provider                 │
+│                ├── MiniMax                       (switched)               │
+│                └── OpenRouter                                            │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -388,6 +644,7 @@ When limits are reached, new tasks queue and start automatically when slots free
 
 - **Task Tool (sync)**: Claude subscription agents run via Claude Code's native Task tool
 - **MCP Server (async)**: External API agents run via MCP for parallel background execution
+- **Proxy (intercept)**: HTTP proxy intercepts Claude Code's native API calls for live model switching
 
 ## Development
 

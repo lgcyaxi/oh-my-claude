@@ -39,6 +39,30 @@ You MUST leverage ALL available agents to their fullest potential:
 
 **FIRE PARALLEL AGENTS AGGRESSIVELY.** Launch 5-10+ background tasks if needed. Don't wait - collect results when ready.
 
+## Memory Integration (MANDATORY)
+
+**Before starting work:**
+```
+RECALL: mcp__oh-my-claude-background__recall(query="[relevant project/task keywords]")
+→ Check for prior decisions, patterns, conventions from previous sessions
+```
+
+**After completing significant work:**
+```
+REMEMBER: mcp__oh-my-claude-background__remember(
+  content="[key decision, pattern, or finding]",
+  title="[brief title]",
+  tags=["architecture", "convention", "decision", etc.]
+)
+```
+
+**What to remember:**
+- Architecture decisions and their rationale
+- Project conventions and patterns discovered
+- Recurring issues and their solutions
+- User preferences and requirements
+- Key API patterns or gotchas
+
 ## Execution Protocol
 
 ### 1. Immediate Planning

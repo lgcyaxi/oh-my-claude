@@ -16,6 +16,10 @@
 - **规划系统** - 使用 Prometheus 智能体进行战略规划和巨石状态追踪
 - **官方 MCP 一键安装** - 一条命令安装 Sequential Thinking、MiniMax 和 GLM MCP 服务
 - **Hook 集成** - 代码质量检查和待办追踪
+- **输出样式管理器** - 通过 CLI 在内置和自定义输出样式之间切换
+- **记忆系统** - 基于 Markdown 的持久化记忆，支持 MCP 工具（remember、recall、forget）
+- **实时模型切换** - HTTP 代理实现对话中模型切换，支持外部供应商（DeepSeek、智谱 GLM、MiniMax）
+- **配套工具** - 一键安装 UI UX Pro Max、CCometixLine 等工具
 
 ## 快速开始
 
@@ -41,7 +45,7 @@ bun run install-local
 ### 设置 API 密钥
 
 ```bash
-# DeepSeek（用于 Oracle、Analyst 智能体）
+# DeepSeek（用于 Analyst 智能体）
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 
 # 智谱 GLM（用于 Librarian、Frontend-UI-UX 智能体）
@@ -91,6 +95,7 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omc-plan` | 使用 Prometheus 开始战略规划 |
 | `/omc-start-work` | 开始执行现有计划 |
 | `/omc-status` | 显示 MCP 后台智能体状态仪表板 |
+| `/omc-switch` | 切换到外部供应商模型（如 `/omc-switch ds-r 3`） |
 
 ### 快捷操作命令（`/omcx-*`）
 
@@ -159,6 +164,8 @@ omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [�
 | **Session** | API 配额使用率 | `[79% 7d:4%]`（5小时/7天） |
 | **Output Style** | 当前输出样式 | `[eng-pro]` |
 | **MCP** | 后台任务 | `[⠙ Oracle: 32s]` |
+| **Memory** | 记忆存储数量 | `[mem:5]` |
+| **Proxy** | 模型切换状态 | `[→DS/R ×2]` |
 
 ### 预设配置
 
@@ -168,7 +175,7 @@ omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [�
 |------|----------|
 | **minimal** | Git、Directory |
 | **standard** | Model、Git、Directory、Context、Session、MCP |
-| **full** | 所有分段（包括 Output Style） |
+| **full** | 所有分段（包括 Output Style、Memory、Proxy） |
 
 ```json
 {
@@ -219,11 +226,235 @@ npx @lgcyaxi/oh-my-claude statusline toggle output-style  # 切换 output-style
 npx @lgcyaxi/oh-my-claude statusline toggle context off   # 禁用 context 分段
 ```
 
-**可用分段：** `model`、`git`、`directory`、`context`、`session`、`output-style`、`mcp`
+**可用分段：** `model`、`git`、`directory`、`context`、`session`、`output-style`、`mcp`、`memory`、`proxy`
 
 ### 多行支持
 
 当您已有状态栏（如 CCometixLine）时，oh-my-claude 会自动创建一个包装器，将两者显示在不同行。
+
+## 输出样式
+
+oh-my-claude 内置多个输出样式预设，可自定义 Claude Code 的响应行为。
+
+### 内置预设
+
+| 样式 | 描述 |
+|------|------|
+| **engineer-professional** | SOLID/KISS/DRY/YAGNI 原则，专业工程输出 |
+| **agent** | 自主智能体模式 — 最少叙述，最多行动 |
+| **concise-coder** | 代码优先，除非被要求否则不解释 |
+| **teaching** | 教学模式 — 解释概念、推理和取舍 |
+| **review** | 代码审查专注模式，带严重性级别 |
+
+### CLI 命令
+
+```bash
+# 列出可用样式
+npx @lgcyaxi/oh-my-claude style list
+
+# 切换输出样式
+npx @lgcyaxi/oh-my-claude style set agent
+
+# 查看样式内容
+npx @lgcyaxi/oh-my-claude style show teaching
+
+# 重置为 Claude 默认
+npx @lgcyaxi/oh-my-claude style reset
+
+# 创建自定义样式
+npx @lgcyaxi/oh-my-claude style create my-style
+```
+
+### 自定义样式
+
+在 `~/.claude/output-styles/` 中创建自定义样式：
+
+```bash
+oh-my-claude style create my-custom-style
+# 编辑 ~/.claude/output-styles/my-custom-style.md
+oh-my-claude style set my-custom-style
+```
+
+样式文件使用 YAML 前言 + markdown 正文：
+
+```markdown
+---
+name: my-custom-style
+description: 我的自定义输出样式
+---
+
+# 我的自定义样式
+
+在此定义样式指令...
+```
+
+## 记忆系统
+
+oh-my-claude 内置基于 Markdown 的记忆系统，可跨会话持久化知识。记忆以人类可读的 `.md` 文件存储 — 支持 Git 版本控制、手动编辑，索引始终可从源文件重建。
+
+### 存储结构
+
+```
+~/.claude/oh-my-claude/memory/
+├── sessions/    # 自动归档的会话摘要
+└── notes/       # 用户创建的持久记忆
+```
+
+### MCP 工具
+
+| 工具 | 说明 |
+|------|------|
+| `remember` | 存储记忆，可选标题、类型和标签 |
+| `recall` | 按文本查询搜索记忆，支持相关度排序 |
+| `forget` | 按 ID 删除特定记忆 |
+| `list_memories` | 浏览记忆，支持类型和日期过滤 |
+| `memory_status` | 显示记忆存储统计信息 |
+
+### CLI 命令
+
+```bash
+oh-my-claude memory status              # 显示记忆统计
+oh-my-claude memory search <查询>       # 搜索记忆
+oh-my-claude memory list [--type note]  # 列出记忆
+oh-my-claude memory show <id>           # 查看记忆内容
+oh-my-claude memory delete <id>         # 删除记忆
+```
+
+### 记忆文件格式
+
+每个记忆都是带有 YAML 前言的 Markdown 文件：
+
+```markdown
+---
+title: 团队偏好函数式组件
+type: note
+tags: [pattern, react, convention]
+created: 2026-01-29T10:00:00.000Z
+updated: 2026-01-29T10:00:00.000Z
+---
+
+团队偏好使用 hooks 的函数式组件而非类组件。
+使用 `useState` 和 `useEffect` 替代类生命周期方法。
+```
+
+## 实时模型切换
+
+oh-my-claude 内置 HTTP 代理，支持**对话中模型切换** — 将 Claude Code 的 API 请求临时路由到外部供应商（DeepSeek、智谱 GLM、MiniMax），不会丢失对话上下文。
+
+### 工作原理
+
+```
+  Claude Code
+       │  ANTHROPIC_BASE_URL=http://localhost:18910
+       ▼
+  ┌─────────────────────────────────────────────┐
+  │  oh-my-claude 代理 (localhost:18910)         │
+  │                                              │
+  │  switched=false?  → 透传到 Anthropic         │
+  │  switched=true?   → 转发到外部供应商          │
+  │                     (DeepSeek/智谱/MiniMax)  │
+  └─────────────────────────────────────────────┘
+```
+
+所有目标供应商使用 **Anthropic 兼容**的 `/v1/messages` 端点。代理仅重写：目标主机、API 密钥头和模型字段 — 无需格式转换。
+
+### 快速开始
+
+```bash
+# 1. 启用代理
+oh-my-claude proxy enable
+
+# 2. 启动代理服务器
+oh-my-claude proxy start
+
+# 3. 设置环境变量（代理启动时会打印）
+export ANTHROPIC_BASE_URL=http://localhost:18910   # Linux/macOS
+set ANTHROPIC_BASE_URL=http://localhost:18910      # Windows
+
+# 4. 正常使用 Claude Code — 所有请求透传到 Anthropic
+```
+
+> **Windows**：代理 CLI 完全跨平台。健康检查使用 Node 的 `http` 模块（无需 `curl`），进程管理使用 PID 文件和 `wmic` 回退（无需 `pgrep`）。
+
+### 切换模型
+
+**通过斜杠命令**（最简单 — 在 Claude Code 对话中）：
+```
+/omc-switch ds-r 3          # 3 个请求通过 DeepSeek Reasoner
+/omc-switch deepseek deepseek-chat
+/omc-switch zhipu glm-4.7 5
+/omc-switch revert           # 切换回原生 Claude
+```
+
+**快捷别名：**
+
+| 快捷名 | 供应商 | 模型 |
+|--------|--------|------|
+| `ds` | deepseek | deepseek-chat |
+| `ds-r` | deepseek | deepseek-reasoner |
+| `zp` | zhipu | glm-4.7 |
+| `mm` | minimax | MiniMax-M2.1 |
+
+**通过 MCP 工具：**
+```
+switch_model(provider="deepseek", model="deepseek-chat", requests=3)
+```
+
+**通过 CLI：**
+```bash
+oh-my-claude proxy switch deepseek deepseek-chat
+```
+
+**通过控制 API：**
+```bash
+curl -X POST http://localhost:18911/switch \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"deepseek","model":"deepseek-chat","requests":3}'
+```
+
+### MCP 工具
+
+| 工具 | 说明 |
+|------|------|
+| `switch_model` | 将接下来 N 个请求切换到外部供应商 |
+| `switch_status` | 查询当前代理切换状态 |
+| `switch_revert` | 立即恢复为原生 Claude |
+
+### 安全特性
+
+- **自动恢复**：N 个请求后（默认：1），自动恢复为原生 Claude
+- **斜杠命令开销跳过**：切换后前 2 个请求不计数（补偿斜杠命令内部 API 调用）
+- **超时机制**：切换在超时后过期（默认：10 分钟）
+- **优雅降级**：如果供应商 API 密钥缺失，静默回退到原生 Claude
+- **错误恢复**：供应商请求失败时自动回退到原生 Claude
+- **默认关闭**：代理默认禁用，需显式启用
+
+### 代理 CLI 命令
+
+```bash
+oh-my-claude proxy start                          # 启动代理守护进程
+oh-my-claude proxy stop                           # 停止代理守护进程
+oh-my-claude proxy status                         # 显示代理状态
+oh-my-claude proxy enable                         # 在配置中启用
+oh-my-claude proxy disable                        # 在配置中禁用
+oh-my-claude proxy switch <供应商> <模型>          # 手动切换模型
+```
+
+### 配置
+
+添加到 `~/.claude/oh-my-claude.json`：
+
+```json
+{
+  "proxy": {
+    "port": 18910,
+    "controlPort": 18911,
+    "defaultRequests": 1,
+    "defaultTimeoutMs": 600000,
+    "enabled": false
+  }
+}
+```
 
 ## 智能体工作流
 
@@ -247,13 +478,15 @@ oh-my-claude 提供两种类型的智能体：
 
 | 智能体 | 供应商 | 模型 | 角色 |
 |--------|--------|------|------|
-| **Oracle** | DeepSeek | deepseek-reasoner | 深度推理 |
+| **Oracle** | Claude | claude-sonnet-4.5 | 深度推理 |
 | **Analyst** | DeepSeek | deepseek-chat | 快速代码分析 |
 | **Librarian** | 智谱 | glm-4.7 | 外部研究 |
 | **Frontend-UI-UX** | 智谱 | glm-4v-flash | 视觉/UI 设计 |
 | **Document-Writer** | MiniMax | MiniMax-M2.1 | 文档编写 |
 
 **调用方式：** `launch_background_task(agent="oracle", prompt="...")` 或 `execute_agent(agent="oracle", prompt="...")`
+
+**直接模型访问：** `execute_with_model(provider="deepseek", model="deepseek-reasoner", prompt="...")` — 绕过智能体路由，直接调用模型，节省 Token 开销。
 
 > **注意：** 如果供应商的 API 密钥未配置，使用该供应商的任务将失败。在使用依赖特定供应商的智能体前，请先设置所需的环境变量（如 `DEEPSEEK_API_KEY`）。
 
@@ -306,6 +539,28 @@ npx @lgcyaxi/oh-my-claude statusline --enable   # 启用状态栏
 npx @lgcyaxi/oh-my-claude statusline --disable  # 禁用状态栏
 npx @lgcyaxi/oh-my-claude statusline preset <名称>     # 设置预设 (minimal/standard/full)
 npx @lgcyaxi/oh-my-claude statusline toggle <分段>     # 切换分段开关
+
+# 输出样式
+npx @lgcyaxi/oh-my-claude style list            # 列出可用样式
+npx @lgcyaxi/oh-my-claude style set <名称>      # 切换输出样式
+npx @lgcyaxi/oh-my-claude style show [名称]     # 查看样式内容
+npx @lgcyaxi/oh-my-claude style reset           # 重置为 Claude 默认
+npx @lgcyaxi/oh-my-claude style create <名称>   # 创建自定义样式
+
+# 记忆
+npx @lgcyaxi/oh-my-claude memory status          # 显示记忆统计
+npx @lgcyaxi/oh-my-claude memory search <查询>   # 搜索记忆
+npx @lgcyaxi/oh-my-claude memory list             # 列出所有记忆
+npx @lgcyaxi/oh-my-claude memory show <id>        # 查看记忆内容
+npx @lgcyaxi/oh-my-claude memory delete <id>      # 删除记忆
+
+# 代理（实时模型切换）
+npx @lgcyaxi/oh-my-claude proxy start             # 启动代理守护进程
+npx @lgcyaxi/oh-my-claude proxy stop              # 停止代理守护进程
+npx @lgcyaxi/oh-my-claude proxy status            # 显示代理状态
+npx @lgcyaxi/oh-my-claude proxy enable            # 在配置中启用代理
+npx @lgcyaxi/oh-my-claude proxy disable           # 在配置中禁用代理
+npx @lgcyaxi/oh-my-claude proxy switch <供应商> <模型>  # 切换到供应商/模型
 ```
 
 ## 配置
@@ -337,7 +592,7 @@ npx @lgcyaxi/oh-my-claude statusline toggle <分段>     # 切换分段开关
   },
   "agents": {
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
-    "oracle": { "provider": "deepseek", "model": "deepseek-reasoner" },
+    "oracle": { "provider": "claude", "model": "claude-sonnet-4.5" },
     "librarian": { "provider": "zhipu", "model": "glm-4.7" }
   }
 }
@@ -351,19 +606,20 @@ npx @lgcyaxi/oh-my-claude statusline toggle <分段>     # 切换分段开关
 ├──────────────────────────────────────────────────────────────────────────┤
 │  主智能体（Claude 订阅）                                                   │
 │         │                                                                 │
-│    ┌────┴────┬─────────────────┐                                         │
-│    ▼         ▼                 ▼                                         │
-│  Task 工具   MCP 服务器     Hooks                                         │
-│  (同步)      (异步)        (生命周期)                                      │
-│    │           │                │                                        │
-│    ▼           ▼                ▼                                        │
-│  Claude      多供应商       settings.json                                 │
-│  子智能体    路由器         脚本                                           │
-│                │                                                         │
-│                ├── DeepSeek（Anthropic 兼容）                             │
-│                ├── 智谱 GLM（Anthropic 兼容）                              │
-│                ├── MiniMax（Anthropic 兼容）                              │
-│                └── OpenRouter（OpenAI 兼容，可选）                         │
+│    ┌────┴────┬─────────────────┬──────────────┐                          │
+│    ▼         ▼                 ▼              ▼                          │
+│  Task 工具   MCP 服务器     Hooks          代理                           │
+│  (同步)      (异步)        (生命周期)     (拦截)                          │
+│    │           │                │              │                          │
+│    ▼           ▼                ▼              ▼                          │
+│  Claude      多供应商       settings.json  API 请求路由器                  │
+│  子智能体    路由器         脚本              │                            │
+│                │                         ┌────┴────┐                     │
+│                │                         ▼         ▼                     │
+│                ├── DeepSeek          Anthropic   外部供应商                │
+│                ├── 智谱 GLM          (默认)     (已切换)                   │
+│                ├── MiniMax                                                │
+│                └── OpenRouter                                            │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -371,6 +627,7 @@ npx @lgcyaxi/oh-my-claude statusline toggle <分段>     # 切换分段开关
 
 - **Task 工具（同步）**：Claude 订阅智能体通过 Claude Code 原生 Task 工具运行
 - **MCP 服务器（异步）**：外部 API 智能体通过 MCP 进行并行后台执行
+- **代理（拦截）**：HTTP 代理拦截 Claude Code 的原生 API 请求，实现实时模型切换
 
 ## 开发
 

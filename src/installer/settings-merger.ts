@@ -23,6 +23,10 @@ interface ClaudeSettings {
       matcher: string;
       hooks: Array<{ type: string; command: string }>;
     }>;
+    UserPromptSubmit?: Array<{
+      matcher: string;
+      hooks: Array<{ type: string; command: string }>;
+    }>;
   };
   mcpServers?: Record<
     string,
@@ -86,7 +90,7 @@ export function saveSettings(settings: ClaudeSettings): void {
  */
 function addHook(
   settings: ClaudeSettings,
-  hookType: "PreToolUse" | "PostToolUse" | "Stop",
+  hookType: "PreToolUse" | "PostToolUse" | "Stop" | "UserPromptSubmit",
   matcher: string,
   command: string,
   force = false
@@ -99,11 +103,14 @@ function addHook(
     settings.hooks[hookType] = [];
   }
 
-  // Check if hook already exists
+  // Extract the hook script filename for precise matching
+  // e.g., "node /path/to/oh-my-claude/hooks/auto-memory.js" → "auto-memory.js"
+  const scriptFile = command.split("/").pop() ?? command;
+
+  // Check if this SPECIFIC hook already exists (match by script filename, not generic path)
   const existingIndex = settings.hooks[hookType]!.findIndex(
     (h) =>
-      h.matcher === matcher &&
-      h.hooks.some((hook) => hook.command.includes("oh-my-claude"))
+      h.hooks.some((hook) => hook.command.endsWith(scriptFile))
   );
 
   if (existingIndex !== -1) {
@@ -128,7 +135,7 @@ function addHook(
  */
 function removeHook(
   settings: ClaudeSettings,
-  hookType: "PreToolUse" | "PostToolUse" | "Stop",
+  hookType: "PreToolUse" | "PostToolUse" | "Stop" | "UserPromptSubmit",
   identifier: string
 ): boolean {
   if (!settings.hooks?.[hookType]) {
@@ -292,6 +299,60 @@ export function installHooks(hooksDir: string, force = false): {
     skipped.push("task-tracker (already installed)");
   }
 
+  // Session logger hook (PostToolUse — logs all tool usage for auto-memory)
+  const sessionLoggerResult = addHook(
+    settings,
+    "PostToolUse",
+    ".*",
+    `${nodeCmd} ${hooksDir}/session-logger.js`,
+    force
+  );
+  if (sessionLoggerResult) {
+    if (force) {
+      updated.push("session-logger (PostToolUse:*)");
+    } else {
+      installed.push("session-logger (PostToolUse:*)");
+    }
+  } else {
+    skipped.push("session-logger (already installed)");
+  }
+
+  // Auto-memory hook (Stop — captures session learnings via external model)
+  const autoMemoryResult = addHook(
+    settings,
+    "Stop",
+    ".*",
+    `${nodeCmd} ${hooksDir}/auto-memory.js`,
+    force
+  );
+  if (autoMemoryResult) {
+    if (force) {
+      updated.push("auto-memory (Stop)");
+    } else {
+      installed.push("auto-memory (Stop)");
+    }
+  } else {
+    skipped.push("auto-memory (already installed)");
+  }
+
+  // Memory awareness hook (UserPromptSubmit — nudges memory recall/remember)
+  const memoryResult = addHook(
+    settings,
+    "UserPromptSubmit",
+    "",
+    `${nodeCmd} ${hooksDir}/memory-awareness.js`,
+    force
+  );
+  if (memoryResult) {
+    if (force) {
+      updated.push("memory-awareness (UserPromptSubmit)");
+    } else {
+      installed.push("memory-awareness (UserPromptSubmit)");
+    }
+  } else {
+    skipped.push("memory-awareness (already installed)");
+  }
+
   saveSettings(settings);
   return { installed, updated, skipped };
 }
@@ -394,6 +455,9 @@ export function uninstallFromSettings(): {
   }
   if (removeHook(settings, "Stop", "oh-my-claude")) {
     removedHooks.push("Stop");
+  }
+  if (removeHook(settings, "UserPromptSubmit", "oh-my-claude")) {
+    removedHooks.push("UserPromptSubmit");
   }
 
   saveSettings(settings);
