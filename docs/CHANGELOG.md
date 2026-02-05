@@ -4,21 +4,19 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.4.x](changelog/v1.4.x.md) - Stable
 
-**Latest: v1.4.0** (2026-02-05)
+**Latest: v1.4.2-beta.0** (2026-02-05)
 
 ### Highlights
 
+- **Project-Scoped Memory** - Per-project memories stored in `.claude/mem/` with auto-detection
+- **Memory Compaction (`/omc-compact`)** - AI-assisted grouping and merging via ZhiPu/MiniMax/DeepSeek
+- **Context Auto-Save** - PostToolUse hook auto-saves session memory at configurable context threshold
+- **Scope-Aware MCP Tools** - All memory tools (`remember`, `recall`, `forget`, `list_memories`) support `project`/`global`/`all` scope
 - **Live Model Switching** - HTTP proxy for in-conversation model switching to external providers
 - **`/omc-switch` Command** - Switch models via slash command with shortcut aliases (`ds`, `ds-r`, `zp`, `mm`)
-- **Windows Proxy Support** - Cross-platform proxy CLI (no curl/pgrep dependency)
-- **Statusline Segment Backfill** - Existing configs auto-upgrade with new segments (memory, proxy)
-- **Slash Command Overhead Skip** - `skipInitialRequests` ensures accurate request counting
 - **OAuth Support** - Proxy works with Claude Code OAuth sessions (no API key needed)
-- **Enhanced Memory Awareness** - Session prompt logging and assertive remember triggers on task completion
-- **Agent Capability Awareness** - All agents now know about memory tools and hot-switch
-- **Oracle on Claude Sonnet** - Oracle agent upgraded from DeepSeek Reasoner to Claude Sonnet 4.5
 - **Proxy MCP Tools** - `switch_model`, `switch_status`, `switch_revert` for seamless switching
-- **Proxy CLI** - `proxy start/stop/status/enable/disable/switch` commands
+- **Agent Capability Awareness** - All agents now know about memory tools and hot-switch
 - **Auto-Revert Safety** - Request counter + timeout ensure automatic return to native Claude
 
 ---
@@ -93,6 +91,8 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v1.4.2-beta.0 | 2026-02-05 | Beta | Project-scoped memory, AI compaction, context auto-save, scope-aware MCP tools |
+| v1.4.1 | 2026-02-05 | Patch | README moved to root for npm visibility |
 | v1.4.0 | 2026-02-05 | Minor | Live model switching proxy, /omc-switch command, OAuth support, Windows proxy fixes |
 | v1.3.0-beta.3 | 2026-01-29 | Beta | execute_with_model tool, memory statusline segment |
 | v1.3.0-beta.0 | 2026-01-29 | Beta | Output style manager with 5 built-in presets |
