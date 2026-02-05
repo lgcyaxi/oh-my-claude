@@ -96,6 +96,7 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omc-start-work` | Begin work on an existing plan |
 | `/omc-status` | Display MCP background agent status dashboard |
 | `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r 3`) |
+| `/omc-compact` | Compact memories with AI-assisted grouping |
 
 ### Quick Action Commands (`/omcx-*`)
 
@@ -292,33 +293,76 @@ Define your style instructions here...
 
 oh-my-claude includes a markdown-first memory system that persists knowledge across sessions. Memories are stored as human-readable `.md` files — git-friendly, human-editable, and always rebuildable.
 
-### Storage Layout
+### Storage Scopes
 
+Memories can be stored in two locations:
+
+| Scope | Path | Use Case |
+|-------|------|----------|
+| **Project** | `.claude/mem/` | Project-specific knowledge (conventions, architecture) |
+| **Global** | `~/.claude/oh-my-claude/memory/` | Cross-project knowledge (personal preferences) |
+
+Both locations have the same structure:
 ```
-~/.claude/oh-my-claude/memory/
 ├── sessions/    # Auto-archived session summaries
 └── notes/       # User-created persistent memories
 ```
+
+**Default behavior:**
+- **Read**: Searches both scopes (`--scope all`)
+- **Write**: Project scope if in a git repo, otherwise global
 
 ### MCP Tools
 
 | Tool | Description |
 |------|-------------|
-| `remember` | Store a memory with optional title, type, and tags |
+| `remember` | Store a memory with optional title, type, tags, and scope |
 | `recall` | Search memories by text query with relevance scoring |
 | `forget` | Delete a specific memory by ID |
-| `list_memories` | Browse memories with type and date filters |
-| `memory_status` | Show memory store statistics |
+| `list_memories` | Browse memories with type, date, and scope filters |
+| `memory_status` | Show memory store statistics with scope breakdown |
+| `compact_memories` | AI-assisted memory compaction (group related memories) |
+
+### Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/omc-compact` | Compact memories with AI-assisted grouping |
 
 ### CLI Commands
 
 ```bash
-oh-my-claude memory status              # Show memory stats
-oh-my-claude memory search <query>      # Search memories
-oh-my-claude memory list [--type note]  # List memories
-oh-my-claude memory show <id>           # Show memory content
-oh-my-claude memory delete <id>         # Delete a memory
+oh-my-claude memory status                  # Show memory stats
+oh-my-claude memory search <query>          # Search memories
+oh-my-claude memory list [--scope project]  # List memories (project only)
+oh-my-claude memory show <id>               # Show memory content
+oh-my-claude memory delete <id>             # Delete a memory
+oh-my-claude memory compact                 # Interactive compaction guide
 ```
+
+### Memory Compaction
+
+When you have many memories, use `/omc-compact` to automatically group and merge related memories:
+
+1. AI analyzes all memories (using ZhiPu → MiniMax → DeepSeek)
+2. Suggests merge groups with preview
+3. You confirm which groups to compact
+4. Creates merged memories and removes originals
+
+### Auto-Save (Context Threshold)
+
+Configure automatic memory capture when context usage exceeds a threshold:
+
+```json
+{
+  "memory": {
+    "autoSaveThreshold": 75,
+    "aiProviderPriority": ["zhipu", "minimax", "deepseek"]
+  }
+}
+```
+
+Set `autoSaveThreshold` to `0` to disable.
 
 ### Memory File Format
 
@@ -329,8 +373,8 @@ Each memory is a markdown file with YAML frontmatter:
 title: Team prefers functional components
 type: note
 tags: [pattern, react, convention]
-created: 2026-01-29T10:00:00.000Z
-updated: 2026-01-29T10:00:00.000Z
+createdAt: "2026-01-29T10:00:00.000Z"
+updatedAt: "2026-01-29T10:00:00.000Z"
 ---
 
 The team prefers functional components with hooks over class components.
@@ -548,11 +592,12 @@ npx @lgcyaxi/oh-my-claude style reset           # Reset to Claude default
 npx @lgcyaxi/oh-my-claude style create <name>   # Create custom style
 
 # Memory
-npx @lgcyaxi/oh-my-claude memory status          # Show memory stats
-npx @lgcyaxi/oh-my-claude memory search <query>  # Search memories
-npx @lgcyaxi/oh-my-claude memory list             # List all memories
-npx @lgcyaxi/oh-my-claude memory show <id>        # Show memory content
-npx @lgcyaxi/oh-my-claude memory delete <id>      # Delete a memory
+npx @lgcyaxi/oh-my-claude memory status               # Show memory stats with scope breakdown
+npx @lgcyaxi/oh-my-claude memory search <query>       # Search memories (--scope project/global/all)
+npx @lgcyaxi/oh-my-claude memory list                 # List all memories (--scope project/global/all)
+npx @lgcyaxi/oh-my-claude memory show <id>            # Show memory content
+npx @lgcyaxi/oh-my-claude memory delete <id>          # Delete a memory (--scope project/global/all)
+npx @lgcyaxi/oh-my-claude memory compact              # Interactive memory compaction guide
 
 # Proxy (Live Model Switching)
 npx @lgcyaxi/oh-my-claude proxy start             # Start proxy daemon
@@ -614,6 +659,28 @@ Control how many background tasks can run in parallel:
 - **per_provider**: Per-provider limits to prevent rate limiting
 
 When limits are reached, new tasks queue and start automatically when slots free up.
+
+### Memory Settings
+
+Configure memory system behavior:
+
+```json
+{
+  "memory": {
+    "defaultReadScope": "all",
+    "defaultWriteScope": "auto",
+    "autoSaveThreshold": 75,
+    "aiProviderPriority": ["zhipu", "minimax", "deepseek"]
+  }
+}
+```
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `defaultReadScope` | Where to search (`project`, `global`, `all`) | `all` |
+| `defaultWriteScope` | Where to write (`project`, `global`, `auto`) | `auto` |
+| `autoSaveThreshold` | Context % to trigger auto-save (0 = disabled) | `75` |
+| `aiProviderPriority` | Provider order for AI-powered features | `["zhipu", "minimax", "deepseek"]` |
 
 ## Architecture
 

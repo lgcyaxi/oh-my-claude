@@ -28,8 +28,8 @@ export interface SearchResult {
  * Search memories with text matching and filtering
  */
 export function searchMemories(options: MemorySearchOptions): SearchResult[] {
-  // Load all memories (filtered by type if specified)
-  const entries = listMemories({ type: options.type });
+  // Load all memories (filtered by type and scope if specified)
+  const entries = listMemories({ type: options.type, scope: options.scope });
 
   // If no query, return entries as-is (with score 1)
   if (!options.query || options.query.trim().length === 0) {

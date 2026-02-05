@@ -28,7 +28,7 @@ import {
   waitForTaskCompletion,
   getConcurrencyStatus,
 } from "./task-manager";
-import { getProvidersStatus } from "../../providers/router";
+import { getProvidersStatus, routeByModel } from "../../providers/router";
 import { agents } from "../../agents";
 import {
   createMemory,
@@ -37,7 +37,10 @@ import {
   listMemories,
   getMemoryStats,
   searchMemories,
+  getDefaultWriteScope,
+  getProjectMemoryDir,
 } from "../../memory";
+import type { MemoryScope } from "../../memory";
 import {
   readSwitchState,
   writeSwitchState,
@@ -297,6 +300,8 @@ If the task takes longer than the timeout (default: 5 minutes), returns the task
 
 Use this to save important context: decisions, patterns, conventions, or anything worth remembering.
 
+Storage: By default, saves to project (.claude/mem/) if in a git repo, otherwise global (~/.claude/oh-my-claude/memory/).
+
 Examples:
 - "The team prefers functional components over class components"
 - "Auth uses JWT with 24h expiry, refresh token is 7 days"
@@ -322,6 +327,11 @@ Examples:
           items: { type: "string" },
           description: "Tags for categorization and search (e.g., ['pattern', 'auth', 'convention'])",
         },
+        scope: {
+          type: "string",
+          enum: ["project", "global"],
+          description: "Where to store: 'project' (.claude/mem/) or 'global' (~/.claude/oh-my-claude/memory/). Default: project if in git repo.",
+        },
       },
       required: ["content"],
     },
@@ -329,6 +339,8 @@ Examples:
   {
     name: "recall",
     description: `Search and retrieve stored memories. Returns matching memories ranked by relevance.
+
+Searches both project (.claude/mem/) and global (~/.claude/oh-my-claude/memory/) by default.
 
 Use this to find previously saved knowledge, decisions, or session summaries.`,
     inputSchema: {
@@ -352,12 +364,17 @@ Use this to find previously saved knowledge, decisions, or session summaries.`,
           type: "number",
           description: "Max results to return (default: 10)",
         },
+        scope: {
+          type: "string",
+          enum: ["project", "global", "all"],
+          description: "Where to search: 'project', 'global', or 'all' (default: all)",
+        },
       },
     },
   },
   {
     name: "forget",
-    description: "Delete a specific memory by its ID.",
+    description: "Delete a specific memory by its ID. Searches both project and global storage.",
     inputSchema: {
       type: "object",
       properties: {
@@ -365,13 +382,18 @@ Use this to find previously saved knowledge, decisions, or session summaries.`,
           type: "string",
           description: "The memory ID to delete",
         },
+        scope: {
+          type: "string",
+          enum: ["project", "global", "all"],
+          description: "Where to search for the memory (default: all)",
+        },
       },
       required: ["id"],
     },
   },
   {
     name: "list_memories",
-    description: "List stored memories with optional filtering by type and date range.",
+    description: "List stored memories with optional filtering by type, date range, and scope.",
     inputSchema: {
       type: "object",
       properties: {
@@ -392,15 +414,64 @@ Use this to find previously saved knowledge, decisions, or session summaries.`,
           type: "string",
           description: "Only show memories created before this date (ISO 8601)",
         },
+        scope: {
+          type: "string",
+          enum: ["project", "global", "all"],
+          description: "Where to list: 'project', 'global', or 'all' (default: all)",
+        },
       },
     },
   },
   {
     name: "memory_status",
-    description: "Get memory store statistics (total count, size, breakdown by type).",
+    description: "Get memory store statistics (total count, size, breakdown by type and scope).",
     inputSchema: {
       type: "object",
       properties: {},
+    },
+  },
+  {
+    name: "compact_memories",
+    description: `Analyze memories and suggest compaction groups. Use this when memory count is high or user requests cleanup.
+
+Flow:
+1. Analyzes all memories using AI (ZhiPu -> MiniMax -> DeepSeek)
+2. Returns suggested merge groups with previews
+3. User confirms which groups to compact
+4. Call again with 'execute' mode to perform the merge
+
+Returns JSON with suggested groups. Each group shows which memories would merge and a preview of the result.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: {
+          type: "string",
+          enum: ["analyze", "execute"],
+          description: "Mode: 'analyze' to get suggestions, 'execute' to perform confirmed merges",
+        },
+        scope: {
+          type: "string",
+          enum: ["project", "global", "all"],
+          description: "Which memories to analyze (default: all)",
+        },
+        groups: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              ids: { type: "array", items: { type: "string" } },
+              title: { type: "string" },
+            },
+          },
+          description: "For 'execute' mode: groups to compact (from analyze results)",
+        },
+        targetScope: {
+          type: "string",
+          enum: ["project", "global"],
+          description: "For 'execute' mode: where to save compacted memories (default: project)",
+        },
+      },
+      required: ["mode"],
     },
   },
   // Proxy switch tools
@@ -861,11 +932,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // ---- Memory tools ----
 
       case "remember": {
-        const { content, title, type, tags } = args as {
+        const { content, title, type, tags, scope } = args as {
           content: string;
           title?: string;
           type?: "note" | "session";
           tags?: string[];
+          scope?: "project" | "global";
         };
 
         if (!content) {
@@ -875,13 +947,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        const result = createMemory({ content, title, type, tags });
+        const result = createMemory({ content, title, type, tags, scope });
         if (!result.success) {
           return {
             content: [{ type: "text", text: `Error: ${result.error}` }],
             isError: true,
           };
         }
+
+        // Determine actual scope used
+        const actualScope = scope ?? getDefaultWriteScope();
 
         return {
           content: [{
@@ -892,17 +967,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               title: result.data!.title,
               type: result.data!.type,
               tags: result.data!.tags,
+              scope: actualScope,
             }),
           }],
         };
       }
 
       case "recall": {
-        const { query, type, tags, limit } = args as {
+        const { query, type, tags, limit, scope } = args as {
           query?: string;
           type?: "note" | "session";
           tags?: string[];
           limit?: number;
+          scope?: MemoryScope;
         };
 
         const results = searchMemories({
@@ -911,6 +988,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           tags,
           limit: limit ?? 10,
           sort: "relevance",
+          scope: scope ?? "all",
         });
 
         return {
@@ -927,6 +1005,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 matchedFields: r.matchedFields,
                 content: r.entry.content,
                 createdAt: r.entry.createdAt,
+                scope: (r.entry as any)._scope,
               })),
             }),
           }],
@@ -934,7 +1013,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "forget": {
-        const { id } = args as { id: string };
+        const { id, scope } = args as { id: string; scope?: MemoryScope };
 
         if (!id) {
           return {
@@ -943,7 +1022,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        const result = deleteMemory(id);
+        const result = deleteMemory(id, scope ?? "all");
         return {
           content: [{
             type: "text",
@@ -957,11 +1036,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_memories": {
-        const { type, limit, after, before } = args as {
+        const { type, limit, after, before, scope } = args as {
           type?: "note" | "session";
           limit?: number;
           after?: string;
           before?: string;
+          scope?: MemoryScope;
         };
 
         const entries = listMemories({
@@ -969,6 +1049,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           limit: limit ?? 20,
           after,
           before,
+          scope: scope ?? "all",
         });
 
         return {
@@ -983,6 +1064,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 tags: e.tags,
                 createdAt: e.createdAt,
                 updatedAt: e.updatedAt,
+                scope: (e as any)._scope,
                 preview: e.content.slice(0, 200) + (e.content.length > 200 ? "..." : ""),
               })),
             }),
@@ -992,12 +1074,257 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "memory_status": {
         const stats = getMemoryStats();
+        const projectDir = getProjectMemoryDir();
 
         return {
           content: [{
             type: "text",
-            text: JSON.stringify(stats),
+            text: JSON.stringify({
+              ...stats,
+              projectMemoryAvailable: projectDir !== null,
+              defaultWriteScope: getDefaultWriteScope(),
+            }),
           }],
+        };
+      }
+
+      case "compact_memories": {
+        const { mode, scope, groups, targetScope } = args as {
+          mode: "analyze" | "execute";
+          scope?: MemoryScope;
+          groups?: Array<{ ids: string[]; title: string }>;
+          targetScope?: "project" | "global";
+        };
+
+        if (mode === "analyze") {
+          // Get all memories to analyze
+          const entries = listMemories({ scope: scope ?? "all" });
+
+          if (entries.length < 2) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  analyzed: true,
+                  groups: [],
+                  message: "Not enough memories to compact (need at least 2)",
+                }),
+              }],
+            };
+          }
+
+          // Prepare memory summaries for AI analysis
+          const memorySummaries = entries.map((e) => ({
+            id: e.id,
+            title: e.title,
+            type: e.type,
+            tags: e.tags,
+            preview: e.content.slice(0, 300),
+            scope: (e as any)._scope,
+          }));
+
+          const analysisPrompt = `You are a memory organization assistant. Analyze these memories and suggest groups that can be merged together.
+
+## Memories to analyze:
+${JSON.stringify(memorySummaries, null, 2)}
+
+## Task:
+1. Find memories that cover the same topic, are duplicates, or are closely related
+2. Group them for merging (each group should have 2+ memories)
+3. Suggest a title for each merged memory
+
+## Rules:
+- Only group memories that are truly related
+- Keep distinct topics separate
+- Prefer quality over quantity of groups
+- Session memories can be grouped with notes if they cover the same topic
+
+## Output format (JSON only, no explanation):
+{
+  "groups": [
+    {
+      "ids": ["memory-id-1", "memory-id-2"],
+      "title": "Suggested merged title",
+      "reason": "Brief reason for grouping"
+    }
+  ],
+  "ungrouped": ["memory-ids-that-should-stay-separate"]
+}`;
+
+          // Try providers in order: zhipu -> minimax -> deepseek
+          const providerOrder = ["zhipu", "minimax", "deepseek"];
+          const modelMap: Record<string, string> = {
+            zhipu: "glm-4.7",
+            minimax: "MiniMax-M2.1",
+            deepseek: "deepseek-chat",
+          };
+
+          let analysisResult: any = null;
+          let usedProvider: string | null = null;
+
+          for (const provider of providerOrder) {
+            try {
+              const model = modelMap[provider];
+              if (!model || !isProviderConfigured(loadConfig(), provider)) {
+                continue;
+              }
+
+              const response = await routeByModel(
+                provider,
+                model,
+                [{ role: "user", content: analysisPrompt }],
+                { temperature: 0.1 }
+              );
+
+              const responseText = response.choices[0]?.message?.content ?? "";
+              // Extract JSON from response
+              const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                analysisResult = JSON.parse(jsonMatch[0]);
+                usedProvider = provider;
+                break;
+              }
+            } catch (error) {
+              // Try next provider
+              continue;
+            }
+          }
+
+          if (!analysisResult) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  analyzed: false,
+                  error: "Failed to analyze memories. No AI provider available.",
+                }),
+              }],
+              isError: true,
+            };
+          }
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                analyzed: true,
+                provider: usedProvider,
+                totalMemories: entries.length,
+                suggestedGroups: analysisResult.groups || [],
+                ungrouped: analysisResult.ungrouped || [],
+                message: "Review the suggested groups and call compact_memories with mode='execute' to merge.",
+              }),
+            }],
+          };
+        } else if (mode === "execute") {
+          // Execute the merge for confirmed groups
+          if (!groups || groups.length === 0) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  executed: false,
+                  error: "No groups provided. Use mode='analyze' first to get suggestions.",
+                }),
+              }],
+              isError: true,
+            };
+          }
+
+          const results: Array<{
+            group: string;
+            success: boolean;
+            newId?: string;
+            error?: string;
+          }> = [];
+
+          for (const group of groups) {
+            try {
+              // Fetch all memories in the group
+              const memories = group.ids
+                .map((id) => getMemory(id))
+                .filter((r) => r.success && r.data)
+                .map((r) => r.data!);
+
+              if (memories.length < 2) {
+                results.push({
+                  group: group.title,
+                  success: false,
+                  error: "Not enough valid memories in group",
+                });
+                continue;
+              }
+
+              // Merge content
+              const mergedContent = memories
+                .map((m) => `## ${m.title}\n\n${m.content}`)
+                .join("\n\n---\n\n");
+
+              // Merge tags (unique)
+              const mergedTags = [...new Set(memories.flatMap((m) => m.tags))];
+
+              // Create new merged memory
+              const createResult = createMemory({
+                title: group.title,
+                content: mergedContent,
+                tags: mergedTags,
+                type: "note",
+                scope: targetScope ?? getDefaultWriteScope(),
+              });
+
+              if (!createResult.success) {
+                results.push({
+                  group: group.title,
+                  success: false,
+                  error: createResult.error,
+                });
+                continue;
+              }
+
+              // Delete original memories
+              for (const memory of memories) {
+                deleteMemory(memory.id);
+              }
+
+              results.push({
+                group: group.title,
+                success: true,
+                newId: createResult.data!.id,
+              });
+            } catch (error) {
+              results.push({
+                group: group.title,
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+
+          const successful = results.filter((r) => r.success).length;
+          const failed = results.filter((r) => !r.success).length;
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                executed: true,
+                successful,
+                failed,
+                results,
+                message: `Compacted ${successful} group(s)${failed > 0 ? `, ${failed} failed` : ""}`,
+              }),
+            }],
+          };
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: "Invalid mode. Use 'analyze' or 'execute'.",
+            }),
+          }],
+          isError: true,
         };
       }
 

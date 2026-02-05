@@ -12,7 +12,7 @@
     "prepare": "bun run build:all || echo 'Build skipped (bun not available or already built)'",
     "build": "bun build src/index.ts src/cli.ts --outdir dist --target node --splitting",
     "build:mcp": "bun build src/mcp/background-agent-server/server.ts --outdir dist/mcp --target node",
-    "build:hooks": "bun build src/hooks/comment-checker.ts src/hooks/todo-continuation.ts src/hooks/task-notification.ts src/hooks/task-tracker.ts src/hooks/memory-awareness.ts src/hooks/auto-memory.ts src/hooks/session-logger.ts --outdir dist/hooks --target node",
+    "build:hooks": "bun build src/hooks/comment-checker.ts src/hooks/todo-continuation.ts src/hooks/task-notification.ts src/hooks/task-tracker.ts src/hooks/memory-awareness.ts src/hooks/auto-memory.ts src/hooks/session-logger.ts src/hooks/context-memory.ts --outdir dist/hooks --target node",
     "build:statusline": "bun build src/statusline/statusline.ts --outdir dist/statusline --target node",
     "build:proxy": "bun build src/proxy/server.ts --outdir dist/proxy --target bun",
     "build:all": "bun run build && bun run build:mcp && bun run build:hooks && bun run build:statusline && bun run build:proxy",

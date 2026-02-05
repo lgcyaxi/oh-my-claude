@@ -46,6 +46,18 @@ export const ConcurrencyConfigSchema = z.object({
   per_provider: z.record(z.string(), z.number().min(1).max(20)).optional(),
 });
 
+// Memory configuration schema
+export const MemoryConfigSchema = z.object({
+  /** Default scope for read operations (default: all) */
+  defaultReadScope: z.enum(["project", "global", "all"]).default("all"),
+  /** Default scope for write operations (default: auto - project if available) */
+  defaultWriteScope: z.enum(["project", "global", "auto"]).default("auto"),
+  /** Context threshold percentage for auto-save (0 to disable, default: 75) */
+  autoSaveThreshold: z.number().min(0).max(100).default(75),
+  /** Provider priority for AI-powered features (compaction, summarization) */
+  aiProviderPriority: z.array(z.string()).default(["zhipu", "minimax", "deepseek"]),
+});
+
 // Proxy configuration schema
 export const ProxyConfigSchema = z.object({
   /** Main proxy port (Claude Code connects here) */
@@ -167,6 +179,9 @@ export const OhMyClaudeConfigSchema = z.object({
   // Proxy configuration for live model switching
   proxy: ProxyConfigSchema.optional(),
 
+  // Memory configuration
+  memory: MemoryConfigSchema.optional(),
+
   // Debug settings
   debugTaskTracker: z.boolean().optional(),
   debugHooks: z.boolean().optional(),
@@ -178,6 +193,7 @@ export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export type CategoryConfig = z.infer<typeof CategoryConfigSchema>;
 export type ConcurrencyConfig = z.infer<typeof ConcurrencyConfigSchema>;
 export type ProxyConfig = z.infer<typeof ProxyConfigSchema>;
+export type MemoryConfig = z.infer<typeof MemoryConfigSchema>;
 
 // Default configuration
 export const DEFAULT_CONFIG: OhMyClaudeConfig =

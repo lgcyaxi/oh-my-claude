@@ -9,8 +9,10 @@
 // Types
 export type {
   MemoryType,
+  MemoryScope,
   MemoryEntry,
   MemoryFrontmatter,
+  MemoryStorageInfo,
   MemorySearchOptions,
   MemoryListOptions,
   MemoryStats,
@@ -21,6 +23,10 @@ export type {
 // Store (CRUD)
 export {
   getMemoryDir,
+  getProjectMemoryDir,
+  hasProjectMemory,
+  getMemoryDirForScope,
+  getDefaultWriteScope,
   ensureMemoryDirs,
   createMemory,
   getMemory,

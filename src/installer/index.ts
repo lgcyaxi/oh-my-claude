@@ -9,7 +9,7 @@
  * - Default configuration to ~/.claude/oh-my-claude.json
  */
 
-import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -273,7 +273,20 @@ console.log(JSON.stringify({ decision: "approve" }));
         const builtMcpDir = join(sourceDir, "dist", "mcp");
         const mcpServerPath = getMcpServerPath();
 
+        // Track if this is a file update (binary changed on disk)
+        let binaryUpdated = false;
+
         if (existsSync(builtMcpDir)) {
+          // Check if the binary is being updated (different size or new)
+          const builtServerPath = join(builtMcpDir, "server.js");
+          if (existsSync(builtServerPath) && existsSync(mcpServerPath)) {
+            const builtSize = statSync(builtServerPath).size;
+            const installedSize = statSync(mcpServerPath).size;
+            binaryUpdated = builtSize !== installedSize;
+          } else if (existsSync(builtServerPath)) {
+            binaryUpdated = true; // First install
+          }
+
           cpSync(builtMcpDir, mcpDir, { recursive: true });
         } else {
           // If not built, write placeholder
@@ -292,8 +305,13 @@ process.exit(1);
         // Install MCP server into settings.json
         const mcpResult = installMcpServer(mcpServerPath, options?.force);
         result.mcp.installed = mcpResult ?? false;
-        // Track if it was an update (already existed but force was used)
-        result.mcp.updated = mcpResult && options?.force ? true : false;
+        // Track if it was an update (binary changed or force reinstall)
+        result.mcp.updated = binaryUpdated || (mcpResult && options?.force ? true : false);
+
+        // Warn user if binary was updated but MCP server is likely still running old code
+        if (binaryUpdated && !options?.force) {
+          result.warnings.push("MCP server binary updated. Restart Claude Code to load new features.");
+        }
       } catch (error) {
         result.errors.push(`Failed to install MCP server: ${error}`);
       }

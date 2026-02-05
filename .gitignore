@@ -42,6 +42,9 @@ Thumbs.db
 # oh-my-claude session state
 .sisyphus/
 
+# oh-my-claude project memory (user-specific, not source code)
+.claude/mem/
+
 # lock files (optional - bun.lock is committed)
 # bun.lock
 # package-lock.json

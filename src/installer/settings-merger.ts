@@ -335,6 +335,24 @@ export function installHooks(hooksDir: string, force = false): {
     skipped.push("auto-memory (already installed)");
   }
 
+  // Context-memory hook (PostToolUse — auto-save at context threshold)
+  const contextMemoryResult = addHook(
+    settings,
+    "PostToolUse",
+    ".*",
+    `${nodeCmd} ${hooksDir}/context-memory.js`,
+    force
+  );
+  if (contextMemoryResult) {
+    if (force) {
+      updated.push("context-memory (PostToolUse)");
+    } else {
+      installed.push("context-memory (PostToolUse)");
+    }
+  } else {
+    skipped.push("context-memory (already installed)");
+  }
+
   // Memory awareness hook (UserPromptSubmit — nudges memory recall/remember)
   const memoryResult = addHook(
     settings,

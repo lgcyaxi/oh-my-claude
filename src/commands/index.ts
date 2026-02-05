@@ -20,6 +20,7 @@ export const agentCommands = [
   "omc-start-work",
   "omc-status",
   "omc-switch",
+  "omc-compact",
 ] as const;
 
 // Quick action commands (omcx- prefix)
