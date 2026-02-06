@@ -21,6 +21,8 @@ export const agentCommands = [
   "omc-status",
   "omc-switch",
   "omc-compact",
+  "omc-clear",
+  "omc-summary",
 ] as const;
 
 // Quick action commands (omcx- prefix)

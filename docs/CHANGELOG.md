@@ -4,10 +4,12 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.5.x](changelog/v1.5.x.md) - Beta
 
-**Latest: v1.5.0-beta.3** (2026-02-06)
+**Latest: v1.5.0-beta.4** (2026-02-06)
 
 ### Highlights
 
+- **`/omc-clear` Command** - AI-powered selective memory cleanup: analyzes memories and suggests outdated/redundant ones for deletion with confidence levels
+- **`/omc-summary` Command** - Date-range memory consolidation: collects memories over N days and produces a timeline summary, with optional archival of originals
 - **`doctor --fix-mem`** - Automated memory system repair: copies WASM runtime, rebuilds SQLite index, tests embedding connectivity
 - **WASM Deployment Fix** - Root cause of embeddings not working: `sql-wasm.wasm` was silently skipped during Bun builds. Now fails explicitly and deploys correctly
 - **Doctor Memory Health Check** - `oh-my-claude doctor` now shows memory system health: file count, WASM status, index status, embedding provider connectivity, active search tier
@@ -113,6 +115,7 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v1.5.0-beta.4 | 2026-02-06 | Beta | /omc-clear (selective AI cleanup), /omc-summary (date-range timeline consolidation) |
 | v1.4.2-beta.1 | 2026-02-05 | Beta | npm package fix (dist/ included), Windows compatibility fixes |
 | v1.4.2-beta.0 | 2026-02-05 | Beta | Project-scoped memory, AI compaction, context auto-save, scope-aware MCP tools |
 | v1.4.1 | 2026-02-05 | Patch | README moved to root for npm visibility |

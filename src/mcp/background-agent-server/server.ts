@@ -500,6 +500,101 @@ Returns JSON with suggested groups. Each group shows which memories would merge 
       required: ["mode"],
     },
   },
+  {
+    name: "clear_memories",
+    description: `AI-powered selective memory cleanup. Analyzes memories and identifies outdated, redundant, or irrelevant ones for removal.
+
+Flow:
+1. AI reviews all memories and identifies candidates for deletion (ZhiPu -> MiniMax -> DeepSeek)
+2. Returns deletion candidates with reasons
+3. User confirms which to delete
+4. Call again with 'execute' mode to perform deletion
+
+Unlike forget (which deletes by ID), this uses AI judgment to identify what's no longer needed.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: {
+          type: "string",
+          enum: ["analyze", "execute"],
+          description: "Mode: 'analyze' to get deletion candidates, 'execute' to delete confirmed ones",
+        },
+        scope: {
+          type: "string",
+          enum: ["project", "global", "all"],
+          description: "Which memories to analyze (default: all)",
+        },
+        ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "For 'execute' mode: memory IDs to delete (from analyze results)",
+        },
+      },
+      required: ["mode"],
+    },
+  },
+  {
+    name: "summarize_memories",
+    description: `Consolidate memories from a date range into a single timeline summary.
+
+Flow:
+1. Collects all memories within the specified date range
+2. AI creates a consolidated timeline summary (ZhiPu -> MiniMax -> DeepSeek)
+3. Returns preview of the summary
+4. User confirms to save the summary and optionally archive originals
+
+Use this to condense many fine-grained memories into a single coherent overview.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: {
+          type: "string",
+          enum: ["analyze", "execute"],
+          description: "Mode: 'analyze' to preview summary, 'execute' to save it",
+        },
+        days: {
+          type: "number",
+          description: "Number of past days to include (default: 7). E.g., 7 = last 7 days",
+        },
+        after: {
+          type: "string",
+          description: "Start date (ISO 8601). Overrides 'days' if provided",
+        },
+        before: {
+          type: "string",
+          description: "End date (ISO 8601). Defaults to now",
+        },
+        scope: {
+          type: "string",
+          enum: ["project", "global", "all"],
+          description: "Which memories to include (default: all)",
+        },
+        summary: {
+          type: "string",
+          description: "For 'execute' mode: the AI-generated summary text to save",
+        },
+        title: {
+          type: "string",
+          description: "For 'execute' mode: title for the summary memory",
+        },
+        archiveOriginals: {
+          type: "boolean",
+          description: "For 'execute' mode: whether to delete original memories after saving summary (default: false)",
+        },
+        originalIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "For 'execute' mode: IDs of original memories (for archival)",
+        },
+        targetScope: {
+          type: "string",
+          enum: ["project", "global"],
+          description: "For 'execute' mode: where to save the summary (default: auto-detect)",
+        },
+      },
+      required: ["mode"],
+    },
+  },
   // Proxy switch tools
   {
     name: "switch_model",
@@ -1604,6 +1699,462 @@ ${JSON.stringify(memorySummaries, null, 2)}
                 failed,
                 results,
                 message: `Compacted ${successful} group(s)${failed > 0 ? `, ${failed} failed` : ""}`,
+              }),
+            }],
+          };
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: "Invalid mode. Use 'analyze' or 'execute'.",
+            }),
+          }],
+          isError: true,
+        };
+      }
+
+      case "clear_memories": {
+        const { mode, scope, ids } = args as {
+          mode: "analyze" | "execute";
+          scope?: MemoryScope;
+          ids?: string[];
+        };
+
+        if (mode === "analyze") {
+          const entries = listMemories({ scope: scope ?? "all" }, cachedProjectRoot);
+
+          if (entries.length === 0) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  analyzed: true,
+                  candidates: [],
+                  message: "No memories found to analyze.",
+                }),
+              }],
+            };
+          }
+
+          // Prepare memory summaries for AI analysis
+          const memorySummaries = entries.map((e) => ({
+            id: e.id,
+            title: e.title,
+            type: e.type,
+            tags: e.tags,
+            createdAt: e.createdAt,
+            updatedAt: e.updatedAt,
+            preview: e.content.slice(0, 300),
+            scope: (e as any)._scope,
+          }));
+
+          const analysisPrompt = `You are a memory cleanup assistant. Analyze these memories and identify ones that should be deleted because they are outdated, redundant, or no longer useful.
+
+## Memories to analyze:
+${JSON.stringify(memorySummaries, null, 2)}
+
+## Task:
+1. Identify memories that are outdated (old session logs, stale context)
+2. Identify memories that are redundant (duplicates, superseded by newer info)
+3. Identify memories that are trivial or no longer useful
+4. Provide a clear reason for each deletion candidate
+
+## Rules:
+- Be conservative — only suggest deletion for clearly unneeded memories
+- Session memories older than 14 days are good candidates
+- Keep architectural decisions, conventions, and important patterns
+- Keep memories that document bugs, fixes, or lessons learned
+- If unsure, do NOT suggest deletion
+
+## Output format (JSON only, no explanation):
+{
+  "candidates": [
+    {
+      "id": "memory-id",
+      "title": "Memory Title",
+      "reason": "Why this should be deleted",
+      "confidence": "high" | "medium"
+    }
+  ],
+  "keep": [
+    {
+      "id": "memory-id",
+      "title": "Memory Title",
+      "reason": "Why this should be kept"
+    }
+  ]
+}`;
+
+          // Try providers in order: zhipu -> minimax -> deepseek
+          const providerOrder = ["zhipu", "minimax", "deepseek"];
+          const modelMap: Record<string, string> = {
+            zhipu: "glm-4.7",
+            minimax: "MiniMax-M2.1",
+            deepseek: "deepseek-chat",
+          };
+
+          let analysisResult: any = null;
+          let usedProvider: string | null = null;
+
+          for (const provider of providerOrder) {
+            try {
+              const model = modelMap[provider];
+              if (!model || !isProviderConfigured(loadConfig(), provider)) {
+                continue;
+              }
+
+              const response = await routeByModel(
+                provider,
+                model,
+                [{ role: "user", content: analysisPrompt }],
+                { temperature: 0.1 }
+              );
+
+              const responseText = response.choices[0]?.message?.content ?? "";
+              const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                analysisResult = JSON.parse(jsonMatch[0]);
+                usedProvider = provider;
+                break;
+              }
+            } catch {
+              continue;
+            }
+          }
+
+          if (!analysisResult) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  analyzed: false,
+                  error: "Failed to analyze memories. No AI provider available.",
+                }),
+              }],
+              isError: true,
+            };
+          }
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                analyzed: true,
+                provider: usedProvider,
+                totalMemories: entries.length,
+                candidates: analysisResult.candidates || [],
+                keep: analysisResult.keep || [],
+                message: "Review the deletion candidates and call clear_memories with mode='execute' and ids=[...] to delete.",
+              }),
+            }],
+          };
+        } else if (mode === "execute") {
+          if (!ids || ids.length === 0) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  executed: false,
+                  error: "No IDs provided. Use mode='analyze' first to get candidates.",
+                }),
+              }],
+              isError: true,
+            };
+          }
+
+          // Clean up index if available
+          await ensureIndexer();
+
+          const results: Array<{
+            id: string;
+            success: boolean;
+            title?: string;
+            error?: string;
+          }> = [];
+
+          for (const id of ids) {
+            try {
+              // Get memory info before deletion for reporting
+              const memResult = getMemory(id, "all", cachedProjectRoot);
+              const title = memResult.data?.title ?? id;
+
+              const deleteResult = deleteMemory(id, "all", cachedProjectRoot);
+              if (deleteResult.success) {
+                // Clean index entry
+                if (cachedIndexer) {
+                  try {
+                    cachedIndexer.removeFile(id);
+                  } catch {
+                    // Index cleanup is best-effort
+                  }
+                }
+                results.push({ id, success: true, title });
+              } else {
+                results.push({ id, success: false, title, error: deleteResult.error });
+              }
+            } catch (error) {
+              results.push({
+                id,
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+
+          const deleted = results.filter((r) => r.success).length;
+          const failed = results.filter((r) => !r.success).length;
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                executed: true,
+                deleted,
+                failed,
+                results,
+                message: `Cleared ${deleted} memory(s)${failed > 0 ? `, ${failed} failed` : ""}`,
+              }),
+            }],
+          };
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              error: "Invalid mode. Use 'analyze' or 'execute'.",
+            }),
+          }],
+          isError: true,
+        };
+      }
+
+      case "summarize_memories": {
+        const { mode, days, after, before, scope, summary, title, archiveOriginals, originalIds, targetScope } = args as {
+          mode: "analyze" | "execute";
+          days?: number;
+          after?: string;
+          before?: string;
+          scope?: MemoryScope;
+          summary?: string;
+          title?: string;
+          archiveOriginals?: boolean;
+          originalIds?: string[];
+          targetScope?: "project" | "global";
+        };
+
+        if (mode === "analyze") {
+          // Calculate date range
+          const now = new Date();
+          const endDate = before ?? now.toISOString();
+          let startDate: string;
+
+          if (after) {
+            startDate = after;
+          } else {
+            const daysBack = days ?? 7;
+            const start = new Date(now);
+            start.setDate(start.getDate() - daysBack);
+            startDate = start.toISOString();
+          }
+
+          const entries = listMemories({
+            scope: scope ?? "all",
+            after: startDate,
+            before: endDate,
+          }, cachedProjectRoot);
+
+          if (entries.length === 0) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  analyzed: true,
+                  summary: null,
+                  message: `No memories found in the specified date range (${startDate.slice(0, 10)} to ${endDate.slice(0, 10)}).`,
+                }),
+              }],
+            };
+          }
+
+          // Prepare full memories for AI summarization
+          const memoryDetails = entries.map((e) => ({
+            id: e.id,
+            title: e.title,
+            type: e.type,
+            tags: e.tags,
+            createdAt: e.createdAt,
+            content: e.content.slice(0, 1000),
+            scope: (e as any)._scope,
+          }));
+
+          const dateRangeLabel = `${startDate.slice(0, 10)} to ${endDate.slice(0, 10)}`;
+          const summarizePrompt = `You are a memory summarization assistant. Create a consolidated timeline summary of these memories.
+
+## Date Range: ${dateRangeLabel}
+
+## Memories to summarize:
+${JSON.stringify(memoryDetails, null, 2)}
+
+## Task:
+1. Create a chronological timeline of key events, decisions, and activities
+2. Group related items together
+3. Highlight important decisions and outcomes
+4. Keep the summary concise but comprehensive
+
+## Rules:
+- Use markdown format with date-based sections
+- Preserve important technical details and decisions
+- Merge related session entries into coherent narratives
+- Include key tags from original memories
+- The summary should stand alone — someone reading it should understand the full context
+
+## Output format (JSON only):
+{
+  "title": "Summary: <date range or topic>",
+  "summary": "# Timeline Summary\\n\\n## <Date>\\n\\n- ...",
+  "tags": ["tag1", "tag2"],
+  "memoriesIncluded": <count>
+}`;
+
+          // Try providers in order
+          const providerOrder = ["zhipu", "minimax", "deepseek"];
+          const modelMap: Record<string, string> = {
+            zhipu: "glm-4.7",
+            minimax: "MiniMax-M2.1",
+            deepseek: "deepseek-chat",
+          };
+
+          let summaryResult: any = null;
+          let usedProvider: string | null = null;
+
+          for (const provider of providerOrder) {
+            try {
+              const model = modelMap[provider];
+              if (!model || !isProviderConfigured(loadConfig(), provider)) {
+                continue;
+              }
+
+              const response = await routeByModel(
+                provider,
+                model,
+                [{ role: "user", content: summarizePrompt }],
+                { temperature: 0.3 }
+              );
+
+              const responseText = response.choices[0]?.message?.content ?? "";
+              const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                summaryResult = JSON.parse(jsonMatch[0]);
+                usedProvider = provider;
+                break;
+              }
+            } catch {
+              continue;
+            }
+          }
+
+          if (!summaryResult) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  analyzed: false,
+                  error: "Failed to summarize memories. No AI provider available.",
+                }),
+              }],
+              isError: true,
+            };
+          }
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                analyzed: true,
+                provider: usedProvider,
+                dateRange: dateRangeLabel,
+                memoriesIncluded: entries.length,
+                originalIds: entries.map((e) => e.id),
+                suggestedTitle: summaryResult.title || `Summary: ${dateRangeLabel}`,
+                suggestedSummary: summaryResult.summary || "",
+                suggestedTags: summaryResult.tags || [],
+                message: "Review the summary preview. Call summarize_memories with mode='execute' to save it.",
+              }),
+            }],
+          };
+        } else if (mode === "execute") {
+          if (!summary) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  executed: false,
+                  error: "No summary text provided. Use mode='analyze' first.",
+                }),
+              }],
+              isError: true,
+            };
+          }
+
+          // Create the summary memory
+          const createResult = createMemory({
+            title: title ?? "Timeline Summary",
+            content: summary,
+            tags: ["summary", "timeline"],
+            type: "note",
+            scope: targetScope ?? getDefaultWriteScope(cachedProjectRoot),
+          }, cachedProjectRoot);
+
+          if (!createResult.success) {
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  executed: false,
+                  error: createResult.error ?? "Failed to create summary memory",
+                }),
+              }],
+              isError: true,
+            };
+          }
+
+          let archivedCount = 0;
+          let archiveErrors = 0;
+
+          // Optionally archive (delete) original memories
+          if (archiveOriginals && originalIds && originalIds.length > 0) {
+            await ensureIndexer();
+
+            for (const id of originalIds) {
+              try {
+                const deleteResult = deleteMemory(id, "all", cachedProjectRoot);
+                if (deleteResult.success) {
+                  if (cachedIndexer) {
+                    try { cachedIndexer.removeFile(id); } catch { /* best-effort */ }
+                  }
+                  archivedCount++;
+                } else {
+                  archiveErrors++;
+                }
+              } catch {
+                archiveErrors++;
+              }
+            }
+          }
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                executed: true,
+                summaryId: createResult.data!.id,
+                summaryTitle: title ?? "Timeline Summary",
+                archived: archiveOriginals ? archivedCount : 0,
+                archiveErrors,
+                message: `Summary saved${archiveOriginals ? `. Archived ${archivedCount} original memories` : ""}`,
               }),
             }],
           };

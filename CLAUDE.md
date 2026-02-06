@@ -56,7 +56,7 @@ Commands are defined in `src/commands/`:
 - **Action Commands (`/omcx-*`)**: Quick actions (commit, implement, refactor, docs)
 - **Mode Commands**: `/ulw` (Ultrawork - maximum performance, work until done)
 - **Switch Command**: `/omc-switch` switches models via proxy (shortcuts: ds, ds-r, zp, mm)
-- **Memory Command**: `/omc-compact` AI-assisted memory compaction
+- **Memory Commands**: `/omc-compact` AI-assisted memory compaction, `/omc-clear` selective AI cleanup, `/omc-summary` date-range timeline consolidation
 
 When adding new commands:
 1. Create `.md` file in `src/commands/`
@@ -114,6 +114,8 @@ npm publish --access public
 - `src/hooks/context-memory.ts` - Unified session writer (PostToolUse checkpoint + Stop session-end capture)
 - `src/commands/omc-switch.md` - Slash command for model switching with aliases
 - `src/commands/omc-compact.md` - Slash command for AI-assisted memory compaction
+- `src/commands/omc-clear.md` - Slash command for AI-powered selective memory cleanup
+- `src/commands/omc-summary.md` - Slash command for date-range memory timeline consolidation
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
 
 ## Documentation Convention
