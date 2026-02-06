@@ -56,6 +56,47 @@ export const MemoryConfigSchema = z.object({
   autoSaveThreshold: z.number().min(0).max(100).default(75),
   /** Provider priority for AI-powered features (compaction, summarization) */
   aiProviderPriority: z.array(z.string()).default(["zhipu", "minimax", "deepseek"]),
+  /** Embedding provider configuration for semantic search */
+  embedding: z.object({
+    /** Primary embedding provider (default: zhipu) */
+    provider: z.enum(["zhipu", "openrouter", "none"]).default("zhipu"),
+    /** Embedding model name */
+    model: z.string().default("embedding-3"),
+    /** Fallback provider if primary is unavailable */
+    fallback: z.enum(["openrouter", "none"]).default("openrouter"),
+  }).optional(),
+  /** Markdown chunking configuration for indexing */
+  chunking: z.object({
+    /** Target tokens per chunk (default: 400) */
+    tokens: z.number().min(100).max(2000).default(400),
+    /** Overlap tokens between chunks (default: 80) */
+    overlap: z.number().min(0).max(200).default(80),
+  }).optional(),
+  /** Search configuration */
+  search: z.object({
+    /** Hybrid search (FTS5 + vector) configuration */
+    hybrid: z.object({
+      /** Enable hybrid search when embeddings are available (default: true) */
+      enabled: z.boolean().default(true),
+      /** Weight for vector similarity (default: 0.7) */
+      vectorWeight: z.number().min(0).max(1).default(0.7),
+      /** Weight for FTS5 BM25 text matching (default: 0.3) */
+      textWeight: z.number().min(0).max(1).default(0.3),
+      /** Multiplier for candidate pool size (default: 4) */
+      candidateMultiplier: z.number().min(1).max(10).default(4),
+    }).optional(),
+    /** Maximum characters for recall snippets (default: 300) */
+    snippetMaxChars: z.number().min(100).max(1000).default(300),
+  }).optional(),
+  /** Deduplication configuration */
+  dedup: z.object({
+    /** Skip exact hash matches silently (default: true) */
+    exactHashSkip: z.boolean().default(true),
+    /** Cosine similarity threshold for near-duplicate detection (default: 0.90) */
+    semanticThreshold: z.number().min(0.5).max(1.0).default(0.90),
+    /** Tag near-duplicates for deferred resolution during compact (default: true) */
+    tagAndDefer: z.boolean().default(true),
+  }).optional(),
 });
 
 // Proxy configuration schema

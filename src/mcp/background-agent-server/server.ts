@@ -30,6 +30,8 @@ import {
 } from "./task-manager";
 import { getProvidersStatus, routeByModel } from "../../providers/router";
 import { agents } from "../../agents";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import {
   createMemory,
   getMemory,
@@ -39,8 +41,13 @@ import {
   searchMemories,
   getDefaultWriteScope,
   getProjectMemoryDir,
+  getMemoryDir,
+  MemoryIndexer,
+  resolveEmbeddingProvider,
+  hashContentSync,
+  checkDuplicate,
 } from "../../memory";
-import type { MemoryScope } from "../../memory";
+import type { MemoryScope, EmbeddingProvider } from "../../memory";
 import {
   readSwitchState,
   writeSwitchState,
@@ -373,6 +380,25 @@ Use this to find previously saved knowledge, decisions, or session summaries.`,
     },
   },
   {
+    name: "get_memory",
+    description: "Read the full content of a specific memory by ID. Use this to drill down after recall returns snippets.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "The memory ID to retrieve",
+        },
+        scope: {
+          type: "string",
+          enum: ["project", "global", "all"],
+          description: "Where to search (default: all)",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
     name: "forget",
     description: "Delete a specific memory by its ID. Searches both project and global storage.",
     inputSchema: {
@@ -530,6 +556,80 @@ This routes the next Claude Code response through DeepSeek's reasoner model.`,
     },
   },
 ];
+
+// Cached project root from MCP roots/list (populated at startup)
+// This avoids cwd() dependency for multi-instance project isolation
+let cachedProjectRoot: string | undefined;
+
+// Cached indexer + embedding provider (lazy init on first memory tool call)
+let cachedIndexer: MemoryIndexer | null = null;
+let cachedEmbeddingProvider: EmbeddingProvider | null = null;
+let indexerInitPromise: Promise<void> | null = null;
+
+/**
+ * Lazily initialize the SQLite indexer and embedding provider.
+ * Called before recall/remember/forget/memory_status operations.
+ * Safe to call multiple times — only initializes once.
+ */
+async function ensureIndexer(): Promise<void> {
+  if (cachedIndexer?.isReady()) return;
+  if (indexerInitPromise) {
+    await indexerInitPromise;
+    return;
+  }
+
+  indexerInitPromise = (async () => {
+    try {
+      const dbPath = join(homedir(), ".claude", "oh-my-claude", "memory", "index.db");
+      cachedIndexer = new MemoryIndexer({ dbPath });
+      await cachedIndexer.init();
+
+      // Resolve embedding provider (ZhiPu → OpenRouter → null)
+      cachedEmbeddingProvider = resolveEmbeddingProvider();
+
+      // Sync all memory files into the index
+      const memoryDirs = getMemoryDirsForSync();
+      if (memoryDirs.length > 0) {
+        await cachedIndexer.syncFiles(memoryDirs);
+        await cachedIndexer.flush();
+      }
+
+      const tier = cachedIndexer.isReady() && cachedEmbeddingProvider
+        ? "hybrid"
+        : cachedIndexer.isReady()
+          ? "fts5"
+          : "legacy";
+      console.error(`[oh-my-claude] Indexer ready (tier: ${tier}, embeddings: ${cachedEmbeddingProvider ? "available" : "none"})`);
+    } catch (e) {
+      console.error("[oh-my-claude] Indexer init failed (falling back to legacy search):", e);
+      cachedIndexer = null;
+      cachedEmbeddingProvider = null;
+    }
+  })();
+
+  await indexerInitPromise;
+}
+
+/**
+ * Build the list of memory directories to sync into the index.
+ */
+function getMemoryDirsForSync(): Array<{ path: string; scope: "project" | "global"; projectRoot?: string }> {
+  const dirs: Array<{ path: string; scope: "project" | "global"; projectRoot?: string }> = [];
+
+  // Global memory directory
+  const globalDir = getMemoryDir();
+  dirs.push({ path: globalDir, scope: "global" });
+
+  // Project memory directory (if in a git repo)
+  if (cachedProjectRoot) {
+    const projectDir = getProjectMemoryDir(cachedProjectRoot);
+    if (projectDir) {
+      dirs.push({ path: projectDir, scope: "project", projectRoot: cachedProjectRoot });
+    }
+  }
+
+  return dirs;
+}
 
 // Create server
 const server = new Server(
@@ -947,7 +1047,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        const result = createMemory({ content, title, type, tags, scope });
+        // Initialize indexer for dedup check
+        await ensureIndexer();
+
+        // Dedup check: skip exact duplicates, tag near-duplicates
+        const contentHash = hashContentSync(content);
+        const dedupResult = await checkDuplicate(
+          content,
+          contentHash,
+          cachedIndexer,
+          cachedEmbeddingProvider,
+        );
+
+        if (dedupResult.isDuplicate) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                stored: false,
+                reason: "exact_duplicate",
+                existingId: dedupResult.exactMatch,
+                message: `Exact duplicate of existing memory "${dedupResult.exactMatch}". Skipped.`,
+              }),
+            }],
+          };
+        }
+
+        // Add near-duplicate tag if similar memories found
+        const memTags = [...(tags ?? [])];
+        let nearDupeInfo: { existingId: string; similarity: number } | undefined;
+        if (dedupResult.nearDuplicates.length > 0) {
+          const top = dedupResult.nearDuplicates[0]!;
+          memTags.push(`potential-duplicate:${top.id}`);
+          nearDupeInfo = { existingId: top.id, similarity: top.similarity };
+        }
+
+        const result = createMemory(
+          { content, title, type, tags: memTags, scope },
+          cachedProjectRoot,
+        );
         if (!result.success) {
           return {
             content: [{ type: "text", text: `Error: ${result.error}` }],
@@ -955,8 +1093,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // Determine actual scope used
-        const actualScope = scope ?? getDefaultWriteScope();
+        // Index the new file in the background
+        if (cachedIndexer?.isReady() && result.data) {
+          try {
+            const actualScope = scope ?? getDefaultWriteScope(cachedProjectRoot);
+            const memDir = actualScope === "project" && cachedProjectRoot
+              ? getProjectMemoryDir(cachedProjectRoot)
+              : getMemoryDir();
+            if (memDir) {
+              const subdir = (result.data.type === "session") ? "sessions" : "notes";
+              const filePath = join(memDir, subdir, `${result.data.id}.md`);
+              await cachedIndexer.indexFile(filePath, actualScope, cachedProjectRoot);
+              await cachedIndexer.flush();
+            }
+          } catch (e) {
+            console.error("[oh-my-claude] Post-write indexing failed:", e);
+          }
+        }
+
+        const actualScope = scope ?? getDefaultWriteScope(cachedProjectRoot);
+        const reason = nearDupeInfo ? "near_duplicate_tagged" : "created";
 
         return {
           content: [{
@@ -968,6 +1124,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               type: result.data!.type,
               tags: result.data!.tags,
               scope: actualScope,
+              reason,
+              ...(nearDupeInfo && {
+                nearDuplicate: nearDupeInfo,
+              }),
             }),
           }],
         };
@@ -982,31 +1142,96 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           scope?: MemoryScope;
         };
 
-        const results = searchMemories({
-          query,
-          type,
-          tags,
-          limit: limit ?? 10,
-          sort: "relevance",
-          scope: scope ?? "all",
-        });
+        // Initialize indexer for tiered search
+        await ensureIndexer();
+
+        const results = await searchMemories(
+          {
+            query,
+            type,
+            tags,
+            limit: limit ?? 5,
+            sort: "relevance",
+            scope: scope ?? "all",
+          },
+          cachedProjectRoot,
+          {
+            indexer: cachedIndexer,
+            embeddingProvider: cachedEmbeddingProvider,
+          },
+        );
+
+        // Determine which tier was used
+        const searchTier = results.length > 0
+          ? (results[0]!.searchTier ?? "legacy")
+          : (cachedIndexer?.isReady() && cachedEmbeddingProvider
+              ? "hybrid"
+              : cachedIndexer?.isReady()
+                ? "fts5"
+                : "legacy");
 
         return {
           content: [{
             type: "text",
             text: JSON.stringify({
               count: results.length,
+              searchTier,
               memories: results.map((r) => ({
                 id: r.entry.id,
                 title: r.entry.title,
                 type: r.entry.type,
                 tags: r.entry.tags,
                 score: r.score,
-                matchedFields: r.matchedFields,
-                content: r.entry.content,
-                createdAt: r.entry.createdAt,
+                snippet: r.snippet ?? r.entry.content.slice(0, 300) + (r.entry.content.length > 300 ? "..." : ""),
+                chunkLocation: r.chunkLocation,
                 scope: (r.entry as any)._scope,
+                createdAt: r.entry.createdAt,
               })),
+            }),
+          }],
+        };
+      }
+
+      case "get_memory": {
+        const { id, scope } = args as { id: string; scope?: MemoryScope };
+
+        if (!id) {
+          return {
+            content: [{ type: "text", text: "Error: id is required" }],
+            isError: true,
+          };
+        }
+
+        const memResult = getMemory(id, scope ?? "all", cachedProjectRoot);
+        if (!memResult.success || !memResult.data) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                found: false,
+                error: memResult.error ?? "Memory not found",
+              }),
+            }],
+            isError: true,
+          };
+        }
+
+        const entry = memResult.data;
+        const totalLines = entry.content.split("\n").length;
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              id: entry.id,
+              title: entry.title,
+              type: entry.type,
+              tags: entry.tags,
+              content: entry.content,
+              totalLines,
+              scope: (entry as any)._scope,
+              createdAt: entry.createdAt,
+              updatedAt: entry.updatedAt,
             }),
           }],
         };
@@ -1022,12 +1247,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        const result = deleteMemory(id, scope ?? "all");
+        // Find the memory first to get file path for index cleanup
+        const memToDelete = getMemory(id, scope ?? "all", cachedProjectRoot);
+        const result = deleteMemory(id, scope ?? "all", cachedProjectRoot);
+
+        // Clean up index entries if deletion succeeded
+        let indexCleaned = false;
+        if (result.success && cachedIndexer?.isReady()) {
+          try {
+            // Determine file path from memory scope and ID
+            const entry = memToDelete.data;
+            if (entry) {
+              const entryScope = (entry as any)._scope as string | undefined;
+              const subdir = entry.type === "session" ? "sessions" : "notes";
+
+              if (entryScope === "project" && cachedProjectRoot) {
+                const projDir = getProjectMemoryDir(cachedProjectRoot);
+                if (projDir) {
+                  await cachedIndexer.removeFile(join(projDir, subdir, `${id}.md`));
+                  indexCleaned = true;
+                }
+              } else {
+                await cachedIndexer.removeFile(join(getMemoryDir(), subdir, `${id}.md`));
+                indexCleaned = true;
+              }
+
+              if (indexCleaned) await cachedIndexer.flush();
+            }
+          } catch (e) {
+            console.error("[oh-my-claude] Index cleanup after forget failed:", e);
+          }
+        }
+
         return {
           content: [{
             type: "text",
             text: JSON.stringify({
               deleted: result.success,
+              indexCleaned,
               ...(result.error && { error: result.error }),
             }),
           }],
@@ -1050,7 +1307,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           after,
           before,
           scope: scope ?? "all",
-        });
+        }, cachedProjectRoot);
 
         return {
           content: [{
@@ -1073,8 +1330,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "memory_status": {
-        const stats = getMemoryStats();
-        const projectDir = getProjectMemoryDir();
+        const stats = getMemoryStats(cachedProjectRoot);
+        const projectDir = getProjectMemoryDir(cachedProjectRoot);
+
+        // Get index status if indexer is available
+        let indexStatus: Record<string, any> | undefined;
+        if (cachedIndexer?.isReady()) {
+          try {
+            const idxStats = await cachedIndexer.getStats();
+            const dbPath = join(homedir(), ".claude", "oh-my-claude", "memory", "index.db");
+            const searchTier = cachedEmbeddingProvider ? "hybrid" : "fts5";
+
+            indexStatus = {
+              initialized: true,
+              dbPath,
+              ...idxStats,
+              embeddingProvider: cachedEmbeddingProvider
+                ? `${cachedEmbeddingProvider.name}/${cachedEmbeddingProvider.model}`
+                : null,
+              searchTier,
+            };
+          } catch {
+            indexStatus = { initialized: false };
+          }
+        } else {
+          indexStatus = {
+            initialized: false,
+            searchTier: "legacy",
+          };
+        }
 
         return {
           content: [{
@@ -1082,7 +1366,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify({
               ...stats,
               projectMemoryAvailable: projectDir !== null,
-              defaultWriteScope: getDefaultWriteScope(),
+              defaultWriteScope: getDefaultWriteScope(cachedProjectRoot),
+              indexStatus,
             }),
           }],
         };
@@ -1098,7 +1383,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (mode === "analyze") {
           // Get all memories to analyze
-          const entries = listMemories({ scope: scope ?? "all" });
+          const entries = listMemories({ scope: scope ?? "all" }, cachedProjectRoot);
 
           if (entries.length < 2) {
             return {
@@ -1242,7 +1527,7 @@ ${JSON.stringify(memorySummaries, null, 2)}
             try {
               // Fetch all memories in the group
               const memories = group.ids
-                .map((id) => getMemory(id))
+                .map((id) => getMemory(id, "all", cachedProjectRoot))
                 .filter((r) => r.success && r.data)
                 .map((r) => r.data!);
 
@@ -1269,8 +1554,8 @@ ${JSON.stringify(memorySummaries, null, 2)}
                 content: mergedContent,
                 tags: mergedTags,
                 type: "note",
-                scope: targetScope ?? getDefaultWriteScope(),
-              });
+                scope: targetScope ?? getDefaultWriteScope(cachedProjectRoot),
+              }, cachedProjectRoot);
 
               if (!createResult.success) {
                 results.push({
@@ -1283,7 +1568,7 @@ ${JSON.stringify(memorySummaries, null, 2)}
 
               // Delete original memories
               for (const memory of memories) {
-                deleteMemory(memory.id);
+                deleteMemory(memory.id, "all", cachedProjectRoot);
               }
 
               results.push({
@@ -1494,8 +1779,36 @@ ${JSON.stringify(memorySummaries, null, 2)}
   }
 });
 
+/**
+ * Resolve project root for memory isolation.
+ * The MCP server is spawned per-instance by Claude Code with the project as cwd.
+ * We walk up from cwd to find the .git root, same as store.ts's findProjectRoot().
+ */
+function resolveProjectRoot(): string | undefined {
+  const { existsSync } = require("node:fs");
+  const { join, dirname } = require("node:path");
+  let dir = process.cwd();
+
+  while (true) {
+    if (existsSync(join(dir, ".git"))) {
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return undefined;
+}
+
 // Start server
 async function main() {
+  // Resolve project root at startup for memory isolation
+  cachedProjectRoot = resolveProjectRoot();
+  if (cachedProjectRoot) {
+    console.error(`[oh-my-claude] Project root: ${cachedProjectRoot}`);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 

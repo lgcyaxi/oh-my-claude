@@ -1,35 +1,29 @@
 #!/usr/bin/env node
 /**
- * Context-Memory Hook (PostToolUse)
+ * Unified Context-Memory Hook (PostToolUse + Stop)
  *
- * Automatically captures session memory when session activity indicates
- * significant context usage. Uses session log file size as a proxy for
- * context consumption.
+ * Single session writer that handles both mid-session checkpoints and
+ * session-end capture. Replaces the previous dual-writer setup
+ * (context-memory + auto-memory) that produced duplicate summaries.
  *
- * Uses the same external model pipeline as auto-memory.ts:
- * ZhiPu -> MiniMax -> DeepSeek (configurable in oh-my-claude.json)
+ * Triggers:
+ * - PostToolUse: Fires after each tool call. Saves when session log
+ *   exceeds a configurable threshold (~100KB). Only saves delta since
+ *   last checkpoint.
+ * - Stop: Fires at session end. Has access to transcript + todos from
+ *   StopInput. Only summarizes DELTA since last save. Clears the
+ *   project-scoped session log.
  *
- * Triggers on PostToolUse hook which fires after each tool call.
- * Uses session log file to estimate context growth.
- * Only saves once per threshold crossing (tracks state in temp file).
- *
- * Usage in settings.json:
- * {
- *   "hooks": {
- *     "PostToolUse": [{
- *       "matcher": ".*",
- *       "hooks": [{
- *         "type": "command",
- *         "command": "node ~/.claude/oh-my-claude/hooks/context-memory.js"
- *       }]
- *     }]
- *   }
- * }
+ * All file paths are project-scoped via `cwd` from hook JSON input
+ * to avoid multi-instance contamination.
  */
 
 import { readFileSync, existsSync, writeFileSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
+
+// ---- Input types for different hook events ----
 
 interface PostToolUseInput {
   tool?: string;
@@ -37,7 +31,23 @@ interface PostToolUseInput {
   tool_input?: Record<string, unknown>;
   tool_response?: string;
   conversation_id?: string;
+  cwd?: string;
+  hook_event_name?: string;
 }
+
+interface StopInput {
+  reason?: string;
+  conversation_id?: string;
+  transcript?: string;
+  todos?: Array<{
+    content: string;
+    status: "pending" | "in_progress" | "completed";
+  }>;
+  cwd?: string;
+  hook_event_name?: string;
+}
+
+type HookInput = PostToolUseInput & StopInput;
 
 interface HookResponse {
   decision: "approve" | "block";
@@ -45,7 +55,8 @@ interface HookResponse {
   message?: string;
 }
 
-// Provider priority order (user's preference: zhipu -> minimax -> deepseek)
+// ---- Provider definitions ----
+
 const DEFAULT_PROVIDER_PRIORITY = [
   {
     name: "zhipu",
@@ -67,22 +78,28 @@ const DEFAULT_PROVIDER_PRIORITY = [
   },
 ];
 
-// Default: save when session log exceeds ~100KB (rough proxy for 75% context)
-// Session log grows ~100-200 bytes per tool call, so 100KB ≈ 500-1000 tool calls
+// ---- Constants ----
+
 const DEFAULT_SESSION_LOG_THRESHOLD_KB = 100;
-
-// State file to track if we've already saved for this session
 const STATE_DIR = join(homedir(), ".claude", "oh-my-claude", "state");
-const STATE_FILE = join(STATE_DIR, "context-memory-state.json");
-const SESSION_LOG_PATH = join(homedir(), ".claude", "oh-my-claude", "memory", "sessions", "active-session.jsonl");
 
-interface ContextMemoryState {
-  lastSaveTimestamp: string | null;
-  lastSaveLogSizeKB: number | null;
-  saveCount: number;
-}
+const CHECKPOINT_PROMPT = `You are a session summarizer. Extract KEY LEARNINGS from this coding session that would be useful for future sessions.
 
-const SUMMARIZE_PROMPT = `You are a session summarizer. Extract KEY LEARNINGS from this coding session that would be useful for future sessions.
+Focus on:
+- Architecture decisions and WHY they were made
+- Project conventions and patterns discovered
+- Problems encountered and their solutions
+- User preferences and requirements
+- Key technical details (API patterns, gotchas, workarounds)
+
+Output a concise summary (200-400 words). Use markdown bullet points. Be specific and actionable — another AI reading this should immediately benefit.
+
+Do NOT include:
+- Trivial details or boilerplate
+- Step-by-step implementation details (code is in git)
+- Generic advice`;
+
+const SESSION_END_PROMPT = `You are a session summarizer. This session is ending. Extract the KEY LEARNINGS from the RECENT activity (since the last checkpoint) that would be useful for future sessions.
 
 Focus on:
 - Architecture decisions and WHY they were made
@@ -97,12 +114,56 @@ Do NOT include:
 - Trivial details or boilerplate
 - Step-by-step implementation details (code is in git)
 - Generic advice
+- Content that was already covered in a previous checkpoint`;
 
-NOTE: This is an auto-save triggered by context threshold. Focus on what's been accomplished so far.`;
+// ---- Helpers: project-scoped paths ----
 
-/**
- * Load configuration from oh-my-claude.json
- */
+function shortHash(str: string): string {
+  return createHash("sha256").update(str).digest("hex").slice(0, 8);
+}
+
+function getStateFile(projectCwd?: string): string {
+  const suffix = projectCwd ? `-${shortHash(projectCwd)}` : "";
+  return join(STATE_DIR, `context-memory-state${suffix}.json`);
+}
+
+function getSessionLogPath(projectCwd?: string): string {
+  const suffix = projectCwd ? `-${shortHash(projectCwd)}` : "";
+  return join(homedir(), ".claude", "oh-my-claude", "memory", "sessions", `active-session${suffix}.jsonl`);
+}
+
+// ---- State management ----
+
+interface ContextMemoryState {
+  lastSaveTimestamp: string | null;
+  lastSaveLogSizeKB: number | null;
+  saveCount: number;
+}
+
+function loadState(projectCwd?: string): ContextMemoryState {
+  try {
+    const stateFile = getStateFile(projectCwd);
+    if (existsSync(stateFile)) {
+      const raw = readFileSync(stateFile, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {
+    // Ignore
+  }
+  return { lastSaveTimestamp: null, lastSaveLogSizeKB: null, saveCount: 0 };
+}
+
+function saveState(state: ContextMemoryState, projectCwd?: string): void {
+  try {
+    mkdirSync(STATE_DIR, { recursive: true });
+    writeFileSync(getStateFile(projectCwd), JSON.stringify(state, null, 2), "utf-8");
+  } catch {
+    // Ignore
+  }
+}
+
+// ---- Config ----
+
 function loadConfig(): { threshold: number; providerPriority: string[] } {
   const configPath = join(homedir(), ".claude", "oh-my-claude.json");
   try {
@@ -110,8 +171,6 @@ function loadConfig(): { threshold: number; providerPriority: string[] } {
       const raw = readFileSync(configPath, "utf-8");
       const config = JSON.parse(raw);
       return {
-        // If autoSaveThreshold is 0, disable this feature
-        // Otherwise convert percentage to KB threshold (75% → 100KB)
         threshold: config.memory?.autoSaveThreshold === 0
           ? 0
           : Math.round((config.memory?.autoSaveThreshold ?? 75) * 1.33),
@@ -127,9 +186,6 @@ function loadConfig(): { threshold: number; providerPriority: string[] } {
   };
 }
 
-/**
- * Get ordered providers based on config priority
- */
 function getOrderedProviders(priority: string[]): typeof DEFAULT_PROVIDER_PRIORITY {
   const providerMap = new Map(DEFAULT_PROVIDER_PRIORITY.map((p) => [p.name, p]));
   const ordered: typeof DEFAULT_PROVIDER_PRIORITY = [];
@@ -141,7 +197,6 @@ function getOrderedProviders(priority: string[]): typeof DEFAULT_PROVIDER_PRIORI
     }
   }
 
-  // Add any remaining providers not in priority list
   for (const provider of DEFAULT_PROVIDER_PRIORITY) {
     if (!ordered.includes(provider)) {
       ordered.push(provider);
@@ -151,53 +206,24 @@ function getOrderedProviders(priority: string[]): typeof DEFAULT_PROVIDER_PRIORI
   return ordered;
 }
 
-/**
- * Load state
- */
-function loadState(): ContextMemoryState {
-  try {
-    if (existsSync(STATE_FILE)) {
-      const raw = readFileSync(STATE_FILE, "utf-8");
-      return JSON.parse(raw);
-    }
-  } catch {
-    // Ignore
-  }
-  return { lastSaveTimestamp: null, lastSaveLogSizeKB: null, saveCount: 0 };
-}
+// ---- Session log operations ----
 
-/**
- * Save state
- */
-function saveState(state: ContextMemoryState): void {
+function getSessionLogSizeKB(projectCwd?: string): number {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
-    writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
-  } catch {
-    // Ignore
-  }
-}
-
-/**
- * Get session log file size in KB
- */
-function getSessionLogSizeKB(): number {
-  try {
-    if (!existsSync(SESSION_LOG_PATH)) return 0;
-    const stats = statSync(SESSION_LOG_PATH);
+    const logPath = getSessionLogPath(projectCwd);
+    if (!existsSync(logPath)) return 0;
+    const stats = statSync(logPath);
     return Math.round(stats.size / 1024);
   } catch {
     return 0;
   }
 }
 
-/**
- * Read session log content for summarization
- */
-function readSessionLog(): string {
+function readSessionLog(projectCwd?: string): string {
   try {
-    if (!existsSync(SESSION_LOG_PATH)) return "";
-    const raw = readFileSync(SESSION_LOG_PATH, "utf-8").trim();
+    const logPath = getSessionLogPath(projectCwd);
+    if (!existsSync(logPath)) return "";
+    const raw = readFileSync(logPath, "utf-8").trim();
     if (!raw) return "";
 
     const lines = raw.split("\n").filter(Boolean);
@@ -213,7 +239,6 @@ function readSessionLog(): string {
       }
     }
 
-    // Return last ~8000 chars
     const joined = observations.join("\n");
     return joined.length > 8000 ? "...\n" + joined.slice(-8000) : joined;
   } catch {
@@ -221,9 +246,20 @@ function readSessionLog(): string {
   }
 }
 
-/**
- * Find the first available provider with an API key
- */
+/** Clear session log after session end (project-scoped) */
+function clearSessionLog(projectCwd?: string): void {
+  try {
+    const logPath = getSessionLogPath(projectCwd);
+    if (existsSync(logPath)) {
+      writeFileSync(logPath, "", "utf-8");
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+// ---- Provider operations ----
+
 function findAvailableProvider(providers: typeof DEFAULT_PROVIDER_PRIORITY): (typeof DEFAULT_PROVIDER_PRIORITY)[number] | null {
   for (const provider of providers) {
     const apiKey = process.env[provider.apiKeyEnv];
@@ -234,12 +270,10 @@ function findAvailableProvider(providers: typeof DEFAULT_PROVIDER_PRIORITY): (ty
   return null;
 }
 
-/**
- * Call external model to summarize
- */
 async function callExternalModel(
   provider: (typeof DEFAULT_PROVIDER_PRIORITY)[number],
-  context: string
+  context: string,
+  prompt: string,
 ): Promise<string | null> {
   const apiKey = process.env[provider.apiKeyEnv];
   if (!apiKey) return null;
@@ -258,7 +292,7 @@ async function callExternalModel(
         messages: [
           {
             role: "user",
-            content: `${SUMMARIZE_PROMPT}\n\n---\n\nSession context:\n${context}`,
+            content: `${prompt}\n\n---\n\nSession context:\n${context}`,
           },
         ],
       }),
@@ -281,24 +315,30 @@ async function callExternalModel(
   }
 }
 
-/**
- * Save memory as markdown file
- */
-function saveSessionMemory(summary: string, providerUsed: string, logSizeKB: number): string {
-  // Try project memory first, fallback to global
+// ---- Memory save ----
+
+function saveSessionMemory(
+  summary: string,
+  providerUsed: string,
+  trigger: "checkpoint" | "session-end",
+  logSizeKB: number,
+  projectCwd?: string,
+): string {
   let memoryDir: string;
 
-  // Check for project root (.git)
+  // Find project root from explicit cwd
   let projectRoot: string | null = null;
-  let dir = process.cwd();
-  while (true) {
-    if (existsSync(join(dir, ".git"))) {
-      projectRoot = dir;
-      break;
+  if (projectCwd) {
+    let dir = projectCwd;
+    while (true) {
+      if (existsSync(join(dir, ".git"))) {
+        projectRoot = dir;
+        break;
+      }
+      const parent = join(dir, "..");
+      if (parent === dir) break;
+      dir = parent;
     }
-    const parent = join(dir, "..");
-    if (parent === dir) break; // Reached filesystem root (works on both Unix and Windows)
-    dir = parent;
   }
 
   if (projectRoot) {
@@ -312,15 +352,24 @@ function saveSessionMemory(summary: string, providerUsed: string, logSizeKB: num
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
   const timeStr = now.toISOString().slice(11, 19).replace(/:/g, "");
-  const id = `context-save-${dateStr}-${timeStr}`;
+  const prefix = trigger === "session-end" ? "session" : "context-save";
+  const id = `${prefix}-${dateStr}-${timeStr}`;
+
+  const titleText = trigger === "session-end"
+    ? `Session summary ${dateStr}`
+    : `Context checkpoint ${dateStr} (${logSizeKB}KB log)`;
+
+  const tags = trigger === "session-end"
+    ? `[auto-capture, session-end, ${providerUsed}]`
+    : `[auto-capture, context-threshold, ${providerUsed}]`;
 
   const frontmatter = [
     "---",
-    `title: "Context checkpoint ${dateStr} (${logSizeKB}KB log)"`,
+    `title: "${titleText}"`,
     `type: session`,
-    `tags: [auto-capture, context-threshold, ${providerUsed}]`,
-    `createdAt: "${now.toISOString()}"`,
-    `updatedAt: "${now.toISOString()}"`,
+    `tags: ${tags}`,
+    `created: "${now.toISOString()}"`,
+    `updated: "${now.toISOString()}"`,
     "---",
   ].join("\n");
 
@@ -331,8 +380,187 @@ function saveSessionMemory(summary: string, providerUsed: string, logSizeKB: num
   return filePath;
 }
 
+// ---- Event handlers ----
+
+/**
+ * Handle PostToolUse event: checkpoint save when session log exceeds threshold
+ */
+async function handlePostToolUse(input: HookInput): Promise<HookResponse> {
+  // Skip if this is a memory-related tool (avoid recursion)
+  const toolName = input.tool || input.tool_name || "";
+  if (toolName.includes("memory") || toolName.includes("context-memory")) {
+    return { decision: "approve" };
+  }
+
+  const projectCwd = input.cwd;
+  const config = loadConfig();
+
+  // Skip if threshold is 0 (disabled)
+  if (config.threshold === 0) {
+    return { decision: "approve" };
+  }
+
+  // Get current session log size (project-scoped)
+  const logSizeKB = getSessionLogSizeKB(projectCwd);
+
+  // Skip if below threshold
+  if (logSizeKB < config.threshold) {
+    return { decision: "approve" };
+  }
+
+  // Check if we've already saved recently (project-scoped state)
+  const state = loadState(projectCwd);
+
+  // Skip if we saved at similar or higher log size (with 20KB buffer)
+  if (
+    state.lastSaveLogSizeKB !== null &&
+    logSizeKB <= state.lastSaveLogSizeKB + 20
+  ) {
+    return { decision: "approve" };
+  }
+
+  // Find available provider
+  const providers = getOrderedProviders(config.providerPriority);
+  const provider = findAvailableProvider(providers);
+
+  if (!provider) {
+    return { decision: "approve" };
+  }
+
+  // Build context for summarization (project-scoped log)
+  const sessionLog = readSessionLog(projectCwd);
+
+  if (!sessionLog || sessionLog.length < 500) {
+    return { decision: "approve" };
+  }
+
+  const context = `Session activity log (${logSizeKB}KB, threshold: ${config.threshold}KB):\n\n${sessionLog}`;
+
+  try {
+    const summary = await callExternalModel(provider, context, CHECKPOINT_PROMPT);
+
+    if (summary) {
+      const filePath = saveSessionMemory(summary, provider.name, "checkpoint", logSizeKB, projectCwd);
+
+      saveState({
+        lastSaveTimestamp: new Date().toISOString(),
+        lastSaveLogSizeKB: logSizeKB,
+        saveCount: state.saveCount + 1,
+      }, projectCwd);
+
+      console.error(`[context-memory] Checkpoint saved at ${logSizeKB}KB: ${filePath}`);
+
+      return {
+        decision: "approve",
+        message: `Context memory auto-saved (${logSizeKB}KB activity, via ${provider.name})`,
+      };
+    }
+  } catch (error) {
+    console.error("[context-memory] Checkpoint error:", error);
+  }
+
+  return { decision: "approve" };
+}
+
+/**
+ * Handle Stop event: session-end capture (absorbs auto-memory functionality)
+ * Only summarizes DELTA since last checkpoint. Clears session log.
+ */
+async function handleStop(input: HookInput): Promise<HookResponse> {
+  const projectCwd = input.cwd;
+  const config = loadConfig();
+  const state = loadState(projectCwd);
+
+  // Find available provider
+  const providers = getOrderedProviders(config.providerPriority);
+  const provider = findAvailableProvider(providers);
+
+  if (!provider) {
+    // Clear session log even if no provider (prevent stale accumulation)
+    clearSessionLog(projectCwd);
+    return { decision: "approve" };
+  }
+
+  // Build context from session log + Stop-specific data (transcript, todos)
+  const parts: string[] = [];
+
+  if (input.reason) {
+    parts.push(`Session end reason: ${input.reason}`);
+  }
+
+  if (input.todos && input.todos.length > 0) {
+    parts.push("\nTask list:");
+    for (const todo of input.todos) {
+      const icon =
+        todo.status === "completed" ? "+" : todo.status === "in_progress" ? ">" : "o";
+      parts.push(`  ${icon} [${todo.status}] ${todo.content}`);
+    }
+  }
+
+  // Read session log (delta since last save)
+  const sessionLog = readSessionLog(projectCwd);
+  if (sessionLog) {
+    const maxLen = 6000;
+    const trimmed = sessionLog.length > maxLen
+      ? "...\n" + sessionLog.slice(-maxLen)
+      : sessionLog;
+    parts.push(`\nTool usage timeline:\n${trimmed}`);
+  }
+
+  // Include transcript excerpt if available (unique to Stop event)
+  if (input.transcript) {
+    const maxLen = 4000;
+    const transcript =
+      input.transcript.length > maxLen
+        ? "..." + input.transcript.slice(-maxLen)
+        : input.transcript;
+    parts.push(`\nRecent conversation:\n${transcript}`);
+  }
+
+  const context = parts.join("\n");
+
+  // Skip if too little content (delta is small since last checkpoint)
+  if (context.length < 500) {
+    clearSessionLog(projectCwd);
+    return { decision: "approve" };
+  }
+
+  try {
+    const summary = await callExternalModel(provider, context, SESSION_END_PROMPT);
+
+    if (summary) {
+      const logSizeKB = getSessionLogSizeKB(projectCwd);
+      const filePath = saveSessionMemory(summary, provider.name, "session-end", logSizeKB, projectCwd);
+
+      // Reset state for next session
+      saveState({
+        lastSaveTimestamp: new Date().toISOString(),
+        lastSaveLogSizeKB: 0,
+        saveCount: 0,
+      }, projectCwd);
+
+      // Clear session log (rotate for next session)
+      clearSessionLog(projectCwd);
+
+      console.error(`[context-memory] Session-end saved: ${filePath}`);
+
+      return {
+        decision: "approve",
+        message: `Session memory saved via ${provider.name} (${provider.model})`,
+      };
+    }
+  } catch (error) {
+    console.error("[context-memory] Session-end error:", error);
+  }
+
+  // Clear session log even on failure
+  clearSessionLog(projectCwd);
+  return { decision: "approve" };
+}
+
+// ---- Main entry point ----
+
 async function main() {
-  // Read input from stdin
   let inputData = "";
   try {
     inputData = readFileSync(0, "utf-8");
@@ -346,7 +574,7 @@ async function main() {
     return;
   }
 
-  let input: PostToolUseInput;
+  let input: HookInput;
   try {
     input = JSON.parse(inputData);
   } catch {
@@ -354,91 +582,18 @@ async function main() {
     return;
   }
 
-  // Skip if this is a memory-related tool (avoid recursion)
-  const toolName = input.tool || input.tool_name || "";
-  if (toolName.includes("memory") || toolName.includes("context-memory")) {
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
+  // Detect which hook event triggered this
+  // Stop event has `reason` field; PostToolUse has `tool`/`tool_name`
+  const isStopEvent = input.reason !== undefined || input.hook_event_name === "Stop";
+
+  let response: HookResponse;
+  if (isStopEvent) {
+    response = await handleStop(input);
+  } else {
+    response = await handlePostToolUse(input);
   }
 
-  // Load config
-  const config = loadConfig();
-
-  // Skip if threshold is 0 (disabled)
-  if (config.threshold === 0) {
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
-  }
-
-  // Get current session log size
-  const logSizeKB = getSessionLogSizeKB();
-
-  // Skip if below threshold
-  if (logSizeKB < config.threshold) {
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
-  }
-
-  // Check if we've already saved recently
-  const state = loadState();
-
-  // Skip if we saved at similar or higher log size (with 20KB buffer)
-  if (
-    state.lastSaveLogSizeKB !== null &&
-    logSizeKB <= state.lastSaveLogSizeKB + 20
-  ) {
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
-  }
-
-  // Find available provider
-  const providers = getOrderedProviders(config.providerPriority);
-  const provider = findAvailableProvider(providers);
-
-  if (!provider) {
-    // No provider available - skip silently
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
-  }
-
-  // Build context for summarization
-  const sessionLog = readSessionLog();
-
-  if (!sessionLog || sessionLog.length < 500) {
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
-  }
-
-  const context = `Session activity log (${logSizeKB}KB, threshold: ${config.threshold}KB):\n\n${sessionLog}`;
-
-  // Call external model
-  try {
-    const summary = await callExternalModel(provider, context);
-
-    if (summary) {
-      const filePath = saveSessionMemory(summary, provider.name, logSizeKB);
-
-      // Update state
-      saveState({
-        lastSaveTimestamp: new Date().toISOString(),
-        lastSaveLogSizeKB: logSizeKB,
-        saveCount: state.saveCount + 1,
-      });
-
-      console.error(`[context-memory] Saved at ${logSizeKB}KB: ${filePath}`);
-
-      const response: HookResponse = {
-        decision: "approve",
-        message: `📝 Context memory auto-saved (${logSizeKB}KB activity, via ${provider.name})`,
-      };
-      console.log(JSON.stringify(response));
-      return;
-    }
-  } catch (error) {
-    console.error("[context-memory] Error:", error);
-  }
-
-  console.log(JSON.stringify({ decision: "approve" }));
+  console.log(JSON.stringify(response));
 }
 
 main().catch(() => {

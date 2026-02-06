@@ -113,6 +113,30 @@ export interface MemoryStats {
 }
 
 /**
+ * Search tier indicating which search backend was used
+ */
+export type SearchTier = "hybrid" | "fts5" | "legacy";
+
+/**
+ * Chunk location within a memory file
+ */
+export interface ChunkLocation {
+  file: string;
+  startLine: number;
+  endLine: number;
+}
+
+/**
+ * Index status metadata for a memory entry
+ */
+export interface MemoryIndexStatus {
+  contentHash: string;
+  chunksIndexed: number;
+  embeddingsReady: boolean;
+  potentialDuplicateOf?: string;
+}
+
+/**
  * Result of a memory operation
  */
 export interface MemoryResult<T = void> {

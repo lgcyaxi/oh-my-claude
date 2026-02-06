@@ -17,7 +17,7 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax) v
 - **Official MCP Setup** - One-command installation for Sequential Thinking, MiniMax, and GLM MCPs
 - **Hook Integration** - Code quality checks, todo tracking, and agent monitoring
 - **Output Style Manager** - Switch between built-in and custom output styles via CLI
-- **Memory System** - Persistent markdown-based memory with MCP tools (remember, recall, forget)
+- **Semantic Memory** - Three-tier search (hybrid FTS5+vector, FTS5, legacy) with deduplication and snippet-only recall
 - **Live Model Switching** - HTTP proxy for in-conversation model switching to external providers (DeepSeek, ZhiPu, MiniMax)
 - **Companion Tools** - One-command setup for UI UX Pro Max, CCometixLine, and more
 
@@ -291,7 +291,7 @@ Define your style instructions here...
 
 ## Memory System
 
-oh-my-claude includes a markdown-first memory system that persists knowledge across sessions. Memories are stored as human-readable `.md` files — git-friendly, human-editable, and always rebuildable.
+oh-my-claude includes a markdown-first memory system with semantic search that persists knowledge across sessions. Memories are stored as human-readable `.md` files — git-friendly, human-editable, and always rebuildable. A derivative SQLite index provides FTS5 BM25 search + optional vector similarity for context-efficient recall.
 
 ### Storage Scopes
 
@@ -316,11 +316,12 @@ Both locations have the same structure:
 
 | Tool | Description |
 |------|-------------|
-| `remember` | Store a memory with optional title, type, tags, and scope |
-| `recall` | Search memories by text query with relevance scoring |
-| `forget` | Delete a specific memory by ID |
+| `remember` | Store a memory with dedup check (exact hash skip, near-duplicate tagging) |
+| `recall` | Search memories returning snippets (~300 chars) with relevance scoring |
+| `get_memory` | Read full content of a specific memory (drill-down from recall snippets) |
+| `forget` | Delete a specific memory by ID (also cleans SQLite index) |
 | `list_memories` | Browse memories with type, date, and scope filters |
-| `memory_status` | Show memory store statistics with scope breakdown |
+| `memory_status` | Show memory stats including index health and search tier |
 | `compact_memories` | AI-assisted memory compaction (group related memories) |
 
 ### Slash Commands

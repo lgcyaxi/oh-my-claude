@@ -42,8 +42,12 @@ Thumbs.db
 # oh-my-claude session state
 .sisyphus/
 
-# oh-my-claude project memory (user-specific, not source code)
-.claude/mem/
+# oh-my-claude project memory
+# Notes are git-tracked (curated knowledge)
+# Sessions, index DB, and drafts are gitignored
+.claude/mem/sessions/
+.claude/mem/index.db
+.claude/mem/*.db-journal
 
 # lock files (optional - bun.lock is committed)
 # bun.lock

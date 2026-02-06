@@ -25,7 +25,7 @@ bun test             # Run tests
 - `src/generators/` - Agent .md file generators
 - `src/installer/` - CLI installer
 - `src/styles/` - Output style presets and manager
-- `src/memory/` - Markdown-first memory system (types, store, parser, search) with project/global scopes
+- `src/memory/` - Markdown-first memory system with three-tier semantic search (hybrid/FTS5/legacy), SQLite indexer, embeddings, dedup
 - `src/statusline/` - StatusLine segments and configuration
 - `src/proxy/` - Live model switching HTTP proxy (server, handler, control, state, auth, stream)
 
@@ -96,7 +96,12 @@ npm publish --access public
 - `src/providers/router.ts` - Routes requests to providers (routeByAgent, routeByCategory, routeByModel)
 - `src/mcp/background-agent-server/server.ts` - MCP server implementation
 - `src/styles/index.ts` - Output style manager (list, set, reset, create)
-- `src/memory/index.ts` - Memory system barrel export (store, parser, search)
+- `src/memory/index.ts` - Memory system barrel export (store, parser, search, indexer, embeddings, dedup)
+- `src/memory/indexer.ts` - SQLite index engine (sql.js-fts5 WASM, FTS5, chunking, hash tracking)
+- `src/memory/embeddings.ts` - Embedding provider (ZhiPu primary, OpenRouter fallback)
+- `src/memory/search.ts` - Three-tier search: hybrid (FTS5+vector) > FTS5 > legacy
+- `src/memory/dedup.ts` - Deduplication (exact hash skip + semantic near-dupe detection)
+- `src/memory/hybrid-search.ts` - Hybrid BM25 + vector result merging
 - `src/statusline/config.ts` - StatusLine config and segment management (9 segments)
 - `src/statusline/segments/memory.ts` - Memory statusline segment
 - `src/statusline/segments/proxy.ts` - Proxy statusline segment
@@ -106,7 +111,7 @@ npm publish --access public
 - `src/proxy/state.ts` - Signal file IPC (proxy-switch.json)
 - `src/proxy/auth.ts` - Proxy auth (dual mode: api-key / oauth)
 - `src/hooks/memory-awareness.ts` - UserPromptSubmit hook for proactive memory usage
-- `src/hooks/context-memory.ts` - PostToolUse hook for auto-save at context threshold
+- `src/hooks/context-memory.ts` - Unified session writer (PostToolUse checkpoint + Stop session-end capture)
 - `src/commands/omc-switch.md` - Slash command for model switching with aliases
 - `src/commands/omc-compact.md` - Slash command for AI-assisted memory compaction
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)

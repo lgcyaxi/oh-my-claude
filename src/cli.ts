@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.4.2-beta.1");
+  .version("1.5.0-beta.0");
 
 // Install command
 program

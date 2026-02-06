@@ -318,41 +318,44 @@ export function installHooks(hooksDir: string, force = false): {
     skipped.push("session-logger (already installed)");
   }
 
-  // Auto-memory hook (Stop — captures session learnings via external model)
-  const autoMemoryResult = addHook(
-    settings,
-    "Stop",
-    ".*",
-    `${nodeCmd} "${join(hooksDir, "auto-memory.js")}"`,
-    force
-  );
-  if (autoMemoryResult) {
-    if (force) {
-      updated.push("auto-memory (Stop)");
-    } else {
-      installed.push("auto-memory (Stop)");
-    }
-  } else {
-    skipped.push("auto-memory (already installed)");
-  }
-
-  // Context-memory hook (PostToolUse — auto-save at context threshold)
-  const contextMemoryResult = addHook(
+  // Context-memory hook (PostToolUse — threshold checkpoint auto-save)
+  const contextMemoryPostResult = addHook(
     settings,
     "PostToolUse",
     ".*",
     `${nodeCmd} "${join(hooksDir, "context-memory.js")}"`,
     force
   );
-  if (contextMemoryResult) {
+  if (contextMemoryPostResult) {
     if (force) {
       updated.push("context-memory (PostToolUse)");
     } else {
       installed.push("context-memory (PostToolUse)");
     }
   } else {
-    skipped.push("context-memory (already installed)");
+    skipped.push("context-memory (PostToolUse already installed)");
   }
+
+  // Context-memory hook (Stop — session-end capture, replaces auto-memory)
+  const contextMemoryStopResult = addHook(
+    settings,
+    "Stop",
+    ".*",
+    `${nodeCmd} "${join(hooksDir, "context-memory.js")}"`,
+    force
+  );
+  if (contextMemoryStopResult) {
+    if (force) {
+      updated.push("context-memory (Stop)");
+    } else {
+      installed.push("context-memory (Stop)");
+    }
+  } else {
+    skipped.push("context-memory (Stop already installed)");
+  }
+
+  // Remove legacy auto-memory hook if present (replaced by context-memory Stop)
+  removeHook(settings, "Stop", "auto-memory");
 
   // Memory awareness hook (UserPromptSubmit — nudges memory recall/remember)
   const memoryResult = addHook(

@@ -17,7 +17,7 @@
 - **官方 MCP 一键安装** - 一条命令安装 Sequential Thinking、MiniMax 和 GLM MCP 服务
 - **Hook 集成** - 代码质量检查和待办追踪
 - **输出样式管理器** - 通过 CLI 在内置和自定义输出样式之间切换
-- **记忆系统** - 基于 Markdown 的持久化记忆，支持 MCP 工具（remember、recall、forget）
+- **语义记忆** - 三层搜索架构（混合 FTS5+向量、FTS5、传统），支持去重和摘要式召回
 - **实时模型切换** - HTTP 代理实现对话中模型切换，支持外部供应商（DeepSeek、智谱 GLM、MiniMax）
 - **配套工具** - 一键安装 UI UX Pro Max、CCometixLine 等工具
 
@@ -290,7 +290,7 @@ description: 我的自定义输出样式
 
 ## 记忆系统
 
-oh-my-claude 内置基于 Markdown 的记忆系统，可跨会话持久化知识。记忆以人类可读的 `.md` 文件存储 — 支持 Git 版本控制、手动编辑，索引始终可从源文件重建。
+oh-my-claude 内置语义记忆系统，支持跨会话持久化知识。记忆以人类可读的 `.md` 文件存储 — 支持 Git 版本控制、手动编辑。派生 SQLite 索引提供 FTS5 BM25 搜索 + 可选向量相似度，实现上下文高效召回。
 
 ### 存储结构
 
@@ -304,11 +304,13 @@ oh-my-claude 内置基于 Markdown 的记忆系统，可跨会话持久化知识
 
 | 工具 | 说明 |
 |------|------|
-| `remember` | 存储记忆，可选标题、类型和标签 |
-| `recall` | 按文本查询搜索记忆，支持相关度排序 |
-| `forget` | 按 ID 删除特定记忆 |
-| `list_memories` | 浏览记忆，支持类型和日期过滤 |
-| `memory_status` | 显示记忆存储统计信息 |
+| `remember` | 存储记忆，自动去重检查（哈希精确匹配跳过、近似重复标记） |
+| `recall` | 搜索记忆，返回摘要片段（~300 字符），支持相关度排序 |
+| `get_memory` | 按 ID 读取完整记忆内容（从 recall 摘要深入查看） |
+| `forget` | 按 ID 删除记忆（同时清理 SQLite 索引） |
+| `list_memories` | 浏览记忆，支持类型、日期和范围过滤 |
+| `memory_status` | 显示记忆统计，包括索引健康状态和搜索层级 |
+| `compact_memories` | AI 辅助记忆压缩（分组合并相关记忆） |
 
 ### CLI 命令
 

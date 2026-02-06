@@ -47,10 +47,13 @@ import {
 
 /**
  * Find project root by looking for .git directory
- * Walks up from cwd() until it finds .git or reaches root
+ * Walks up from the given directory (or cwd()) until it finds .git or reaches root.
+ *
+ * @param fromDir - Explicit starting directory. Use this to avoid cwd() dependency.
+ *                  Hooks should pass cwd from JSON input, MCP server should pass roots/list result.
  */
-function findProjectRoot(): string | null {
-  let dir = cwd();
+function findProjectRoot(fromDir?: string): string | null {
+  let dir = fromDir ?? cwd();
   const root = dirname(dir);
 
   while (dir !== root) {
@@ -83,29 +86,35 @@ export function getMemoryDir(): string {
  * Get project memory directory (.claude/mem/)
  * Returns the path even if it doesn't exist yet (for write operations)
  * Returns null if not in a git repo
+ *
+ * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function getProjectMemoryDir(): string | null {
-  const projectRoot = findProjectRoot();
-  if (!projectRoot) return null;
+export function getProjectMemoryDir(projectRoot?: string): string | null {
+  const root = projectRoot ?? findProjectRoot();
+  if (!root) return null;
 
-  return join(projectRoot, ".claude", "mem");
+  return join(root, ".claude", "mem");
 }
 
 /**
  * Check if project memory directory exists
+ *
+ * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function hasProjectMemory(): boolean {
-  const dir = getProjectMemoryDir();
+export function hasProjectMemory(projectRoot?: string): boolean {
+  const dir = getProjectMemoryDir(projectRoot);
   return dir !== null && existsSync(dir);
 }
 
 /**
  * Get memory directories for a specific scope
  * Returns array of paths (project first for ranking priority)
+ *
+ * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function getMemoryDirForScope(scope: MemoryScope): string[] {
+export function getMemoryDirForScope(scope: MemoryScope, projectRoot?: string): string[] {
   const globalDir = getMemoryDir();
-  const projectDir = getProjectMemoryDir();
+  const projectDir = getProjectMemoryDir(projectRoot);
 
   switch (scope) {
     case "project":
@@ -123,10 +132,12 @@ export function getMemoryDirForScope(scope: MemoryScope): string[] {
  * - If .claude/mem/ exists -> project
  * - If in git repo -> project (will create .claude/mem/)
  * - Otherwise -> global
+ *
+ * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function getDefaultWriteScope(): "project" | "global" {
-  if (hasProjectMemory()) return "project";
-  if (findProjectRoot() !== null) return "project";
+export function getDefaultWriteScope(projectRoot?: string): "project" | "global" {
+  if (hasProjectMemory(projectRoot)) return "project";
+  if (findProjectRoot(projectRoot) !== null) return "project";
   return "global";
 }
 
@@ -140,12 +151,14 @@ function getTypeDir(baseDir: string, type: MemoryType): string {
 
 /**
  * Ensure memory directory structure exists for a scope
+ *
+ * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function ensureMemoryDirs(scope?: MemoryScope): void {
+export function ensureMemoryDirs(scope?: MemoryScope, projectRoot?: string): void {
   const targetScope = scope ?? "all";
 
   if (targetScope === "project" || targetScope === "all") {
-    const projectDir = getProjectMemoryDir();
+    const projectDir = getProjectMemoryDir(projectRoot);
     if (projectDir) {
       mkdirSync(join(projectDir, "sessions"), { recursive: true });
       mkdirSync(join(projectDir, "notes"), { recursive: true });
@@ -163,16 +176,19 @@ export function ensureMemoryDirs(scope?: MemoryScope): void {
 
 /**
  * Create a new memory entry
+ *
+ * @param projectRoot - Explicit project root for project-scoped writes.
+ *                      Avoids cwd() dependency when provided.
  */
-export function createMemory(input: CreateMemoryInput): MemoryResult<MemoryEntry> {
+export function createMemory(input: CreateMemoryInput, projectRoot?: string): MemoryResult<MemoryEntry> {
   try {
     // Determine write scope
-    const writeScope = input.scope === "all" ? getDefaultWriteScope() : (input.scope ?? getDefaultWriteScope());
+    const writeScope = input.scope === "all" ? getDefaultWriteScope(projectRoot) : (input.scope ?? getDefaultWriteScope(projectRoot));
 
     // Determine target directory
     let targetDir: string;
     if (writeScope === "project") {
-      const projectDir = getProjectMemoryDir();
+      const projectDir = getProjectMemoryDir(projectRoot);
       if (!projectDir) {
         return {
           success: false,
@@ -229,10 +245,12 @@ export function createMemory(input: CreateMemoryInput): MemoryResult<MemoryEntry
 /**
  * Read a single memory by ID
  * Searches both project and global directories, both sessions/ and notes/
+ *
+ * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function getMemory(id: string, scope: MemoryScope = "all"): MemoryResult<MemoryEntry> {
+export function getMemory(id: string, scope: MemoryScope = "all", projectRoot?: string): MemoryResult<MemoryEntry> {
   try {
-    const dirs = getMemoryDirForScope(scope);
+    const dirs = getMemoryDirForScope(scope, projectRoot);
 
     for (const baseDir of dirs) {
       for (const type of ["session", "note"] as MemoryType[]) {
@@ -242,7 +260,7 @@ export function getMemory(id: string, scope: MemoryScope = "all"): MemoryResult<
           const entry = parseMemoryFile(id, raw);
           if (entry) {
             // Add scope metadata
-            const projectDir = getProjectMemoryDir();
+            const projectDir = getProjectMemoryDir(projectRoot);
             (entry as any)._scope = baseDir === projectDir ? "project" : "global";
             (entry as any)._path = filePath;
             return { success: true, data: entry };
@@ -293,10 +311,12 @@ export function updateMemory(
 /**
  * Delete a memory by ID
  * Searches both project and global directories
+ *
+ * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function deleteMemory(id: string, scope: MemoryScope = "all"): MemoryResult {
+export function deleteMemory(id: string, scope: MemoryScope = "all", projectRoot?: string): MemoryResult {
   try {
-    const dirs = getMemoryDirForScope(scope);
+    const dirs = getMemoryDirForScope(scope, projectRoot);
 
     for (const baseDir of dirs) {
       for (const type of ["session", "note"] as MemoryType[]) {
@@ -316,13 +336,15 @@ export function deleteMemory(id: string, scope: MemoryScope = "all"): MemoryResu
 /**
  * List all memories with optional filtering
  * Supports scope filtering and ranks project memories higher
+ *
+ * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function listMemories(options?: MemoryListOptions): MemoryEntry[] {
+export function listMemories(options?: MemoryListOptions, projectRoot?: string): MemoryEntry[] {
   const entries: MemoryEntry[] = [];
   const types: MemoryType[] = options?.type ? [options.type] : ["session", "note"];
   const scope = options?.scope ?? "all";
-  const dirs = getMemoryDirForScope(scope);
-  const projectDir = getProjectMemoryDir();
+  const dirs = getMemoryDirForScope(scope, projectRoot);
+  const projectDir = getProjectMemoryDir(projectRoot);
 
   for (const baseDir of dirs) {
     const isProjectDir = baseDir === projectDir;
@@ -377,9 +399,11 @@ export function listMemories(options?: MemoryListOptions): MemoryEntry[] {
 /**
  * Get memory store statistics
  * Includes breakdown by scope (project vs global)
+ *
+ * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function getMemoryStats(): MemoryStats {
-  const projectDir = getProjectMemoryDir();
+export function getMemoryStats(projectRoot?: string): MemoryStats {
+  const projectDir = getProjectMemoryDir(projectRoot);
 
   const stats: MemoryStats = {
     total: 0,
