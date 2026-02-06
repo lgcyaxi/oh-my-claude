@@ -4,10 +4,13 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.5.x](changelog/v1.5.x.md) - Beta
 
-**Latest: v1.5.0-beta.1** (2026-02-05)
+**Latest: v1.5.0-beta.3** (2026-02-06)
 
 ### Highlights
 
+- **`doctor --fix-mem`** - Automated memory system repair: copies WASM runtime, rebuilds SQLite index, tests embedding connectivity
+- **WASM Deployment Fix** - Root cause of embeddings not working: `sql-wasm.wasm` was silently skipped during Bun builds. Now fails explicitly and deploys correctly
+- **Doctor Memory Health Check** - `oh-my-claude doctor` now shows memory system health: file count, WASM status, index status, embedding provider connectivity, active search tier
 - **Semantic Memory Search** - Three-tier architecture: Hybrid (FTS5 + vector) → FTS5-only → Legacy, with automatic degradation
 - **SQLite Index Engine** - Pure WASM SQLite (sql.js-fts5) with FTS5 BM25 search, heading-aware chunking, SHA-256 change detection
 - **Embedding Provider** - Explicit selection: custom (Ollama/vLLM/LM Studio), ZhiPu, OpenRouter, or none. Dimension auto-detection for custom endpoints

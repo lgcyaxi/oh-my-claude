@@ -789,6 +789,47 @@ export class MemoryIndexer {
   }
 }
 
+// ---- WASM Resolution (Public) ----
+
+/**
+ * Find the sql-wasm.wasm file across standard locations.
+ * Used by both the MemoryIndexer and the doctor/fix-mem CLI.
+ * Returns the resolved path or null if not found.
+ */
+export function findWasmPath(): string | null {
+  const filename = "sql-wasm.wasm";
+  const candidates: string[] = [];
+
+  // 1. node_modules resolution (dev mode)
+  try {
+    const resolved = require.resolve(`sql.js-fts5/dist/${filename}`);
+    if (resolved) candidates.push(resolved);
+  } catch {
+    try {
+      const { createRequire } = require("node:module");
+      const r = createRequire(import.meta.url);
+      const resolved = r.resolve(`sql.js-fts5/dist/${filename}`);
+      if (resolved) candidates.push(resolved);
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. oh-my-claude install directories
+  const omcDir = join(homedir(), ".claude", "oh-my-claude");
+  candidates.push(join(omcDir, "mcp", filename));
+  candidates.push(join(omcDir, "wasm", filename));
+
+  // 3. Next to the default DB file
+  candidates.push(join(omcDir, "memory", filename));
+
+  for (const p of candidates) {
+    if (p && existsSync(p)) return p;
+  }
+
+  return null;
+}
+
 // ---- Chunking Helpers ----
 
 /**

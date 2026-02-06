@@ -1,6 +1,6 @@
 {
   "name": "@lgcyaxi/oh-my-claude",
-  "version": "1.5.0-beta.1",
+  "version": "1.5.0-beta.3",
   "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
   "type": "module",
   "main": "dist/index.js",
@@ -17,7 +17,7 @@
   "scripts": {
     "prepare": "bun run build:all || echo 'Build skipped (bun not available or already built)'",
     "build": "bun build src/index.ts src/cli.ts --outdir dist --target node --splitting",
-    "build:mcp": "bun build src/mcp/background-agent-server/server.ts --outdir dist/mcp --target node && cp node_modules/sql.js-fts5/dist/sql-wasm.wasm dist/mcp/sql-wasm.wasm 2>/dev/null || copy node_modules\\sql.js-fts5\\dist\\sql-wasm.wasm dist\\mcp\\sql-wasm.wasm 2>nul || echo 'WASM copy skipped'",
+    "build:mcp": "bun build src/mcp/background-agent-server/server.ts --outdir dist/mcp --target node && bun run scripts/copy-wasm.ts",
     "build:hooks": "bun build src/hooks/comment-checker.ts src/hooks/todo-continuation.ts src/hooks/task-notification.ts src/hooks/task-tracker.ts src/hooks/memory-awareness.ts src/hooks/session-logger.ts src/hooks/context-memory.ts --outdir dist/hooks --target node",
     "build:statusline": "bun build src/statusline/statusline.ts --outdir dist/statusline --target node",
     "build:proxy": "bun build src/proxy/server.ts --outdir dist/proxy --target bun",

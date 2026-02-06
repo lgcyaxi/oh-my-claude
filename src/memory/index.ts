@@ -54,7 +54,7 @@ export { searchMemories } from "./search";
 export type { SearchResult } from "./search";
 
 // Indexer (SQLite + FTS5)
-export { MemoryIndexer, chunkMarkdown, hashContent, hashContentSync } from "./indexer";
+export { MemoryIndexer, chunkMarkdown, hashContent, hashContentSync, findWasmPath } from "./indexer";
 export type {
   IndexedFile,
   IndexedChunk,
