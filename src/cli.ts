@@ -61,6 +61,9 @@ program
     if (result.commands.skipped.length > 0) {
       console.log("⊘ Skipped commands:", result.commands.skipped.join(", "));
     }
+    if (result.commands.removed.length > 0) {
+      console.log("  ↳ Removed deprecated:", result.commands.removed.map(c => `/${c}`).join(", "));
+    }
 
     // Report hooks
     if (result.hooks.installed.length > 0) {

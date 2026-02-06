@@ -10,6 +10,7 @@ All notable changes to oh-my-claude are documented here.
 
 - **Command Namespace Reorganization** - Memory commands grouped under `/omc-mem-*` (`compact`, `clear`, `summary`), Ultrawork mode renamed to `/omc-ulw`
 - **`/omc-ulw` Auto-Accept** - Ultrawork mode prompts user to enable auto-accept permissions for uninterrupted execution
+- **Installer Deprecated Command Cleanup** - `install`/`update` removes old renamed commands to prevent duplicates
 - **`/omc-mem-clear` Command** - AI-powered selective memory cleanup: analyzes memories and suggests outdated/redundant ones for deletion with confidence levels
 - **`/omc-mem-summary` Command** - Date-range memory consolidation: collects memories over N days and produces a timeline summary, with optional archival of originals
 - **`doctor --fix-mem`** - Automated memory system repair: copies WASM runtime, rebuilds SQLite index, tests embedding connectivity

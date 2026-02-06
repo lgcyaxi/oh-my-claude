@@ -9,7 +9,7 @@
  * - Default configuration to ~/.claude/oh-my-claude.json
  */
 
-import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -104,7 +104,7 @@ export function getStatusLineScriptPath(): string {
 export interface InstallResult {
   success: boolean;
   agents: { generated: string[]; skipped: string[] };
-  commands: { installed: string[]; skipped: string[] };
+  commands: { installed: string[]; skipped: string[]; removed: string[] };
   hooks: { installed: string[]; updated: string[]; skipped: string[] };
   mcp: { installed: boolean; updated: boolean };
   statusLine: {
@@ -146,7 +146,7 @@ export async function install(options?: {
   const result: InstallResult = {
     success: true,
     agents: { generated: [], skipped: [] },
-    commands: { installed: [], skipped: [] },
+    commands: { installed: [], skipped: [], removed: [] },
     hooks: { installed: [], updated: [], skipped: [] },
     mcp: { installed: false, updated: false },
     statusLine: { installed: false, wrapperCreated: false, updated: false, configCreated: false },
@@ -209,6 +209,25 @@ export async function install(options?: {
               result.commands.installed.push(`${file.replace(".md", "")} (updated)`);
             } else {
               result.commands.installed.push(file.replace(".md", ""));
+            }
+          }
+
+          // Clean up deprecated/renamed command files
+          const deprecatedCommands = [
+            "omc-compact.md",   // renamed → omc-mem-compact.md
+            "omc-clear.md",     // renamed → omc-mem-clear.md
+            "omc-summary.md",   // renamed → omc-mem-summary.md
+            "ulw.md",           // renamed → omc-ulw.md
+          ];
+          for (const deprecated of deprecatedCommands) {
+            const oldPath = join(commandsDir, deprecated);
+            if (existsSync(oldPath)) {
+              try {
+                unlinkSync(oldPath);
+                result.commands.removed.push(deprecated.replace(".md", ""));
+              } catch {
+                // Best-effort cleanup
+              }
             }
           }
         } else {
