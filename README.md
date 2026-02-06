@@ -350,6 +350,45 @@ When you have many memories, use `/omc-compact` to automatically group and merge
 3. You confirm which groups to compact
 4. Creates merged memories and removes originals
 
+### Embedding Provider (Semantic Search)
+
+Semantic search requires an embedding provider. Choose one explicitly in your config:
+
+```json
+{
+  "memory": {
+    "embedding": {
+      "provider": "custom"
+    }
+  }
+}
+```
+
+| Provider | Config Value | Required Env Var | Model |
+|----------|-------------|------------------|-------|
+| **Custom** (Ollama, vLLM, LM Studio, etc.) | `"custom"` (default) | `EMBEDDING_API_BASE` | Any OpenAI-compatible |
+| **ZhiPu** | `"zhipu"` | `ZHIPU_API_KEY` | `embedding-3` (1024d) |
+| **OpenRouter** | `"openrouter"` | `OPENROUTER_API_KEY` | `text-embedding-3-small` (1536d) |
+| **Disabled** | `"none"` | — | FTS5-only search (Tier 2) |
+
+**Custom provider** works with any OpenAI-compatible `/v1/embeddings` endpoint:
+
+```bash
+# Required: endpoint URL (activates custom provider)
+export EMBEDDING_API_BASE=http://localhost:11434/v1
+
+# Optional: model name (default: text-embedding-3-small)
+export EMBEDDING_MODEL=qwen3-embedding
+
+# Optional: API key (not needed for local endpoints like Ollama)
+export EMBEDDING_API_KEY=your-key
+
+# Optional: dimensions (auto-detected via probe call if not set)
+export EMBEDDING_DIMENSIONS=4096
+```
+
+If the selected provider can't initialize (missing env var, connection error), the system degrades to FTS5-only keyword search (Tier 2). No silent fallback to another provider — check MCP stderr logs for clear diagnostics.
+
 ### Auto-Save (Context Threshold)
 
 Configure automatic memory capture when context usage exceeds a threshold:

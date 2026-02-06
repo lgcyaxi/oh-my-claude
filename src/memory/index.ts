@@ -65,6 +65,7 @@ export type {
 
 // Embeddings
 export {
+  createCustomEmbeddingProvider,
   createZhiPuEmbeddingProvider,
   createOpenRouterEmbeddingProvider,
   resolveEmbeddingProvider,

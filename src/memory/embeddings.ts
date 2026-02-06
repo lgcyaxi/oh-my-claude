@@ -2,12 +2,18 @@
  * Embedding Provider
  *
  * Abstraction for vector embeddings used in semantic memory search.
- * Provider cascade: ZhiPu embedding-3 → OpenRouter text-embedding-3-small → null (no embeddings)
+ * Explicit provider selection — configure which provider to use in oh-my-claude config:
  *
- * When no provider is available, the system degrades to FTS5-only search (Tier 2)
- * or legacy in-memory search (Tier 3).
+ *   "custom"     — Any OpenAI-compatible endpoint (Ollama, vLLM, LM Studio, etc.)
+ *                   Activated via EMBEDDING_API_BASE env var
+ *   "zhipu"      — ZhiPu embedding-3 (requires ZHIPU_API_KEY)
+ *   "openrouter"  — OpenRouter text-embedding-3-small (requires OPENROUTER_API_KEY)
+ *   "none"        — Disabled (FTS5-only search, Tier 2)
  *
- * Both providers use the OpenAI-compatible embeddings API format:
+ * When no provider is available or initialization fails, the system degrades
+ * to FTS5-only search (Tier 2) or legacy in-memory search (Tier 3).
+ *
+ * All providers use the OpenAI-compatible embeddings API format:
  *   POST /v1/embeddings { model, input }
  *   → { data: [{ embedding: number[] }] }
  */
@@ -28,12 +34,12 @@ export interface EmbeddingProvider {
 }
 
 export interface EmbeddingConfig {
-  /** Primary provider (default: zhipu) */
-  provider: "zhipu" | "openrouter" | "none";
-  /** Model name */
+  /** Embedding provider to use (explicit selection, no cascade) */
+  provider: "custom" | "zhipu" | "openrouter" | "none";
+  /** Model name (used by zhipu/openrouter; custom uses EMBEDDING_MODEL env) */
   model: string;
-  /** Fallback provider */
-  fallback: "openrouter" | "none";
+  /** Embedding dimensions (optional, auto-detected for custom provider) */
+  dimensions?: number;
 }
 
 // ---- Constants ----
@@ -45,6 +51,14 @@ const ZHIPU_DIMENSIONS = 1024;
 const OPENROUTER_EMBEDDING_URL = "https://openrouter.ai/api/v1/embeddings";
 const OPENROUTER_DEFAULT_MODEL = "text-embedding-3-small";
 const OPENROUTER_DIMENSIONS = 1536;
+
+/** Environment variables for custom embedding provider */
+const CUSTOM_API_BASE_ENV = "EMBEDDING_API_BASE";
+const CUSTOM_MODEL_ENV = "EMBEDDING_MODEL";
+const CUSTOM_API_KEY_ENV = "EMBEDDING_API_KEY";
+const CUSTOM_DIMENSIONS_ENV = "EMBEDDING_DIMENSIONS";
+
+const CUSTOM_DEFAULT_MODEL = "text-embedding-3-small";
 
 /** Max texts per batch API call */
 const MAX_BATCH_SIZE = 20;
@@ -64,6 +78,58 @@ interface EmbeddingResponse {
 }
 
 // ---- Provider Factories ----
+
+/**
+ * Create a custom OpenAI-compatible embedding provider.
+ * Works with Ollama, vLLM, LM Studio, or any OpenAI-compatible endpoint.
+ *
+ * Dimension auto-detection: makes a single API call with a short probe text
+ * to detect the embedding dimensions, unless explicitly set via env or config.
+ */
+export async function createCustomEmbeddingProvider(
+  baseUrl: string,
+  options?: {
+    model?: string;
+    apiKey?: string;
+    dimensions?: number;
+  }
+): Promise<EmbeddingProvider> {
+  const modelName = options?.model ?? CUSTOM_DEFAULT_MODEL;
+  const apiKey = options?.apiKey ?? "";
+  // Normalize URL: strip trailing slash, ensure no double /embeddings
+  const url = baseUrl.replace(/\/+$/, "").replace(/\/embeddings$/, "") + "/embeddings";
+
+  let dims = options?.dimensions ?? 0;
+
+  // Auto-detect dimensions if not provided
+  if (dims === 0) {
+    try {
+      const probeResult = await callEmbeddingAPI(url, apiKey, modelName, [
+        "dimension probe",
+      ]);
+      dims = probeResult[0]!.length;
+    } catch (e) {
+      throw new Error(
+        `Custom embedding provider: dimension auto-detection failed (${e instanceof Error ? e.message : String(e)}). Set EMBEDDING_DIMENSIONS to skip.`
+      );
+    }
+  }
+
+  return {
+    name: "custom",
+    model: modelName,
+    dimensions: dims,
+
+    async embed(text: string): Promise<number[]> {
+      const result = await callEmbeddingAPI(url, apiKey, modelName, [text]);
+      return result[0]!;
+    },
+
+    async embedBatch(texts: string[]): Promise<number[][]> {
+      return batchEmbed(url, apiKey, modelName, texts);
+    },
+  };
+}
 
 /**
  * Create a ZhiPu embedding provider.
@@ -130,59 +196,100 @@ export function createOpenRouterEmbeddingProvider(
 // ---- Provider Resolution ----
 
 /**
- * Resolve the best available embedding provider based on config and API keys.
- * Returns null if no provider is available (degrades to FTS5-only search).
+ * Resolve the embedding provider based on explicit config selection.
+ * No cascade — uses exactly the provider specified in config.
+ * Returns null if provider is "none", misconfigured, or initialization fails.
  *
- * Resolution order:
- * 1. Check primary provider (default: zhipu) — requires ZHIPU_API_KEY env
- * 2. If unavailable, check fallback (default: openrouter) — requires OPENROUTER_API_KEY env
- * 3. If neither available, return null (Tier 2 mode)
+ * Provider types:
+ *   "custom"     → EMBEDDING_API_BASE + EMBEDDING_MODEL env vars
+ *   "zhipu"      → ZHIPU_API_KEY env var
+ *   "openrouter" → OPENROUTER_API_KEY env var
+ *   "none"       → disabled (returns null)
  */
-export function resolveEmbeddingProvider(
+export async function resolveEmbeddingProvider(
   config?: Partial<EmbeddingConfig>
-): EmbeddingProvider | null {
-  const primary = config?.provider ?? "zhipu";
-  const fallback = config?.fallback ?? "openrouter";
+): Promise<EmbeddingProvider | null> {
+  const selected = config?.provider ?? "custom";
+
+  if (selected === "none") {
+    console.error("[oh-my-claude] Embedding provider: none (disabled)");
+    return null;
+  }
+
   const model = config?.model;
+  const dimensions = config?.dimensions;
 
-  // Try primary
-  if (primary !== "none") {
-    const provider = tryCreateProvider(primary, model);
-    if (provider) return provider;
+  const provider = await tryCreateProvider(selected, model, dimensions);
+
+  if (provider) {
+    console.error(
+      `[oh-my-claude] Embedding provider: ${provider.name}/${provider.model} (${provider.dimensions}d)`
+    );
+  } else {
+    console.error(
+      `[oh-my-claude] Embedding provider "${selected}" not available — falling back to FTS5-only (Tier 2)`
+    );
   }
 
-  // Try fallback
-  if (fallback !== "none") {
-    const provider = tryCreateProvider(fallback);
-    if (provider) return provider;
-  }
-
-  return null;
+  return provider;
 }
 
 /**
- * Try to create a provider if its API key is available
+ * Try to create a provider if its credentials are available.
  */
-function tryCreateProvider(
+async function tryCreateProvider(
   name: string,
-  model?: string
-): EmbeddingProvider | null {
+  model?: string,
+  dimensions?: number
+): Promise<EmbeddingProvider | null> {
   switch (name) {
+    case "custom": {
+      const baseUrl = process.env[CUSTOM_API_BASE_ENV];
+      if (!baseUrl || baseUrl.length === 0) {
+        console.error(
+          `[oh-my-claude] Custom embedding provider selected but ${CUSTOM_API_BASE_ENV} not set`
+        );
+        return null;
+      }
+      try {
+        return await createCustomEmbeddingProvider(baseUrl, {
+          model: model ?? process.env[CUSTOM_MODEL_ENV] ?? undefined,
+          apiKey: process.env[CUSTOM_API_KEY_ENV] ?? undefined,
+          dimensions:
+            dimensions ??
+            (process.env[CUSTOM_DIMENSIONS_ENV]
+              ? parseInt(process.env[CUSTOM_DIMENSIONS_ENV], 10)
+              : undefined),
+        });
+      } catch (e) {
+        console.error(
+          `[oh-my-claude] Custom embedding provider failed: ${e instanceof Error ? e.message : String(e)}`
+        );
+        return null;
+      }
+    }
     case "zhipu": {
       const key = process.env.ZHIPU_API_KEY;
-      if (key && key.length > 0) {
-        return createZhiPuEmbeddingProvider(key, model);
+      if (!key || key.length === 0) {
+        console.error(
+          "[oh-my-claude] ZhiPu embedding selected but ZHIPU_API_KEY not set"
+        );
+        return null;
       }
-      return null;
+      return createZhiPuEmbeddingProvider(key, model);
     }
     case "openrouter": {
       const key = process.env.OPENROUTER_API_KEY;
-      if (key && key.length > 0) {
-        return createOpenRouterEmbeddingProvider(key, model);
+      if (!key || key.length === 0) {
+        console.error(
+          "[oh-my-claude] OpenRouter embedding selected but OPENROUTER_API_KEY not set"
+        );
+        return null;
       }
-      return null;
+      return createOpenRouterEmbeddingProvider(key, model);
     }
     default:
+      console.error(`[oh-my-claude] Unknown embedding provider: "${name}"`);
       return null;
   }
 }
@@ -191,7 +298,7 @@ function tryCreateProvider(
 
 /**
  * Call an OpenAI-compatible embeddings API.
- * Both ZhiPu and OpenRouter use the same request/response format.
+ * All providers (custom, ZhiPu, OpenRouter) use the same request/response format.
  */
 async function callEmbeddingAPI(
   url: string,
@@ -199,12 +306,18 @@ async function callEmbeddingAPI(
   model: string,
   input: string[]
 ): Promise<number[][]> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Only add Authorization header if apiKey is non-empty
+  if (apiKey && apiKey.length > 0) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers,
     body: JSON.stringify({ model, input }),
   });
 

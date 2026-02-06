@@ -584,8 +584,9 @@ async function ensureIndexer(): Promise<void> {
       cachedIndexer = new MemoryIndexer({ dbPath });
       await cachedIndexer.init();
 
-      // Resolve embedding provider (ZhiPu → OpenRouter → null)
-      cachedEmbeddingProvider = resolveEmbeddingProvider();
+      // Resolve embedding provider (explicit selection from config)
+      const config = loadConfig();
+      cachedEmbeddingProvider = await resolveEmbeddingProvider(config.memory?.embedding);
 
       // Sync all memory files into the index
       const memoryDirs = getMemoryDirsForSync();
@@ -1251,6 +1252,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const memToDelete = getMemory(id, scope ?? "all", cachedProjectRoot);
         const result = deleteMemory(id, scope ?? "all", cachedProjectRoot);
 
+        // Ensure indexer is ready for cleanup
+        await ensureIndexer();
+
         // Clean up index entries if deletion succeeded
         let indexCleaned = false;
         if (result.success && cachedIndexer?.isReady()) {
@@ -1332,6 +1336,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "memory_status": {
         const stats = getMemoryStats(cachedProjectRoot);
         const projectDir = getProjectMemoryDir(cachedProjectRoot);
+
+        // Ensure indexer is ready for accurate status reporting
+        await ensureIndexer();
 
         // Get index status if indexer is available
         let indexStatus: Record<string, any> | undefined;

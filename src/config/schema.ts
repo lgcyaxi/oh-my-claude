@@ -58,12 +58,12 @@ export const MemoryConfigSchema = z.object({
   aiProviderPriority: z.array(z.string()).default(["zhipu", "minimax", "deepseek"]),
   /** Embedding provider configuration for semantic search */
   embedding: z.object({
-    /** Primary embedding provider (default: zhipu) */
-    provider: z.enum(["zhipu", "openrouter", "none"]).default("zhipu"),
-    /** Embedding model name */
+    /** Embedding provider: "custom" (OpenAI-compatible via EMBEDDING_API_BASE), "zhipu", "openrouter", or "none" */
+    provider: z.enum(["custom", "zhipu", "openrouter", "none"]).default("custom"),
+    /** Embedding model name (for zhipu/openrouter; custom reads EMBEDDING_MODEL env) */
     model: z.string().default("embedding-3"),
-    /** Fallback provider if primary is unavailable */
-    fallback: z.enum(["openrouter", "none"]).default("openrouter"),
+    /** Embedding dimensions (optional, auto-detected for custom provider) */
+    dimensions: z.number().min(64).max(8192).optional(),
   }).optional(),
   /** Markdown chunking configuration for indexing */
   chunking: z.object({

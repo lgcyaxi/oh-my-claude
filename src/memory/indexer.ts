@@ -202,9 +202,18 @@ export class MemoryIndexer {
       const sqlJsModule = await import("sql.js-fts5");
       const initSqlJs = sqlJsModule.default ?? sqlJsModule;
 
-      const SQL = await initSqlJs({
-        locateFile: (file: string) => this.findWasmFile(file),
-      });
+      // Use wasmBinary (pre-read file) instead of locateFile to avoid
+      // Bun treating Windows file paths as URLs (ConnectionRefused error)
+      const wasmPath = this.findWasmFile("sql-wasm.wasm");
+      const initOptions: Record<string, any> = {};
+      if (wasmPath && existsSync(wasmPath)) {
+        initOptions.wasmBinary = readFileSync(wasmPath);
+      } else {
+        // Fallback: let sql.js try its default resolution
+        initOptions.locateFile = (file: string) => this.findWasmFile(file);
+      }
+
+      const SQL = await initSqlJs(initOptions);
 
       // Load existing DB or create new
       if (existsSync(this.options.dbPath)) {

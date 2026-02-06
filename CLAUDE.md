@@ -98,7 +98,7 @@ npm publish --access public
 - `src/styles/index.ts` - Output style manager (list, set, reset, create)
 - `src/memory/index.ts` - Memory system barrel export (store, parser, search, indexer, embeddings, dedup)
 - `src/memory/indexer.ts` - SQLite index engine (sql.js-fts5 WASM, FTS5, chunking, hash tracking)
-- `src/memory/embeddings.ts` - Embedding provider (ZhiPu primary, OpenRouter fallback)
+- `src/memory/embeddings.ts` - Embedding provider (explicit selection: custom/zhipu/openrouter/none, async resolver)
 - `src/memory/search.ts` - Three-tier search: hybrid (FTS5+vector) > FTS5 > legacy
 - `src/memory/dedup.ts` - Deduplication (exact hash skip + semantic near-dupe detection)
 - `src/memory/hybrid-search.ts` - Hybrid BM25 + vector result merging

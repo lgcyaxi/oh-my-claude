@@ -4,13 +4,13 @@ All notable changes to oh-my-claude are documented here.
 
 ## [1.5.x](changelog/v1.5.x.md) - Beta
 
-**Latest: v1.5.0-beta.0** (2026-02-05)
+**Latest: v1.5.0-beta.1** (2026-02-05)
 
 ### Highlights
 
 - **Semantic Memory Search** - Three-tier architecture: Hybrid (FTS5 + vector) → FTS5-only → Legacy, with automatic degradation
 - **SQLite Index Engine** - Pure WASM SQLite (sql.js-fts5) with FTS5 BM25 search, heading-aware chunking, SHA-256 change detection
-- **Embedding Provider** - ZhiPu `embedding-3` primary, OpenRouter fallback, with embedding cache in SQLite
+- **Embedding Provider** - Explicit selection: custom (Ollama/vLLM/LM Studio), ZhiPu, OpenRouter, or none. Dimension auto-detection for custom endpoints
 - **Deduplication** - Exact hash skip + semantic near-duplicate detection via vector cosine similarity
 - **Snippet-Only Recall** - ~200 tokens for 5 results (was ~15k), with `get_memory(id)` drill-down
 - **Project Isolation Fix** - Multi-instance contamination fixed across MCP server, hooks, and session logs
