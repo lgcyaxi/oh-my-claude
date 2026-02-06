@@ -105,13 +105,14 @@ function addHook(
 
   // Extract the hook script filename for precise matching
   // e.g., "node /path/to/oh-my-claude/hooks/auto-memory.js" → "auto-memory.js"
-  // Split on both / and \ to support Windows and Unix paths
-  const scriptFile = command.split(/[/\\]/).pop() ?? command;
+  // Split on both / and \ to support Windows and Unix paths, strip quotes
+  const scriptFile = (command.split(/[/\\]/).pop() ?? command).replace(/"/g, "");
 
   // Check if this SPECIFIC hook already exists (match by script filename, not generic path)
+  // Strip quotes from existing commands too for reliable comparison across path formats
   const existingIndex = settings.hooks[hookType]!.findIndex(
     (h) =>
-      h.hooks.some((hook) => hook.command.endsWith(scriptFile))
+      h.hooks.some((hook) => hook.command.replace(/"/g, "").endsWith(scriptFile))
   );
 
   if (existingIndex !== -1) {
