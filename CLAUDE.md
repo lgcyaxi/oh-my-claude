@@ -52,11 +52,11 @@ oh-my-claude doctor    # Verify configuration
 
 Commands are defined in `src/commands/`:
 
-- **Agent Commands (`/omc-*`)**: Activate specific agents (sisyphus, oracle, librarian, switch, compact, etc.)
+- **Agent Commands (`/omc-*`)**: Activate specific agents (sisyphus, oracle, librarian, switch, etc.)
 - **Action Commands (`/omcx-*`)**: Quick actions (commit, implement, refactor, docs)
-- **Mode Commands**: `/ulw` (Ultrawork - maximum performance, work until done)
+- **Ultrawork Mode**: `/omc-ulw` (maximum performance, auto-accept permissions, work until done)
 - **Switch Command**: `/omc-switch` switches models via proxy (shortcuts: ds, ds-r, zp, mm)
-- **Memory Commands**: `/omc-compact` AI-assisted memory compaction, `/omc-clear` selective AI cleanup, `/omc-summary` date-range timeline consolidation
+- **Memory Commands (`/omc-mem-*`)**: `/omc-mem-compact` AI-assisted compaction, `/omc-mem-clear` selective AI cleanup, `/omc-mem-summary` date-range timeline consolidation
 
 When adding new commands:
 1. Create `.md` file in `src/commands/`
@@ -113,9 +113,9 @@ npm publish --access public
 - `src/hooks/memory-awareness.ts` - UserPromptSubmit hook for proactive memory usage
 - `src/hooks/context-memory.ts` - Unified session writer (PostToolUse checkpoint + Stop session-end capture)
 - `src/commands/omc-switch.md` - Slash command for model switching with aliases
-- `src/commands/omc-compact.md` - Slash command for AI-assisted memory compaction
-- `src/commands/omc-clear.md` - Slash command for AI-powered selective memory cleanup
-- `src/commands/omc-summary.md` - Slash command for date-range memory timeline consolidation
+- `src/commands/omc-mem-compact.md` - Slash command for AI-assisted memory compaction
+- `src/commands/omc-mem-clear.md` - Slash command for AI-powered selective memory cleanup
+- `src/commands/omc-mem-summary.md` - Slash command for date-range memory timeline consolidation
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
 
 ## Documentation Convention

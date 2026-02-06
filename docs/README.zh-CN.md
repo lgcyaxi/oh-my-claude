@@ -96,6 +96,10 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omc-start-work` | 开始执行现有计划 |
 | `/omc-status` | 显示 MCP 后台智能体状态仪表板 |
 | `/omc-switch` | 切换到外部供应商模型（如 `/omc-switch ds-r 3`） |
+| `/omc-mem-compact` | AI 辅助记忆压缩 |
+| `/omc-mem-clear` | AI 驱动选择性记忆清理 |
+| `/omc-mem-summary` | 按日期范围整合记忆为时间线 |
+| `/omc-ulw` | **超级工作模式** - 最高性能，工作到完成 |
 
 ### 快捷操作命令（`/omcx-*`）
 
@@ -107,16 +111,11 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omcx-docs` | 生成或更新文档 |
 | `/omcx-issue` | 向 oh-my-claude GitHub Issues 报告 Bug |
 
-### 模式命令
-
-| 命令 | 描述 |
-|------|------|
-| `/ulw` | **超级工作模式** - 最高性能，工作到完成 |
-
-#### 超级工作模式（`/ulw`）
+#### 超级工作模式（`/omc-ulw`）
 
 超级工作模式激活**最高性能执行**，采用零容忍完成策略：
 
+- **自动权限接受** - 启动前提示用户启用自动接受权限，确保不中断执行
 - **100% 交付** - 不允许部分完成、不允许缩小范围、不允许占位符
 - **激进并行化** - 同时启动多个智能体
 - **强制验证** - 代码编译、测试通过、构建成功
@@ -124,12 +123,13 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 
 **使用方法：**
 ```bash
-/ulw 根据计划实现认证系统
-/ulw 修复代码库中的所有类型错误
-/ulw 为 API 添加全面的测试覆盖
+/omc-ulw 根据计划实现认证系统
+/omc-ulw 修复代码库中的所有类型错误
+/omc-ulw 为 API 添加全面的测试覆盖
 ```
 
 **核心特性：**
+- 启动前请求自动接受权限以实现不间断执行
 - 自动创建全面的待办列表
 - 同步智能体（Task 工具）和异步智能体（MCP）并行使用
 - 每个步骤验证后才标记完成

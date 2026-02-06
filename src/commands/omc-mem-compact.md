@@ -1,4 +1,4 @@
-# /omc-compact
+# /omc-mem-compact
 
 Compact and organize memories using AI-assisted grouping.
 

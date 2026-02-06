@@ -1,4 +1,4 @@
-# /omc-clear
+# /omc-mem-clear
 
 AI-powered selective memory cleanup. Identifies outdated, redundant, or irrelevant memories for removal.
 
@@ -106,13 +106,13 @@ Display message that there are no memories to analyze.
 ## Examples
 
 ```
-User: /omc-clear
+User: /omc-mem-clear
 -> Analyzes all memories and suggests cleanup
 
-User: /omc-clear project
+User: /omc-mem-clear project
 -> Only analyzes project-specific memories
 
-User: /omc-clear global
+User: /omc-mem-clear global
 -> Only analyzes global memories
 ```
 

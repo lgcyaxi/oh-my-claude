@@ -1,4 +1,4 @@
-# /omc-summary
+# /omc-mem-summary
 
 Consolidate memories from a date range into a single timeline summary.
 
@@ -107,16 +107,16 @@ Display message and suggest trying a wider date range.
 ## Examples
 
 ```
-User: /omc-summary
+User: /omc-mem-summary
 -> Summarizes memories from the last 7 days
 
-User: /omc-summary 14
+User: /omc-mem-summary 14
 -> Summarizes memories from the last 14 days
 
-User: /omc-summary 30 project
+User: /omc-mem-summary 30 project
 -> Summarizes project-specific memories from the last 30 days
 
-User: /omc-summary 7 global
+User: /omc-mem-summary 7 global
 -> Summarizes global memories from the last 7 days
 ```
 

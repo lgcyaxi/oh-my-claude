@@ -20,7 +20,7 @@ import { loadConfig } from "./config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("1.5.0-beta.4");
+  .version("1.5.0-beta.5");
 
 // Install command
 program
@@ -1797,7 +1797,7 @@ memoryCmd
 
     // Instructions
     console.log(`${c.bold}How to compact:${c.reset}`);
-    console.log(`  ${c.cyan}1.${c.reset} In Claude Code, use: ${c.green}/omc-compact${c.reset}`);
+    console.log(`  ${c.cyan}1.${c.reset} In Claude Code, use: ${c.green}/omc-mem-compact${c.reset}`);
     console.log(`  ${c.cyan}2.${c.reset} Or use MCP tool: ${c.green}mcp__oh-my-claude-background__compact_memories${c.reset}`);
     console.log();
     console.log(`${c.dim}Compaction uses AI (ZhiPu -> MiniMax -> DeepSeek) to analyze and group related memories.${c.reset}`);

@@ -96,7 +96,10 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omc-start-work` | Begin work on an existing plan |
 | `/omc-status` | Display MCP background agent status dashboard |
 | `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r 3`) |
-| `/omc-compact` | Compact memories with AI-assisted grouping |
+| `/omc-mem-compact` | Compact memories with AI-assisted grouping |
+| `/omc-mem-clear` | AI-powered selective memory cleanup |
+| `/omc-mem-summary` | Consolidate memories into timeline summary |
+| `/omc-ulw` | **Ultrawork Mode** - Maximum performance, work until done |
 
 ### Quick Action Commands (`/omcx-*`)
 
@@ -108,16 +111,11 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omcx-docs` | Generate or update documentation |
 | `/omcx-issue` | Report a bug to oh-my-claude GitHub Issues |
 
-### Mode Commands
-
-| Command | Description |
-|---------|-------------|
-| `/ulw` | **Ultrawork Mode** - Maximum performance, work until done |
-
-#### Ultrawork Mode (`/ulw`)
+#### Ultrawork Mode (`/omc-ulw`)
 
 Ultrawork mode activates **maximum performance execution** with zero-tolerance completion policy:
 
+- **Auto-Accept Permissions** - Prompts user to enable auto-accept before starting
 - **100% Delivery** - No partial completion, no scope reduction, no placeholders
 - **Aggressive Parallelization** - Fire multiple agents simultaneously
 - **Mandatory Verification** - Code compiles, tests pass, build succeeds
@@ -125,12 +123,13 @@ Ultrawork mode activates **maximum performance execution** with zero-tolerance c
 
 **Usage:**
 ```bash
-/ulw implement the authentication system from the plan
-/ulw fix all type errors in the codebase
-/ulw add comprehensive test coverage for the API
+/omc-ulw implement the authentication system from the plan
+/omc-ulw fix all type errors in the codebase
+/omc-ulw add comprehensive test coverage for the API
 ```
 
 **Key Features:**
+- Requests auto-accept permissions before starting for uninterrupted execution
 - Automatically creates comprehensive todo lists
 - Uses sync agents (Task tool) and async agents (MCP) in parallel
 - Verifies each step before marking complete
@@ -328,7 +327,9 @@ Both locations have the same structure:
 
 | Command | Description |
 |---------|-------------|
-| `/omc-compact` | Compact memories with AI-assisted grouping |
+| `/omc-mem-compact` | Compact memories with AI-assisted grouping |
+| `/omc-mem-clear` | AI-powered selective memory cleanup |
+| `/omc-mem-summary` | Consolidate memories into timeline summary |
 
 ### CLI Commands
 
@@ -341,9 +342,9 @@ oh-my-claude memory delete <id>             # Delete a memory
 oh-my-claude memory compact                 # Interactive compaction guide
 ```
 
-### Memory Compaction
+### Memory Management
 
-When you have many memories, use `/omc-compact` to automatically group and merge related memories:
+**Compaction** — use `/omc-mem-compact` to automatically group and merge related memories:
 
 1. AI analyzes all memories (using ZhiPu → MiniMax → DeepSeek)
 2. Suggests merge groups with preview

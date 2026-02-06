@@ -20,9 +20,10 @@ export const agentCommands = [
   "omc-start-work",
   "omc-status",
   "omc-switch",
-  "omc-compact",
-  "omc-clear",
-  "omc-summary",
+  "omc-mem-compact",
+  "omc-mem-clear",
+  "omc-mem-summary",
+  "omc-ulw",
 ] as const;
 
 // Quick action commands (omcx- prefix)
@@ -34,9 +35,8 @@ export const actionCommands = [
   "omcx-issue",
 ] as const;
 
-// Special mode commands
+// Special mode commands (kept for backward compat, but primary names are in agentCommands)
 export const modeCommands = [
-  "ulw", // Ultrawork mode - work until done
 ] as const;
 
 // All commands

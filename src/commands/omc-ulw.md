@@ -1,4 +1,29 @@
-# /ulw - Ultrawork Mode
+# /omc-ulw - Ultrawork Mode
+
+**ULTRAWORK MODE ACTIVATION SEQUENCE**
+
+## Step 0: Permission Setup (CRITICAL)
+
+Before any work begins, you MUST request the user to enable auto-accept permissions so you can work uninterrupted until the task is complete.
+
+**Display this message to the user:**
+```
+ULTRAWORK MODE requires uninterrupted execution.
+
+To enable this, please:
+  1. Press Shift+Tab to open permission settings
+  2. Select "Allow all tools for this session" (or press 'a')
+  3. Confirm to proceed
+
+Alternatively, start Claude Code with: claude --dangerously-skip-permissions
+
+Without auto-accept, Ultrawork Mode will be interrupted by permission prompts.
+Shall I proceed once permissions are enabled?
+```
+
+**Wait for user confirmation before proceeding.** If the user declines auto-accept, acknowledge and proceed anyway but warn that the workflow may be interrupted by permission prompts.
+
+---
 
 **ULTRAWORK MODE ACTIVATED!**
 
@@ -152,7 +177,7 @@ Then execute with maximum intensity until COMPLETE.
 
 ## Arguments
 
-`/ulw [task description]`
+`/omc-ulw [task description]`
 
 - Provide the task you want completed
 - Or use after `/omc-plan` to execute an existing plan with ultrawork intensity
@@ -160,9 +185,9 @@ Then execute with maximum intensity until COMPLETE.
 ## Examples
 
 ```
-/ulw implement the authentication system from the plan
-/ulw fix all type errors in the codebase
-/ulw add comprehensive test coverage for the API
+/omc-ulw implement the authentication system from the plan
+/omc-ulw fix all type errors in the codebase
+/omc-ulw add comprehensive test coverage for the API
 ```
 
 **NOW EXECUTE. NO HALF MEASURES. WORK UNTIL DONE.**
