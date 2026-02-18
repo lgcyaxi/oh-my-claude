@@ -45,9 +45,23 @@ export function registerMenubarCommand(program: Command) {
       }
 
       if (!menubarDir) {
-        console.log(fail("Menubar app not found."));
-        console.log(dimText("The menubar app requires Tauri (Rust) to build."));
-        console.log(dimText("Reinstall oh-my-claude to get the menubar app source."));
+        console.log(fail("Menubar app source not found."));
+        console.log(dimText("The menubar app is not included in the npm package."));
+        console.log(dimText("Clone the repo to build it:"));
+        console.log(`  git clone https://github.com/lgcyaxi/oh-my-claude.git`);
+        console.log(`  cd oh-my-claude/apps/menubar`);
+        console.log(`  bun install && bun run tauri build`);
+        process.exit(1);
+      }
+
+      // Verify tauri.conf.json exists (required for Tauri to recognize the project)
+      const tauriConf = join(menubarDir, "src-tauri", "tauri.conf.json");
+      if (!existsSync(tauriConf)) {
+        console.log(fail("Menubar app source is incomplete (missing tauri.conf.json)."));
+        console.log(dimText("Clone the full repo to build the menubar app:"));
+        console.log(`  git clone https://github.com/lgcyaxi/oh-my-claude.git`);
+        console.log(`  cd oh-my-claude/apps/menubar`);
+        console.log(`  bun install && bun run tauri build`);
         process.exit(1);
       }
 

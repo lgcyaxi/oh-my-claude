@@ -50,12 +50,9 @@ export function generateAgentMarkdown(agent: AgentDefinition): string {
   lines.push(`name: ${agent.name.toLowerCase()}`);
   lines.push(`description: ${escapeYamlString(agent.description)}`);
 
-  // Add tools - Task agents get full tool access, MCP agents get read-only tools
-  if (agent.executionMode === "task") {
-    lines.push("tools: Read, Glob, Grep, Bash, Edit, Write, Task, WebFetch, WebSearch");
-  } else {
-    lines.push("tools: Read, Glob, Grep, Bash, Edit, Write");
-  }
+  // All agents get full tool access — both Task and MCP agents can be spawned
+  // via subagent_type in the Task tool, which needs all tools for implementation
+  lines.push("tools: Read, Glob, Grep, Bash, Edit, Write, Task, WebFetch, WebSearch");
 
   lines.push("---");
   lines.push("");
