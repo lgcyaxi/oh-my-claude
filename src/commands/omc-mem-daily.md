@@ -109,6 +109,7 @@ Use mcp__oh-my-claude-background__summarize_memories with:
 - archiveOriginals: true (delete the original session files)
 - originalIds: <list of session IDs from that day>
 - targetScope: project (prefer project scope)
+- createdAt: "YYYY-MM-DDT00:00:00.000Z" (use the narrative's date, not today's date — this ensures the memory ID is `YYYY-MM-DD-daily-narrative` instead of `today-daily-narrative-YYYY-MM-DD`)
 ```
 
 **Step 6: Show results**

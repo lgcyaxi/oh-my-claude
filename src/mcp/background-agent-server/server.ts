@@ -730,6 +730,10 @@ Use this to condense many fine-grained memories into a single coherent overview.
           enum: ["note", "session"],
           description: "For 'execute' mode: memory type for the saved summary (default: note)",
         },
+        createdAt: {
+          type: "string",
+          description: "For 'execute' mode: override the date used in the memory ID (ISO 8601 or YYYY-MM-DD). If omitted, auto-detects from title (e.g., 'Daily Narrative: 2026-02-14' → 2026-02-14).",
+        },
       },
       required: ["mode"],
     },
@@ -2384,7 +2388,7 @@ ${JSON.stringify(memorySummaries, null, 2)}
       }
 
       case "summarize_memories": {
-        const { mode, days, after, before, scope, summary, title, tags: executeTags, archiveOriginals, originalIds, targetScope, type, narrative, dateRange, outputType } = args as {
+        const { mode, days, after, before, scope, summary, title, tags: executeTags, archiveOriginals, originalIds, targetScope, type, narrative, dateRange, outputType, createdAt: explicitCreatedAt } = args as {
           mode: "analyze" | "execute";
           days?: number;
           after?: string;
@@ -2400,6 +2404,7 @@ ${JSON.stringify(memorySummaries, null, 2)}
           narrative?: boolean;  // Use narrative format for daily consolidation
           dateRange?: { start: string; end: string };  // Specific date range for daily narrative
           outputType?: "note" | "session";  // Memory type for the saved summary
+          createdAt?: string;  // Override date used in memory ID
         };
 
         // Parse originalIds properly - MCP sometimes passes arrays as JSON strings
@@ -2632,12 +2637,24 @@ Aim for 8-20 specific, searchable tags.
           const summaryTags = executeTags && executeTags.length > 0
             ? executeTags
             : ["summary", "timeline"];
+
+          // Resolve createdAt: explicit param > auto-detect from title > now
+          let resolvedCreatedAt = explicitCreatedAt;
+          if (!resolvedCreatedAt && title) {
+            // Auto-detect date from title like "Daily Narrative: 2026-02-14"
+            const dateMatch = title.match(/(\d{4}-\d{2}-\d{2})/);
+            if (dateMatch) {
+              resolvedCreatedAt = `${dateMatch[1]}T00:00:00.000Z`;
+            }
+          }
+
           const createResult = createMemory({
             title: title ?? "Timeline Summary",
             content: summary,
             tags: summaryTags,
             type: outputType ?? "note",
             scope: targetScope ?? getDefaultWriteScope(cachedProjectRoot),
+            ...(resolvedCreatedAt ? { createdAt: resolvedCreatedAt } : {}),
           }, cachedProjectRoot);
 
           if (!createResult.success) {
