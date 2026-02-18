@@ -133,6 +133,21 @@ export async function installFromGitHub(
       timeout: 120000, // 2 minute timeout
     });
 
+    // Build dist/ in the global install directory
+    // GitHub tarballs contain source only — the prepare script may silently
+    // skip the build if bun is not in npm's PATH, leaving dist/ empty.
+    const globalRoot = execSync("npm root -g", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    const globalPkgDir = join(globalRoot, "@lgcyaxi", "oh-my-claude");
+
+    if (!existsSync(join(globalPkgDir, "dist", "cli.js"))) {
+      console.log("Building from source (dist/ not found)...");
+      execSync("bun run build:all", {
+        cwd: globalPkgDir,
+        stdio: "inherit",
+        timeout: 120000,
+      });
+    }
+
     // Try to resolve the actual commit SHA for the ref
     let resolvedRef = ref;
     try {

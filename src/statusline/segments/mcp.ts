@@ -44,7 +44,7 @@ const PROVIDER_ABBREV: Record<string, string> = {
   deepseek: "DS",
   zhipu: "ZP",
   minimax: "MM",
-  openrouter: "OR",
+  kimi: "KM",
 };
 
 // Model name abbreviations
@@ -54,9 +54,10 @@ const MODEL_ABBREV: Record<string, string> = {
   haiku: "H",
   "deepseek-reasoner": "R",
   "deepseek-chat": "C",
-  "glm-4.7": "G4",
+  "GLM-5": "G5",
   "glm-4v-flash": "V",
-  "minimax-m2.1": "M2",
+  "minimax-m2.5": "M2",
+  "k2.5": "K2",
 };
 
 interface ActiveTask {
@@ -223,6 +224,7 @@ async function collectMcpData(context: SegmentContext): Promise<SegmentData | nu
       taskCount: String(taskCount),
       tasks: JSON.stringify(data.activeTasks),
       concurrency: data.concurrency ? JSON.stringify(data.concurrency) : "",
+      newLine: "true",
     },
     color,
   };

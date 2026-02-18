@@ -11,20 +11,10 @@ export interface ProxySwitchState {
   switched: boolean;
   /** Provider name (e.g., "deepseek", "zhipu", "minimax") */
   provider?: string;
-  /** Model name (e.g., "deepseek-reasoner", "glm-4.7") */
+  /** Model name (e.g., "deepseek-reasoner", "GLM-5") */
   model?: string;
-  /** Remaining requests before auto-revert (0 = unlimited, use timeout) */
-  requestsRemaining: number;
   /** Timestamp when the switch was activated */
   switchedAt?: number;
-  /** Timestamp when the switch auto-reverts */
-  timeoutAt?: number;
-  /**
-   * Number of initial requests to skip before counting.
-   * Accounts for slash command overhead (MCP tool call + confirmation response).
-   * When > 0, decrementAndCheck() decrements this instead of requestsRemaining.
-   */
-  skipInitialRequests?: number;
 }
 
 /** Proxy server configuration */
@@ -33,10 +23,6 @@ export interface ProxyConfig {
   port: number;
   /** Control API port (health/status/switch endpoints) */
   controlPort: number;
-  /** Default number of requests per switch (1 = single-shot) */
-  defaultRequests: number;
-  /** Default timeout in ms before auto-revert (600000 = 10 min) */
-  defaultTimeoutMs: number;
   /** Whether the proxy feature is enabled */
   enabled: boolean;
 }
@@ -67,13 +53,10 @@ export interface ForwardOptions {
 export const DEFAULT_PROXY_CONFIG: ProxyConfig = {
   port: 18910,
   controlPort: 18911,
-  defaultRequests: 1,
-  defaultTimeoutMs: 600_000, // 10 minutes
   enabled: false,
 };
 
 /** Default switch state (passthrough mode) */
 export const DEFAULT_SWITCH_STATE: ProxySwitchState = {
   switched: false,
-  requestsRemaining: 0,
 };

@@ -5,11 +5,12 @@
  * - Agent .md files to ~/.claude/agents/
  * - Slash commands to ~/.claude/commands/
  * - Hook scripts to ~/.claude/oh-my-claude/hooks/
+ * - Scripts to ~/.claude/oh-my-claude/scripts/ (for auth login scripts)
  * - MCP server configuration to ~/.claude/settings.json
  * - Default configuration to ~/.claude/oh-my-claude.json
  */
 
-import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, cpSync, readdirSync, statSync, unlinkSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -104,7 +105,7 @@ export function getStatusLineScriptPath(): string {
 export interface InstallResult {
   success: boolean;
   agents: { generated: string[]; skipped: string[] };
-  commands: { installed: string[]; skipped: string[] };
+  commands: { installed: string[]; skipped: string[]; removed: string[] };
   hooks: { installed: string[]; updated: string[]; skipped: string[] };
   mcp: { installed: boolean; updated: boolean };
   statusLine: {
@@ -146,7 +147,7 @@ export async function install(options?: {
   const result: InstallResult = {
     success: true,
     agents: { generated: [], skipped: [] },
-    commands: { installed: [], skipped: [] },
+    commands: { installed: [], skipped: [], removed: [] },
     hooks: { installed: [], updated: [], skipped: [] },
     mcp: { installed: false, updated: false },
     statusLine: { installed: false, wrapperCreated: false, updated: false, configCreated: false },
@@ -211,6 +212,26 @@ export async function install(options?: {
               result.commands.installed.push(file.replace(".md", ""));
             }
           }
+
+          // Clean up deprecated/renamed command files
+          const deprecatedCommands = [
+            "omc-compact.md",   // renamed → omc-mem-compact.md
+            "omc-clear.md",     // renamed → omc-mem-clear.md
+            "omc-summary.md",   // renamed → omc-mem-summary.md
+            "ulw.md",           // renamed → omc-ulw.md
+            "omc-team.md",      // removed — use native Agent Teams
+          ];
+          for (const deprecated of deprecatedCommands) {
+            const oldPath = join(commandsDir, deprecated);
+            if (existsSync(oldPath)) {
+              try {
+                unlinkSync(oldPath);
+                result.commands.removed.push(deprecated.replace(".md", ""));
+              } catch {
+                // Best-effort cleanup
+              }
+            }
+          }
         } else {
           result.errors.push(`Commands source directory not found: ${srcCommandsDir}`);
         }
@@ -261,6 +282,37 @@ console.log(JSON.stringify({ decision: "approve" }));
       }
     }
 
+    // 3b. Install scripts (for auth login scripts, etc.)
+    try {
+      const scriptsDir = join(installDir, "scripts");
+      if (!existsSync(scriptsDir)) {
+        mkdirSync(scriptsDir, { recursive: true });
+      }
+
+      // Copy scripts from source (directly from scripts/ since these are source files)
+      const sourceScriptsDir = join(sourceDir, "scripts");
+      if (existsSync(sourceScriptsDir)) {
+        cpSync(sourceScriptsDir, scriptsDir, { recursive: true });
+      }
+    } catch (error) {
+      result.errors.push(`Failed to install scripts: ${error}`);
+    }
+
+    // 3c. Install node_modules (for playwright and other runtime deps)
+    try {
+      const sourceNodeModules = join(sourceDir, "node_modules", "playwright");
+      const targetNodeModules = join(installDir, "node_modules", "playwright");
+
+      if (existsSync(sourceNodeModules)) {
+        if (!existsSync(join(installDir, "node_modules"))) {
+          mkdirSync(join(installDir, "node_modules"), { recursive: true });
+        }
+        cpSync(sourceNodeModules, targetNodeModules, { recursive: true });
+      }
+    } catch (error) {
+      result.errors.push(`Failed to install node_modules: ${error}`);
+    }
+
     // 3. Install MCP server
     if (!options?.skipMcp) {
       try {
@@ -273,7 +325,20 @@ console.log(JSON.stringify({ decision: "approve" }));
         const builtMcpDir = join(sourceDir, "dist", "mcp");
         const mcpServerPath = getMcpServerPath();
 
+        // Track if this is a file update (binary changed on disk)
+        let binaryUpdated = false;
+
         if (existsSync(builtMcpDir)) {
+          // Check if the binary is being updated (different size or new)
+          const builtServerPath = join(builtMcpDir, "server.js");
+          if (existsSync(builtServerPath) && existsSync(mcpServerPath)) {
+            const builtSize = statSync(builtServerPath).size;
+            const installedSize = statSync(mcpServerPath).size;
+            binaryUpdated = builtSize !== installedSize;
+          } else if (existsSync(builtServerPath)) {
+            binaryUpdated = true; // First install
+          }
+
           cpSync(builtMcpDir, mcpDir, { recursive: true });
         } else {
           // If not built, write placeholder
@@ -292,8 +357,13 @@ process.exit(1);
         // Install MCP server into settings.json
         const mcpResult = installMcpServer(mcpServerPath, options?.force);
         result.mcp.installed = mcpResult ?? false;
-        // Track if it was an update (already existed but force was used)
-        result.mcp.updated = mcpResult && options?.force ? true : false;
+        // Track if it was an update (binary changed or force reinstall)
+        result.mcp.updated = binaryUpdated || (mcpResult && options?.force ? true : false);
+
+        // Warn user if binary was updated but MCP server is likely still running old code
+        if (binaryUpdated && !options?.force) {
+          result.warnings.push("MCP server binary updated. Restart Claude Code to load new features.");
+        }
       } catch (error) {
         result.errors.push(`Failed to install MCP server: ${error}`);
       }
@@ -357,6 +427,40 @@ process.exit(1);
       }
     }
 
+    // 4a2. Install CLI dist (keeps ~/.claude/oh-my-claude/dist/cli.js current)
+    try {
+      const cliDistDir = join(installDir, "dist");
+      if (!existsSync(cliDistDir)) {
+        mkdirSync(cliDistDir, { recursive: true });
+      }
+
+      const builtCliPath = join(sourceDir, "dist", "cli.js");
+      const installedCliPath = join(cliDistDir, "cli.js");
+      if (existsSync(builtCliPath)) {
+        copyFileSync(builtCliPath, installedCliPath);
+      }
+
+      // Also copy index.js (library entry point)
+      const builtIndexPath = join(sourceDir, "dist", "index.js");
+      const installedIndexPath = join(cliDistDir, "index.js");
+      if (existsSync(builtIndexPath)) {
+        copyFileSync(builtIndexPath, installedIndexPath);
+      }
+
+      // Copy WASM assets
+      const distDir = join(sourceDir, "dist");
+      if (existsSync(distDir)) {
+        for (const file of readdirSync(distDir)) {
+          if (file.endsWith(".wasm")) {
+            copyFileSync(join(distDir, file), join(cliDistDir, file));
+          }
+        }
+      }
+    } catch (error) {
+      // Non-critical — CLI is served from npm global symlink primarily
+      if (debug) console.log(`[DEBUG] Failed to install CLI dist: ${error}`);
+    }
+
     // 4b. Install proxy server
     try {
       const proxyDir = join(installDir, "dist", "proxy");
@@ -371,6 +475,61 @@ process.exit(1);
     } catch (error) {
       // Non-critical — proxy is opt-in
       if (debug) console.log(`[DEBUG] Failed to install proxy: ${error}`);
+    }
+
+    // 4c. Install menubar app (Tauri app source for dev mode or building)
+    try {
+      const menubarDir = join(installDir, "apps", "menubar");
+
+      // Clean stale source files (preserve node_modules and target to avoid re-download/rebuild)
+      if (existsSync(menubarDir)) {
+        for (const entry of readdirSync(menubarDir)) {
+          if (entry === "node_modules" || entry === "target") continue;
+          rmSync(join(menubarDir, entry), { recursive: true, force: true });
+        }
+      } else {
+        mkdirSync(menubarDir, { recursive: true });
+      }
+
+      const srcMenubarDir = join(sourceDir, "apps", "menubar");
+      if (existsSync(srcMenubarDir)) {
+        // Copy everything except node_modules and target (build artifacts)
+        cpSync(srcMenubarDir, menubarDir, {
+          recursive: true,
+          filter: (src) => {
+            const basename = src.split(/[/\\]/).pop();
+            return basename !== "node_modules" && basename !== "target";
+          }
+        });
+
+        // Install dependencies if package.json exists
+        const menubarPkgJson = join(menubarDir, "package.json");
+        if (existsSync(menubarPkgJson)) {
+          try {
+            execSync("bun install", {
+              cwd: menubarDir,
+              stdio: debug ? "inherit" : "pipe",
+            });
+          } catch (installError) {
+            // Non-critical — user can install manually
+            if (debug) console.log(`[DEBUG] Failed to install menubar deps: ${installError}`);
+          }
+        }
+      }
+    } catch (error) {
+      // Non-critical — menubar is opt-in
+      if (debug) console.log(`[DEBUG] Failed to install menubar app: ${error}`);
+    }
+
+    // 4c. Clean up removed team templates (deprecated in v2.1)
+    try {
+      const teamsDir = join(installDir, "teams");
+      if (existsSync(teamsDir)) {
+        rmSync(teamsDir, { recursive: true, force: true });
+      }
+    } catch (error) {
+      // Best-effort cleanup
+      if (debug) console.log(`[DEBUG] Failed to clean up team templates: ${error}`);
     }
 
     // 5. Deploy output style presets
@@ -510,6 +669,11 @@ export async function uninstall(options?: {
           "omc-plan",
           "omc-start-work",
           "omc-status",
+          "omc-switch",
+          "omc-mem-compact",
+          "omc-mem-clear",
+          "omc-mem-summary",
+          "omc-ulw",
           // Quick action commands (omcx-)
           "omcx-commit",
           "omcx-implement",

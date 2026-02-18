@@ -15,6 +15,7 @@ export class OpenAICompatibleClient implements ProviderClient {
   protected apiKey: string;
   protected defaultModel?: string;
   protected timeout: number;
+  protected tokenResolver?: () => Promise<string>;
 
   constructor(name: string, options: ProviderClientOptions) {
     this.name = name;
@@ -22,16 +23,21 @@ export class OpenAICompatibleClient implements ProviderClient {
     this.apiKey = options.apiKey;
     this.defaultModel = options.defaultModel;
     this.timeout = options.timeout ?? 120000; // 2 minutes default
+    this.tokenResolver = options.tokenResolver;
   }
 
   isConfigured(): boolean {
+    // OAuth providers are configured if they have a tokenResolver
+    if (this.tokenResolver) return true;
     return !!this.apiKey && this.apiKey.length > 0;
   }
 
   async createChatCompletion(
     request: ChatCompletionRequest
   ): Promise<ChatCompletionResponse> {
-    if (!this.isConfigured()) {
+    // Resolve API key: use tokenResolver for OAuth, or static apiKey
+    const apiKey = this.tokenResolver ? await this.tokenResolver() : this.apiKey;
+    if (!apiKey) {
       throw new Error(`${this.name} API key not configured`);
     }
 
@@ -53,7 +59,7 @@ export class OpenAICompatibleClient implements ProviderClient {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(body),
         signal: controller.signal,

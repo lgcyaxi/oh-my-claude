@@ -121,8 +121,11 @@ function readMcpStatus(sessionDir: string): StatusLineData | null {
 /**
  * Format the ready indicator (when no segments are active)
  */
+/** Brand prefix — shows "omc[debug]" when OMC_DEBUG=1 */
+const BRAND_PREFIX = process.env.OMC_DEBUG === "1" ? "omc[debug]" : "omc";
+
 function formatReadyStatus(): string {
-  return `omc ${colors.ready}●${colors.reset} ready`;
+  return `${BRAND_PREFIX} ${colors.ready}●${colors.reset} ready`;
 }
 
 /**
@@ -189,8 +192,8 @@ async function main() {
 
     // Build final output
     if (segmentOutput) {
-      // Prefix with "omc" branding
-      console.log(`omc ${segmentOutput}`);
+      // Prefix with brand (includes [debug] when OMC_DEBUG=1)
+      console.log(`${BRAND_PREFIX} ${segmentOutput}`);
     } else {
       // No segments produced output - show ready status
       console.log(formatReadyStatus());

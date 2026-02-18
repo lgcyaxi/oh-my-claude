@@ -2,7 +2,7 @@
  * DeepSeek API client (Anthropic-compatible)
  *
  * Models:
- * - deepseek-chat: Fast general-purpose model (DeepSeek V3.1)
+ * - deepseek-chat: Fast general-purpose model (DeepSeek V4)
  * - deepseek-reasoner: High-IQ reasoning model with thinking traces
  *
  * Endpoint: https://api.deepseek.com/anthropic

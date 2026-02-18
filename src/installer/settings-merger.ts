@@ -105,12 +105,14 @@ function addHook(
 
   // Extract the hook script filename for precise matching
   // e.g., "node /path/to/oh-my-claude/hooks/auto-memory.js" → "auto-memory.js"
-  const scriptFile = command.split("/").pop() ?? command;
+  // Split on both / and \ to support Windows and Unix paths, strip quotes
+  const scriptFile = (command.split(/[/\\]/).pop() ?? command).replace(/"/g, "");
 
   // Check if this SPECIFIC hook already exists (match by script filename, not generic path)
+  // Strip quotes from existing commands too for reliable comparison across path formats
   const existingIndex = settings.hooks[hookType]!.findIndex(
     (h) =>
-      h.hooks.some((hook) => hook.command.endsWith(scriptFile))
+      h.hooks.some((hook) => hook.command.replace(/"/g, "").endsWith(scriptFile))
   );
 
   if (existingIndex !== -1) {
@@ -222,7 +224,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PreToolUse",
     "Edit|Write",
-    `${nodeCmd} ${hooksDir}/comment-checker.js`,
+    `${nodeCmd} "${join(hooksDir, "comment-checker.js")}"`,
     force
   );
   if (commentCheckerResult) {
@@ -250,7 +252,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "Stop",
     ".*",
-    `${nodeCmd} ${hooksDir}/todo-continuation.js`,
+    `${nodeCmd} "${join(hooksDir, "todo-continuation.js")}"`,
     force
   );
   if (todoResult) {
@@ -268,7 +270,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PreToolUse",
     "Task",
-    `${nodeCmd} ${hooksDir}/task-tracker.js`,
+    `${nodeCmd} "${join(hooksDir, "task-tracker.js")}"`,
     force
   );
   if (taskPreResult) {
@@ -286,7 +288,7 @@ export function installHooks(hooksDir: string, force = false): {
     settings,
     "PostToolUse",
     "Task",
-    `${nodeCmd} ${hooksDir}/task-tracker.js`,
+    `${nodeCmd} "${join(hooksDir, "task-tracker.js")}"`,
     force
   );
   if (taskPostResult) {
@@ -299,12 +301,35 @@ export function installHooks(hooksDir: string, force = false): {
     skipped.push("task-tracker (already installed)");
   }
 
+  // Task notification hook (PostToolUse — scans signal files for completed tasks)
+  const taskNotifResult = addHook(
+    settings,
+    "PostToolUse",
+    ".*",
+    `${nodeCmd} "${join(hooksDir, "task-notification.js")}"`,
+    force
+  );
+  if (taskNotifResult) {
+    if (force) {
+      updated.push("task-notification (PostToolUse:*)");
+    } else {
+      installed.push("task-notification (PostToolUse:*)");
+    }
+  } else {
+    skipped.push("task-notification (already installed)");
+  }
+
+  // Remove legacy task-notification hook with MCP-only matcher (if any)
+  // The old hook used "mcp__oh-my-claude-background__.*" matcher; new one uses ".*"
+  // removeHook matches by command identifier, which will match both old and new.
+  // Since we just added the new one above, this is a no-op for fresh installs.
+
   // Session logger hook (PostToolUse — logs all tool usage for auto-memory)
   const sessionLoggerResult = addHook(
     settings,
     "PostToolUse",
     ".*",
-    `${nodeCmd} ${hooksDir}/session-logger.js`,
+    `${nodeCmd} "${join(hooksDir, "session-logger.js")}"`,
     force
   );
   if (sessionLoggerResult) {
@@ -317,30 +342,51 @@ export function installHooks(hooksDir: string, force = false): {
     skipped.push("session-logger (already installed)");
   }
 
-  // Auto-memory hook (Stop — captures session learnings via external model)
-  const autoMemoryResult = addHook(
+  // Context-memory hook (PostToolUse — threshold checkpoint auto-save)
+  const contextMemoryPostResult = addHook(
+    settings,
+    "PostToolUse",
+    ".*",
+    `${nodeCmd} "${join(hooksDir, "context-memory.js")}"`,
+    force
+  );
+  if (contextMemoryPostResult) {
+    if (force) {
+      updated.push("context-memory (PostToolUse)");
+    } else {
+      installed.push("context-memory (PostToolUse)");
+    }
+  } else {
+    skipped.push("context-memory (PostToolUse already installed)");
+  }
+
+  // Context-memory hook (Stop — session-end capture, replaces auto-memory)
+  const contextMemoryStopResult = addHook(
     settings,
     "Stop",
     ".*",
-    `${nodeCmd} ${hooksDir}/auto-memory.js`,
+    `${nodeCmd} "${join(hooksDir, "context-memory.js")}"`,
     force
   );
-  if (autoMemoryResult) {
+  if (contextMemoryStopResult) {
     if (force) {
-      updated.push("auto-memory (Stop)");
+      updated.push("context-memory (Stop)");
     } else {
-      installed.push("auto-memory (Stop)");
+      installed.push("context-memory (Stop)");
     }
   } else {
-    skipped.push("auto-memory (already installed)");
+    skipped.push("context-memory (Stop already installed)");
   }
+
+  // Remove legacy auto-memory hook if present (replaced by context-memory Stop)
+  removeHook(settings, "Stop", "auto-memory");
 
   // Memory awareness hook (UserPromptSubmit — nudges memory recall/remember)
   const memoryResult = addHook(
     settings,
     "UserPromptSubmit",
     "",
-    `${nodeCmd} ${hooksDir}/memory-awareness.js`,
+    `${nodeCmd} "${join(hooksDir, "memory-awareness.js")}"`,
     force
   );
   if (memoryResult) {
@@ -379,11 +425,16 @@ export function installMcpServer(serverPath: string, force = false): boolean {
   const { execSync } = require("node:child_process");
   const { platform } = require("node:os");
 
+  // Clear CLAUDECODE env to avoid "nested session" error when running inside Claude Code
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.CLAUDECODE;
+  const execOpts = { encoding: "utf-8" as const, stdio: ["pipe", "pipe", "pipe"] as const, env: cleanEnv };
+
   try {
     // Check if already installed
     let alreadyInstalled = false;
     try {
-      const list = execSync("claude mcp list", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+      const list = execSync("claude mcp list", execOpts);
       alreadyInstalled = list.includes("oh-my-claude-background");
     } catch {
       // Ignore if list fails
@@ -393,7 +444,7 @@ export function installMcpServer(serverPath: string, force = false): boolean {
       if (force) {
         // Remove and re-add to update the path
         try {
-          execSync("claude mcp remove --scope user oh-my-claude-background", { stdio: ["pipe", "pipe", "pipe"] });
+          execSync("claude mcp remove --scope user oh-my-claude-background", execOpts);
         } catch {
           // Ignore remove errors
         }
@@ -409,7 +460,7 @@ export function installMcpServer(serverPath: string, force = false): boolean {
     // Add MCP server globally (--scope user)
     execSync(
       `claude mcp add --scope user oh-my-claude-background -- ${nodePath} "${serverPath}"`,
-      { encoding: "utf-8" }
+      execOpts,
     );
     return true;
   } catch (error) {
@@ -419,7 +470,7 @@ export function installMcpServer(serverPath: string, force = false): boolean {
       return true;
     }
 
-    console.error("Failed to add MCP server via CLI:", error);
+    console.error("Failed to add MCP server via CLI, falling back to settings.json");
 
     // Fallback to settings.json method
     const settings = loadSettings();

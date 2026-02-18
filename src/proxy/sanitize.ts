@@ -6,16 +6,12 @@
  * conditionally strips unsupported types before forwarding to avoid 400 errors.
  *
  * Provider compatibility:
- * - ZhiPu, MiniMax: fully Anthropic-compatible, no sanitization needed
- *   (except thinking blocks — signatures are provider-specific)
- * - DeepSeek: rejects extended types like tool_reference, needs sanitization
- * - OpenRouter: varies by model, sanitize to be safe
- *
- * Thinking block signatures:
- * Anthropic's API uses cryptographic signatures on thinking blocks.
- * These signatures are provider-specific and cannot be validated across
- * providers. ALL switched requests must strip thinking blocks regardless
- * of provider compatibility level.
+ * - ZhiPu (GLM-5), MiniMax (M2.5): fully Anthropic-compatible, support ALL
+ *   content types including thinking blocks, tool_reference, etc. No sanitization.
+ * - Kimi (K2.5): Anthropic-compatible but rejects tool_reference internal type.
+ *   Thinking blocks and config work fine. Minimal sanitization.
+ * - DeepSeek: rejects extended types like tool_reference, needs full sanitization
+ * - OpenAI (OAuth): varies by model, sanitize to be safe
  */
 
 /** Content block types that basic providers reliably support */
@@ -38,65 +34,170 @@ const UNSUPPORTED_TOP_LEVEL_KEYS = new Set([
 ]);
 
 /**
- * Providers that fully support Anthropic content types (except thinking signatures).
- * These providers skip general sanitization but still need thinking block removal.
+ * Providers that fully support ALL Anthropic content types including thinking blocks,
+ * tool_reference, and other internal types. Zero sanitization needed.
  */
-const FULL_COMPATIBILITY_PROVIDERS = new Set([
+const ZERO_SANITIZATION_PROVIDERS = new Set([
   "zhipu",
   "minimax",
 ]);
 
 /**
+ * Kimi supports Anthropic-compatible endpoints but rejects internal content
+ * types like tool_reference. Thinking blocks and config work fine.
+ */
+const KIMI_PROVIDER = "kimi";
+
+/**
  * Sanitize a request body for external provider compatibility.
  *
- * Two-phase sanitization:
- * 1. Thinking blocks are ALWAYS stripped for ALL providers (signatures are provider-specific)
- * 2. General sanitization (unsupported types) is skipped for FULL_COMPATIBILITY_PROVIDERS
+ * Provider-specific sanitization:
+ * - ZhiPu/MiniMax: no sanitization (fully compatible)
+ * - Kimi: strip unsupported content types (tool_reference)
+ * - DeepSeek Reasoner: replace thinking blocks with empty ones (required by API)
+ * - Other providers: strip thinking blocks, thinking config, and unsupported types
  *
  * Mutates the body in-place for performance (avoid deep clone on every request).
  */
 export function sanitizeRequestBody(body: Record<string, unknown>, provider: string): void {
-  // Phase 1: Always strip thinking blocks — signatures are provider-specific
-  // and Anthropic-signed blocks will be rejected by external providers
-  console.error(`[sanitize] Stripping thinking blocks for provider "${provider}"`);
-  sanitizeTopLevelKeys(body);
-  stripThinkingBlocks(body);
-
-  // Phase 2: Full sanitization for non-compatible providers
-  if (FULL_COMPATIBILITY_PROVIDERS.has(provider)) {
-    console.error(`[sanitize] Provider "${provider}" has full compatibility, skipping general sanitization`);
+  // ZhiPu GLM-5 and MiniMax M2.5 are fully Anthropic-compatible —
+  // they handle thinking blocks, tool_reference, and all internal types natively.
+  // Zero sanitization needed.
+  if (ZERO_SANITIZATION_PROVIDERS.has(provider)) {
     return;
   }
 
-  console.error(`[sanitize] Sanitizing request for provider "${provider}"`);
-  sanitizeMessages(body);
+  // Kimi K2.5: Anthropic-compatible but rejects internal content types like
+  // tool_reference. Thinking blocks and config work fine (tested).
+  if (provider === KIMI_PROVIDER) {
+    sanitizeMessages(body, false);
+    return;
+  }
+
+  // Check if model is deepseek-reasoner (requires thinking blocks in assistant messages)
+  const model = body.model as string | undefined;
+  const isDeepSeekReasoner = provider === "deepseek" && model === "deepseek-reasoner";
+
+  // Phase 1: Handle thinking content blocks from history
+  // DeepSeek Reasoner: replace with empty thinking block (required by API)
+  // Other providers: strip entirely
+  const strippedBlocks = isDeepSeekReasoner
+    ? replaceThinkingBlocksForReasoner(body)
+    : stripThinkingBlocks(body);
+
+  // Phase 2: Strip top-level thinking config for non-compatible providers
+  // DeepSeek Reasoner needs thinking config to stay — it enables reasoning
+  const strippedKeys = isDeepSeekReasoner ? 0 : sanitizeTopLevelKeys(body);
+
+  if (strippedKeys > 0 || strippedBlocks > 0) {
+    console.error(`[sanitize] ${provider}: ${isDeepSeekReasoner ? "replaced" : "stripped"} ${strippedBlocks} thinking blocks, ${strippedKeys} top-level keys`);
+  }
+
+  // Phase 3: Full content type sanitization for non-compatible providers
+  sanitizeMessages(body, isDeepSeekReasoner);
 }
 
 /**
  * Strip thinking content blocks from a body for passthrough to Anthropic.
  *
- * Called after a switch has occurred in the session to remove
- * non-Anthropic thinking signatures from conversation history.
+ * Always called on passthrough requests to remove thinking blocks that
+ * may have non-Anthropic signatures (from prior model switches).
  * Only removes thinking content blocks from messages — preserves
  * the top-level `thinking` config (Anthropic needs it to enable thinking).
  *
  * Mutates the body in-place.
+ * @returns Number of thinking blocks stripped
  */
-export function stripThinkingFromBody(body: Record<string, unknown>): void {
-  stripThinkingBlocks(body);
+export function stripThinkingFromBody(body: Record<string, unknown>): number {
+  return stripThinkingBlocks(body);
 }
 
 /**
  * Remove top-level keys that external providers don't support
  * (e.g., `thinking` config object)
+ * @returns Number of keys stripped
  */
-function sanitizeTopLevelKeys(body: Record<string, unknown>): void {
+function sanitizeTopLevelKeys(body: Record<string, unknown>): number {
+  let count = 0;
   for (const key of UNSUPPORTED_TOP_LEVEL_KEYS) {
     if (key in body) {
       delete body[key];
-      console.error(`[sanitize] Stripped top-level key: ${key}`);
+      count++;
     }
   }
+  return count;
+}
+
+/**
+ * Replace Claude's thinking blocks with empty DeepSeek-compatible thinking blocks.
+ *
+ * DeepSeek Reasoner API requires every assistant message to contain a thinking block.
+ * When switching from Claude to DeepSeek Reasoner mid-conversation, assistant messages
+ * in history may have Claude's thinking blocks (with incompatible signatures) or none
+ * at all. This function ensures every assistant message has a DeepSeek-compatible
+ * thinking block.
+ *
+ * @returns Number of thinking blocks replaced/added
+ */
+function replaceThinkingBlocksForReasoner(body: Record<string, unknown>): number {
+  const messages = body.messages;
+  if (!Array.isArray(messages)) return 0;
+
+  let count = 0;
+
+  for (const message of messages) {
+    if (!message || typeof message !== "object") continue;
+    const msg = message as Record<string, unknown>;
+
+    // Only process assistant messages
+    if (msg.role !== "assistant") continue;
+
+    const content = msg.content;
+    if (typeof content === "string") {
+      // String content — convert to array with thinking + text blocks
+      msg.content = [
+        { type: "thinking", thinking: "" },
+        { type: "text", text: content },
+      ];
+      count++;
+      continue;
+    }
+
+    if (!Array.isArray(content)) continue;
+
+    // Check if there's already a thinking block
+    let hasThinking = false;
+    const filtered: unknown[] = [];
+
+    for (const block of content) {
+      if (!block || typeof block !== "object") {
+        filtered.push(block);
+        continue;
+      }
+
+      const blockType = (block as Record<string, unknown>).type as string | undefined;
+      if (blockType && THINKING_CONTENT_TYPES.has(blockType)) {
+        // Replace with empty DeepSeek-format thinking block (only keep first one)
+        if (!hasThinking) {
+          filtered.push({ type: "thinking", thinking: "" });
+          hasThinking = true;
+        }
+        count++;
+      } else {
+        filtered.push(block);
+      }
+    }
+
+    // If no thinking block found, prepend one (DeepSeek requires it)
+    if (!hasThinking) {
+      filtered.unshift({ type: "thinking", thinking: "" });
+      count++;
+    }
+
+    msg.content = filtered;
+  }
+
+  return count;
 }
 
 /**
@@ -109,10 +210,12 @@ function sanitizeTopLevelKeys(body: Record<string, unknown>): void {
  * Per Anthropic docs: thinking blocks from previous turns are automatically
  * stripped and not counted towards context. Stripping them proactively is safe
  * and avoids signature validation errors.
+ *
+ * @returns Number of thinking blocks stripped
  */
-function stripThinkingBlocks(body: Record<string, unknown>): void {
+function stripThinkingBlocks(body: Record<string, unknown>): number {
   const messages = body.messages;
-  if (!Array.isArray(messages)) return;
+  if (!Array.isArray(messages)) return 0;
 
   let strippedCount = 0;
 
@@ -151,9 +254,7 @@ function stripThinkingBlocks(body: Record<string, unknown>): void {
     }
   }
 
-  if (strippedCount > 0) {
-    console.error(`[sanitize] Stripped ${strippedCount} thinking/redacted_thinking blocks`);
-  }
+  return strippedCount;
 }
 
 /**
@@ -191,9 +292,10 @@ function stripThinkingFromToolResult(block: Record<string, unknown>): number {
 }
 
 /**
- * Iterate through messages and filter out unsupported content blocks
+ * Iterate through messages and filter out unsupported content blocks.
+ * When keepThinking is true (DeepSeek Reasoner), thinking blocks are preserved.
  */
-function sanitizeMessages(body: Record<string, unknown>): void {
+function sanitizeMessages(body: Record<string, unknown>, keepThinking = false): void {
   const messages = body.messages;
   if (!Array.isArray(messages)) return;
 
@@ -223,7 +325,8 @@ function sanitizeMessages(body: Record<string, unknown>): void {
         continue;
       }
 
-      if (SUPPORTED_CONTENT_TYPES.has(blockType)) {
+      if (SUPPORTED_CONTENT_TYPES.has(blockType) ||
+          (keepThinking && THINKING_CONTENT_TYPES.has(blockType))) {
         // For tool_result blocks, recursively sanitize nested content
         if (blockType === "tool_result") {
           sanitizeToolResultContent(block as Record<string, unknown>, strippedTypes);

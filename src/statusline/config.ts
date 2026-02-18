@@ -14,7 +14,7 @@ import { PRESETS, DEFAULT_SEGMENT_POSITIONS } from "./segments/types";
 // Zod schema for segment config
 const SegmentConfigSchema = z.object({
   enabled: z.boolean(),
-  position: z.number().int().min(1).max(10),
+  position: z.number().int().min(1).max(20),
 });
 
 // Zod schema for style config
@@ -36,9 +36,11 @@ export const StatusLineConfigSchema = z.object({
       context: SegmentConfigSchema.default({ enabled: true, position: 4 }),
       session: SegmentConfigSchema.default({ enabled: true, position: 5 }),
       "output-style": SegmentConfigSchema.default({ enabled: false, position: 6 }),
-      mcp: SegmentConfigSchema.default({ enabled: true, position: 7 }),
+      proxy: SegmentConfigSchema.default({ enabled: true, position: 7 }),
       memory: SegmentConfigSchema.default({ enabled: false, position: 8 }),
-      proxy: SegmentConfigSchema.default({ enabled: true, position: 9 }),
+      preferences: SegmentConfigSchema.default({ enabled: false, position: 10 }),
+      mcp: SegmentConfigSchema.default({ enabled: true, position: 11 }),
+      usage: SegmentConfigSchema.default({ enabled: false, position: 12 }),
     })
     .default({}),
   style: StyleConfigSchema.default({}),
@@ -63,6 +65,8 @@ export function getDefaultConfig(preset: StatusLineConfig["preset"] = "standard"
     "mcp",
     "memory",
     "proxy",
+    "usage",
+    "preferences",
   ];
 
   const segments: Record<SegmentId, { enabled: boolean; position: number }> = {} as any;
@@ -123,7 +127,7 @@ function applyPresetToConfig(config: StatusLineConfig, rawSegmentKeys: Set<strin
   const presetSegments = PRESETS[config.preset] ?? PRESETS.standard;
   const allSegmentIds: SegmentId[] = [
     "model", "git", "directory", "context", "session",
-    "output-style", "mcp", "memory", "proxy",
+    "output-style", "proxy", "memory", "preferences", "mcp", "usage",
   ];
 
   let modified = false;

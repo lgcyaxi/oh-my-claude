@@ -2,14 +2,18 @@
 /**
  * Task Notification Hook (PostToolUse)
  *
- * Monitors for MCP background task completions and provides
- * notifications in the Claude Code output.
+ * Detects background task completions via signal files and provides
+ * notifications in the Claude Code output. Works on ALL tool calls,
+ * not just MCP tools — enabling passive discovery of completed tasks.
+ *
+ * Signal files are written by task-manager.ts at:
+ *   ~/.claude/oh-my-claude/signals/completed/{taskId}.json
  *
  * Usage in settings.json:
  * {
  *   "hooks": {
  *     "PostToolUse": [{
- *       "matcher": "mcp__oh-my-claude-background__.*",
+ *       "matcher": ".*",
  *       "hooks": [{
  *         "type": "command",
  *         "command": "node ~/.claude/oh-my-claude/hooks/task-notification.js"
@@ -19,15 +23,9 @@
  * }
  */
 
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, unlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
-
-interface PostToolUseInput {
-  tool: string;
-  tool_input?: Record<string, unknown>;
-  tool_output?: string;
-}
 
 interface HookResponse {
   decision: "approve";
@@ -37,58 +35,42 @@ interface HookResponse {
   };
 }
 
-// File to track notified task IDs (prevent duplicate notifications)
+interface CompletionSignal {
+  taskId: string;
+  status: string;
+  agentName: string;
+  resultPreview: string;
+  completedAt: string;
+}
+
+const SIGNALS_DIR = join(homedir(), ".claude", "oh-my-claude", "signals", "completed");
+
+// Dedup file to avoid re-notifying if signal file deletion races
 const NOTIFIED_FILE_PATH = join(homedir(), ".claude", "oh-my-claude", "notified-tasks.json");
 
-/**
- * Load list of already-notified task IDs
- */
 function loadNotifiedTasks(): Set<string> {
   try {
-    if (!existsSync(NOTIFIED_FILE_PATH)) {
-      return new Set();
-    }
-    const content = readFileSync(NOTIFIED_FILE_PATH, "utf-8");
-    const data = JSON.parse(content);
-    // Clean up old entries (older than 1 hour)
+    if (!existsSync(NOTIFIED_FILE_PATH)) return new Set();
+    const data = JSON.parse(readFileSync(NOTIFIED_FILE_PATH, "utf-8"));
+    // Clean up entries older than 1 hour
     const oneHourAgo = Date.now() - 60 * 60 * 1000;
-    const filtered = Object.entries(data)
-      .filter(([_, timestamp]) => (timestamp as number) > oneHourAgo)
-      .map(([id]) => id);
-    return new Set(filtered);
+    return new Set(
+      Object.entries(data)
+        .filter(([_, ts]) => (ts as number) > oneHourAgo)
+        .map(([id]) => id)
+    );
   } catch {
     return new Set();
   }
 }
 
-/**
- * Save notified task ID
- */
-function saveNotifiedTask(taskId: string): void {
+function saveNotifiedTasks(notified: Set<string>): void {
   try {
     const dir = dirname(NOTIFIED_FILE_PATH);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-
-    let data: Record<string, number> = {};
-    if (existsSync(NOTIFIED_FILE_PATH)) {
-      try {
-        data = JSON.parse(readFileSync(NOTIFIED_FILE_PATH, "utf-8"));
-      } catch {
-        data = {};
-      }
-    }
-
-    // Clean up old entries
-    const oneHourAgo = Date.now() - 60 * 60 * 1000;
-    for (const [id, timestamp] of Object.entries(data)) {
-      if (timestamp < oneHourAgo) {
-        delete data[id];
-      }
-    }
-
-    data[taskId] = Date.now();
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const data: Record<string, number> = {};
+    const now = Date.now();
+    for (const id of notified) data[id] = now;
     writeFileSync(NOTIFIED_FILE_PATH, JSON.stringify(data));
   } catch {
     // Silently fail
@@ -100,102 +82,83 @@ function saveNotifiedTask(taskId: string): void {
  */
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
+  if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
+  return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+}
+
+/**
+ * Scan signal directory for completed task notifications
+ */
+function scanSignalFiles(notified: Set<string>): string[] {
+  const notifications: string[] = [];
+
+  if (!existsSync(SIGNALS_DIR)) return notifications;
+
+  try {
+    const files = readdirSync(SIGNALS_DIR).filter(f => f.endsWith(".json"));
+
+    for (const file of files) {
+      const filePath = join(SIGNALS_DIR, file);
+      try {
+        const signal: CompletionSignal = JSON.parse(readFileSync(filePath, "utf-8"));
+
+        if (notified.has(signal.taskId)) {
+          // Already notified — clean up stale signal
+          try { unlinkSync(filePath); } catch { /* best effort */ }
+          continue;
+        }
+
+        // Calculate age for display
+        const completedAt = new Date(signal.completedAt).getTime();
+        const age = Date.now() - completedAt;
+        const durationStr = age < 5000 ? "just now" : `${formatDuration(age)} ago`;
+
+        const statusIcon = signal.status === "completed" ? "+" : "!";
+        notifications.push(
+          `[@] ${signal.agentName}: ${signal.status} (${durationStr})`
+        );
+
+        notified.add(signal.taskId);
+
+        // Remove signal file after consumption
+        try { unlinkSync(filePath); } catch { /* best effort */ }
+      } catch {
+        // Bad signal file — remove it
+        try { unlinkSync(filePath); } catch { /* best effort */ }
+      }
+    }
+  } catch {
+    // Directory read failed
+  }
+
+  return notifications;
 }
 
 async function main() {
-  // Read input from stdin
-  let inputData = "";
+  // Read input from stdin (required by hook protocol)
   try {
-    inputData = readFileSync(0, "utf-8");
+    readFileSync(0, "utf-8");
   } catch {
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
+    // Stdin may be empty for some events
   }
 
-  if (!inputData.trim()) {
-    console.log(JSON.stringify({ decision: "approve" }));
+  // Scan for completion signals
+  const notified = loadNotifiedTasks();
+  const notifications = scanSignalFiles(notified);
+
+  if (notifications.length > 0) {
+    saveNotifiedTasks(notified);
+    const response: HookResponse = {
+      decision: "approve",
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        additionalContext: `\n${notifications.join("\n")}`,
+      },
+    };
+    console.log(JSON.stringify(response));
     return;
-  }
-
-  let toolInput: PostToolUseInput;
-  try {
-    toolInput = JSON.parse(inputData);
-  } catch {
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
-  }
-
-  // Only process MCP tool outputs
-  if (!toolInput.tool?.includes("oh-my-claude-background")) {
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
-  }
-
-  // Check for poll_task or list_tasks responses that contain completed tasks
-  const toolOutput = toolInput.tool_output;
-  if (!toolOutput) {
-    console.log(JSON.stringify({ decision: "approve" }));
-    return;
-  }
-
-  try {
-    const output = JSON.parse(toolOutput);
-    const notifiedTasks = loadNotifiedTasks();
-    const notifications: string[] = [];
-
-    // Check for single task completion (poll_task)
-    if (output.status === "completed" && toolInput.tool?.includes("poll_task")) {
-      // This is handled by the poll itself, no need for additional notification
-      console.log(JSON.stringify({ decision: "approve" }));
-      return;
-    }
-
-    // Check for task list with completed tasks
-    if (output.tasks && Array.isArray(output.tasks)) {
-      for (const task of output.tasks) {
-        if (
-          (task.status === "completed" || task.status === "failed") &&
-          task.id &&
-          !notifiedTasks.has(task.id)
-        ) {
-          // Calculate duration if we have timestamps
-          let durationStr = "";
-          if (task.created && task.completed) {
-            const created = new Date(task.created).getTime();
-            const completed = new Date(task.completed).getTime();
-            durationStr = ` (${formatDuration(completed - created)})`;
-          }
-
-          const statusIcon = task.status === "completed" ? "+" : "!";
-          const agentName = task.agent || "unknown";
-          notifications.push(
-            `[${statusIcon}] ${agentName}: ${task.status}${durationStr}`
-          );
-
-          saveNotifiedTask(task.id);
-        }
-      }
-    }
-
-    if (notifications.length > 0) {
-      const response: HookResponse = {
-        decision: "approve",
-        hookSpecificOutput: {
-          hookEventName: "PostToolUse",
-          additionalContext: `\n[omc] ${notifications.join(" | ")}`,
-        },
-      };
-      console.log(JSON.stringify(response));
-      return;
-    }
-  } catch {
-    // Parsing failed, just approve
   }
 
   console.log(JSON.stringify({ decision: "approve" }));

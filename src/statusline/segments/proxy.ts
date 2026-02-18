@@ -2,34 +2,95 @@
  * Proxy segment - shows proxy switch status
  *
  * Hidden when not switched (no visual noise).
- * When switched: [→DS/R ×2] (arrow prefix = redirected, provider/model abbrev, remaining count)
+ * When switched: [→DeepSeek/DeepSeek R] (arrow prefix = redirected, full provider/model)
  * Color: yellow when switched (attention-grabbing)
+ *
+ * Session-aware: extracts session ID from ANTHROPIC_BASE_URL and queries
+ * the control API for session-scoped status (accurate per-session state).
+ * Falls back to global file state if control API is unreachable.
  */
 
 import type { Segment, SegmentData, SegmentContext, SegmentConfig, StyleConfig } from "./types";
 import { wrapBrackets, applyColor } from "./index";
-import { readSwitchState, isTimedOut } from "../../proxy/state";
+import { readSwitchState } from "../../proxy/state";
+import type { ProxySwitchState } from "../../proxy/types";
+import { DEFAULT_PROXY_CONFIG } from "../../proxy/types";
 
-/** Provider name abbreviations */
-const PROVIDER_ABBREV: Record<string, string> = {
-  deepseek: "DS",
-  zhipu: "ZP",
-  minimax: "MM",
-  openrouter: "OR",
+/**
+ * Get the control port from environment variable OMC_PROXY_CONTROL_PORT,
+ * or fall back to the default port.
+ */
+function getControlPort(): number {
+  const envPort = process.env.OMC_PROXY_CONTROL_PORT;
+  if (envPort) {
+    const parsed = parseInt(envPort, 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return DEFAULT_PROXY_CONFIG.controlPort;
+}
+
+/** Full provider display names */
+const PROVIDER_DISPLAY: Record<string, string> = {
+  deepseek: "DeepSeek",
+  zhipu: "ZhiPu",
+  minimax: "MiniMax",
+  kimi: "Kimi",
+  openai: "OpenAI",
 };
 
-/** Model name abbreviations */
-function abbreviateModel(model: string): string {
-  const abbrevMap: Record<string, string> = {
-    "deepseek-reasoner": "R",
-    "deepseek-chat": "C",
-    "glm-4.7": "4.7",
-    "glm-4v-flash": "4vF",
-    "MiniMax-M2.1": "M2",
-    "minimax-m2.1": "M2",
+/** Full model display names */
+function getModelDisplay(model: string): string {
+  const displayMap: Record<string, string> = {
+    "deepseek-reasoner": "DeepSeek R",
+    "deepseek-chat": "DeepSeek Chat",
+    "GLM-5": "GLM-5",
+    "glm-4v-flash": "GLM-4V Flash",
+    "MiniMax-M2.5": "MiniMax-M2.5",
+    "minimax-m2.5": "MiniMax-M2.5",
+    "k2.5": "Kimi K2.5",
+    "K2.5": "Kimi K2.5",
+    "gpt-5.2": "GPT-5.2",
+    "gpt-5.3-codex": "GPT-5.3 Codex",
+    "o3-mini": "o3-mini",
   };
 
-  return abbrevMap[model] ?? model.slice(0, 6);
+  return displayMap[model] ?? model;
+}
+
+/**
+ * Extract session ID from ANTHROPIC_BASE_URL.
+ * Matches paths like /s/{sessionId} at the end of the URL.
+ */
+function extractSessionId(): string | undefined {
+  const baseUrl = process.env.ANTHROPIC_BASE_URL;
+  if (!baseUrl) return undefined;
+
+  try {
+    const url = new URL(baseUrl);
+    const match = url.pathname.match(/^\/s\/([a-zA-Z0-9_-]+)\/?$/);
+    return match ? match[1] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Try to get switch state from the control API (session-scoped).
+ * Returns null if the control API is unreachable.
+ */
+async function fetchStatusFromControlApi(sessionId?: string): Promise<ProxySwitchState | null> {
+  try {
+    const controlPort = getControlPort();
+    const url = sessionId
+      ? `http://localhost:${controlPort}/status?session=${sessionId}`
+      : `http://localhost:${controlPort}/status`;
+
+    const resp = await fetch(url, { signal: AbortSignal.timeout(500) });
+    if (!resp.ok) return null;
+    return await resp.json() as ProxySwitchState;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -37,37 +98,37 @@ function abbreviateModel(model: string): string {
  */
 async function collectProxyData(_context: SegmentContext): Promise<SegmentData | null> {
   try {
-    const state = readSwitchState();
+    const sessionId = extractSessionId();
 
-    // Hidden when not switched
-    if (!state.switched) {
+    // Prefer control API for session-accurate status
+    let state: ProxySwitchState | null = null;
+    if (sessionId) {
+      state = await fetchStatusFromControlApi(sessionId);
+    }
+
+    // Fallback to global file state
+    if (!state) {
+      state = readSwitchState();
+    }
+
+    const isSwitched = state.switched;
+
+    // Hidden when not switched AND no session (not connected through proxy)
+    if (!isSwitched && !sessionId) {
       return null;
     }
 
-    // Check if timed out
-    if (isTimedOut(state)) {
-      return null;
+    // Always show session ID when connected through proxy (model segment shows the actual model)
+    // No need to duplicate provider/model info here
+    if (sessionId) {
+      return {
+        primary: `s:${sessionId.slice(0, 8)}`,
+        metadata: { newLine: "true" },
+        color: isSwitched ? "warning" : "neutral",
+      };
     }
 
-    const provider = state.provider ?? "?";
-    const model = state.model ?? "?";
-    const remaining = state.requestsRemaining;
-
-    const providerAbbrev = PROVIDER_ABBREV[provider] ?? provider.slice(0, 2).toUpperCase();
-    const modelAbbrev = abbreviateModel(model);
-
-    const remainingStr = remaining < 0 ? "∞" : `×${remaining}`;
-    const primary = `→${providerAbbrev}/${modelAbbrev} ${remainingStr}`;
-
-    return {
-      primary,
-      metadata: {
-        provider,
-        model,
-        remaining: String(remaining),
-      },
-      color: "warning", // Yellow — attention-grabbing
-    };
+    return null;
   } catch {
     return null;
   }

@@ -27,7 +27,6 @@ const DEFAULT_LIMITS: ConcurrencyConfig = {
     deepseek: 5,
     zhipu: 5,
     minimax: 3,
-    openrouter: 5,
   },
 };
 
@@ -209,7 +208,6 @@ export function getConcurrencyStatusString(): string {
     deepseek: "DS",
     zhipu: "ZP",
     minimax: "MM",
-    openrouter: "OR",
   };
 
   for (const [provider, info] of Object.entries(status.perProvider)) {

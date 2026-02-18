@@ -3,15 +3,28 @@
  *
  * Handles both text/event-stream (SSE) and application/json responses.
  * Uses ReadableStream for true streaming without buffering.
+ *
+ * When switching to external providers, SSE events are transformed to:
+ * - Replace provider model names with the original Claude model name
+ * - Ensure response format matches Claude Code's expectations
  */
+
+/** Timeout for upstream fetch requests (5 min — generous for slow providers) */
+const UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
 
 /**
  * Pipe an upstream response body to the client response as a ReadableStream.
  * Preserves SSE format and handles backpressure.
+ *
+ * @param originalModel - The original model name from Claude Code (e.g., "claude-opus-4-6")
+ *                       If provided, transforms SSE events to replace the provider's model name.
+ * @param providerModel - The provider's model name (e.g., "kimi-k2.5") for logging
  */
 export function createStreamingResponse(
   upstreamResponse: Response,
-  overrideHeaders?: Record<string, string>
+  overrideHeaders?: Record<string, string>,
+  originalModel?: string,
+  providerModel?: string
 ): Response {
   const contentType = upstreamResponse.headers.get("content-type") ?? "";
   const isSSE = contentType.includes("text/event-stream");
@@ -53,6 +66,18 @@ export function createStreamingResponse(
   // If no body, return empty response with same status
   if (!upstreamResponse.body) {
     return new Response(null, {
+      status: upstreamResponse.status,
+      headers,
+    });
+  }
+
+  // If transforming model names, use SSE transformer
+  if (isSSE && originalModel) {
+    console.error(`[stream] Transforming SSE model: "${providerModel ?? "?"}" → "${originalModel}"`);
+    const transformedStream = upstreamResponse.body.pipeThrough(
+      new SSEModelTransformStream(originalModel)
+    );
+    return new Response(transformedStream, {
       status: upstreamResponse.status,
       headers,
     });
@@ -111,6 +136,9 @@ export async function forwardToUpstream(
     headers.set("x-api-key", apiKey);
   }
 
+  // Override Bun's default User-Agent so providers see "oh-my-claude" in their consoles
+  headers.set("user-agent", "oh-my-claude/2.0");
+
   // Determine body — priority: bodyOverride > rawBodyText > originalRequest.body
   let body: string | null = null;
   if (bodyOverride) {
@@ -123,12 +151,78 @@ export async function forwardToUpstream(
     body = await originalRequest.text();
   }
 
-  // Forward to upstream
+  // Forward to upstream with timeout to prevent hanging on slow providers
   const upstreamResponse = await fetch(targetUrl, {
     method: originalRequest.method,
     headers,
     body,
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   });
 
   return upstreamResponse;
+}
+
+/**
+ * TransformStream that parses SSE events and replaces the provider's model name
+ * with the original Claude model name from the request.
+ *
+ * This is needed when switching to external providers (DeepSeek, ZhiPu, etc.)
+ * because they return their own model names (e.g., "deepseek-chat") in the response,
+ * but Claude Code expects to see the original model name (e.g., "claude-opus-4-6").
+ *
+ * The transformation is done as a streaming transform to avoid buffering the entire response.
+ */
+class SSEModelTransformStream extends TransformStream<Uint8Array, Uint8Array> {
+  private decoder = new TextDecoder();
+  private encoder = new TextEncoder();
+  private buffer = "";
+  private readonly originalModel: string;
+
+  constructor(originalModel: string) {
+    super({
+      transform: (chunk, controller) => this._transform(chunk, controller),
+      flush: (controller) => this._flush(controller),
+    });
+    this.originalModel = originalModel;
+  }
+
+  private _transform(chunk: Uint8Array, controller: TransformStreamDefaultController<Uint8Array>): void {
+    // Decode chunk and add to buffer
+    this.buffer += this.decoder.decode(chunk, { stream: true });
+
+    // Process complete SSE events
+    const lines = this.buffer.split("\n");
+    // Keep the last incomplete line in the buffer
+    this.buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      let outputLine = line;
+
+      // Transform data lines that contain JSON
+      if (line.startsWith("data: ")) {
+        const jsonStr = line.slice(6); // Remove "data: " prefix
+        try {
+          const data = JSON.parse(jsonStr) as Record<string, unknown>;
+
+          // Replace model name if present
+          if (typeof data.model === "string") {
+            data.model = this.originalModel;
+            outputLine = `data: ${JSON.stringify(data)}`;
+          }
+        } catch {
+          // Invalid JSON, pass through as-is
+        }
+      }
+
+      // Enqueue transformed line
+      controller.enqueue(this.encoder.encode(outputLine + "\n"));
+    }
+  }
+
+  private _flush(controller: TransformStreamDefaultController<Uint8Array>): void {
+    // Flush any remaining buffer content
+    if (this.buffer.length > 0) {
+      controller.enqueue(this.encoder.encode(this.buffer));
+    }
+  }
 }

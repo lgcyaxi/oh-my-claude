@@ -42,6 +42,8 @@ import { contextSegment } from "./context";
 import { outputStyleSegment } from "./output-style";
 import { memorySegment } from "./memory";
 import { proxySegment } from "./proxy";
+import { usageSegment } from "./usage";
+import { preferencesSegment } from "./preferences";
 
 // Registry of all available segments
 const segmentRegistry = new Map<SegmentId, Segment>();
@@ -95,9 +97,11 @@ export function applyPreset(
     "context",
     "session",
     "output-style",
-    "mcp",
-    "memory",
     "proxy",
+    "memory",
+    "preferences",
+    "mcp",
+    "usage",
   ];
 
   const result: Record<SegmentId, { enabled: boolean; position: number }> = {} as any;
@@ -114,6 +118,10 @@ export function applyPreset(
 
 /**
  * Render all enabled segments
+ *
+ * Segments with metadata.newLine === "true" are rendered on a separate line.
+ * The main line segments are joined with the configured separator.
+ * New-line segments are appended with a "\n" prefix.
  */
 export async function renderSegments(
   config: StatusLineConfig,
@@ -124,7 +132,8 @@ export async function renderSegments(
   }
 
   const segments = getEnabledSegments(config);
-  const parts: string[] = [];
+  const mainParts: string[] = [];
+  const newLineParts: string[] = [];
 
   for (const segment of segments) {
     try {
@@ -132,7 +141,11 @@ export async function renderSegments(
       if (data) {
         const formatted = segment.format(data, config.segments[segment.id], config.style);
         if (formatted) {
-          parts.push(formatted);
+          if (data.metadata.newLine === "true") {
+            newLineParts.push(formatted);
+          } else {
+            mainParts.push(formatted);
+          }
         }
       }
     } catch (error) {
@@ -143,7 +156,14 @@ export async function renderSegments(
     }
   }
 
-  return parts.join(config.style.separator);
+  let output = mainParts.join(config.style.separator);
+
+  // Append new-line segments as a single second line
+  if (newLineParts.length > 0) {
+    output += `\n${newLineParts.join(config.style.separator)}`;
+  }
+
+  return output;
 }
 
 /**
@@ -188,3 +208,5 @@ registerSegment(outputStyleSegment);
 registerSegment(mcpSegment);
 registerSegment(memorySegment);
 registerSegment(proxySegment);
+registerSegment(usageSegment);
+registerSegment(preferencesSegment);

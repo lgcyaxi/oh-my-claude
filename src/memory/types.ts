@@ -13,6 +13,23 @@
 export type MemoryType = "session" | "note";
 
 /**
+ * Memory storage scope
+ * - project: .claude/mem/ under project root
+ * - global: ~/.claude/oh-my-claude/memory/
+ * - all: search both (project-first ranking)
+ */
+export type MemoryScope = "project" | "global" | "all";
+
+/**
+ * Memory storage location info
+ */
+export interface MemoryStorageInfo {
+  scope: MemoryScope;
+  path: string;
+  isProjectMemory: boolean;
+}
+
+/**
  * Core memory entry (parsed from markdown file)
  */
 export interface MemoryEntry {
@@ -57,6 +74,8 @@ export interface MemorySearchOptions {
   limit?: number;
   /** Sort order */
   sort?: "newest" | "oldest" | "relevance";
+  /** Storage scope to search (default: all) */
+  scope?: MemoryScope;
 }
 
 /**
@@ -71,6 +90,8 @@ export interface MemoryListOptions {
   before?: string;
   /** Maximum results to return */
   limit?: number;
+  /** Storage scope to list (default: all) */
+  scope?: MemoryScope;
 }
 
 /**
@@ -81,10 +102,38 @@ export interface MemoryStats {
   total: number;
   /** Count by type */
   byType: Record<MemoryType, number>;
+  /** Count by scope (project vs global) */
+  byScope: Record<"project" | "global", number>;
   /** Total size in bytes across all memory files */
   totalSizeBytes: number;
-  /** Storage directory path */
+  /** Global storage directory path */
   storagePath: string;
+  /** Project storage directory path (if in a git repo) */
+  projectPath?: string;
+}
+
+/**
+ * Search tier indicating which search backend was used
+ */
+export type SearchTier = "hybrid" | "fts5" | "legacy";
+
+/**
+ * Chunk location within a memory file
+ */
+export interface ChunkLocation {
+  file: string;
+  startLine: number;
+  endLine: number;
+}
+
+/**
+ * Index status metadata for a memory entry
+ */
+export interface MemoryIndexStatus {
+  contentHash: string;
+  chunksIndexed: number;
+  embeddingsReady: boolean;
+  potentialDuplicateOf?: string;
 }
 
 /**
@@ -108,4 +157,8 @@ export interface CreateMemoryInput {
   type?: MemoryType;
   /** Tags for categorization */
   tags?: string[];
+  /** Storage scope (default: project if in git repo, otherwise global) */
+  scope?: MemoryScope;
+  /** Override creation date (used by compact to preserve original date context) */
+  createdAt?: string;
 }

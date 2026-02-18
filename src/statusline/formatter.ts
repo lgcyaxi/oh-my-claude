@@ -87,7 +87,6 @@ const PROVIDER_ABBREV: Record<string, string> = {
   deepseek: "DS",
   zhipu: "ZP",
   minimax: "MM",
-  openrouter: "OR",
 };
 
 /**
@@ -134,7 +133,7 @@ const MODEL_ABBREV: Record<string, string> = {
   "deepseek-reasoner": "R",
   "deepseek-chat": "C",
   // ZhiPu models
-  "glm-4.7": "G4",
+  "GLM-5": "G5",
   "glm-4v-flash": "V",
   // MiniMax models
   "minimax-m2.1": "M2",
@@ -215,8 +214,11 @@ function formatConcurrency(concurrency: ConcurrencyInfo): string {
  * - With tasks: "omc [⠙ Oracle: 32s DS/R] "Analyze..." (2/10)"
  * - With queue: "omc [⠙ Oracle: 32s DS/R] (5/5 +2q)"
  */
+/** Brand prefix — shows "omc[debug]" when OMC_DEBUG=1 */
+const BRAND_PREFIX = process.env.OMC_DEBUG === "1" ? "omc[debug]" : "omc";
+
 export function formatStatusLine(data: StatusLineData): string {
-  const parts: string[] = ["omc"];
+  const parts: string[] = [BRAND_PREFIX];
 
   // Format active tasks with spinners and colors
   if (data.activeTasks.length > 0) {
@@ -246,7 +248,7 @@ export function formatStatusLine(data: StatusLineData): string {
  */
 export function formatEmptyStatusLine(): string {
   const readyIndicator = colorize("●", colors.ready);
-  return `omc ${readyIndicator} ready`;
+  return `${BRAND_PREFIX} ${readyIndicator} ready`;
 }
 
 /**

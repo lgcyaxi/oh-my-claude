@@ -18,8 +18,6 @@ export {
   readSwitchState,
   writeSwitchState,
   resetSwitchState,
-  decrementAndCheck,
-  isTimedOut,
   getSwitchStatePath,
 } from "./state";
 
@@ -33,3 +31,11 @@ export {
   generateProxyToken,
   validateProxyToken,
 } from "./auth";
+
+export {
+  startDaemon,
+  stopDaemon,
+  isRunning,
+  getPid,
+  getServerScript,
+} from "./daemon";

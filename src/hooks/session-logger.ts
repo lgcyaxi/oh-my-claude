@@ -33,6 +33,7 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 
 interface PostToolUseInput {
   tool?: string;
@@ -43,6 +44,7 @@ interface PostToolUseInput {
   tool_output?: string;
   output?: string;
   hook_event_name?: string;
+  cwd?: string;
 }
 
 interface Observation {
@@ -51,9 +53,15 @@ interface Observation {
   summary: string;  // Brief description of what happened
 }
 
-/** Path to the active session log */
-function getSessionLogPath(): string {
-  return join(homedir(), ".claude", "oh-my-claude", "memory", "sessions", "active-session.jsonl");
+/** Compute a short hash of a string for project-scoped filenames */
+function shortHash(str: string): string {
+  return createHash("sha256").update(str).digest("hex").slice(0, 8);
+}
+
+/** Path to the active session log (scoped by project to avoid multi-instance contamination) */
+function getSessionLogPath(projectCwd?: string): string {
+  const suffix = projectCwd ? `-${shortHash(projectCwd)}` : "";
+  return join(homedir(), ".claude", "oh-my-claude", "memory", "sessions", `active-session${suffix}.jsonl`);
 }
 
 /** Ensure session log directory exists */
@@ -134,6 +142,7 @@ async function main() {
   const toolName = input.tool || input.tool_name || "?";
   const toolInput = input.tool_input || input.input || {};
   const toolOutput = input.tool_response || input.tool_output || input.output || "";
+  const projectCwd = input.cwd;
 
   // Skip logging our own hooks and trivial tools to avoid noise
   if (toolName === "session-logger" || toolName === "auto-memory") {
@@ -152,10 +161,10 @@ async function main() {
     summary,
   };
 
-  // Append to session log
+  // Append to project-scoped session log
   try {
     ensureLogDir();
-    const logPath = getSessionLogPath();
+    const logPath = getSessionLogPath(projectCwd);
     appendFileSync(logPath, JSON.stringify(observation) + "\n", "utf-8");
   } catch {
     // Silently fail — never block tool execution

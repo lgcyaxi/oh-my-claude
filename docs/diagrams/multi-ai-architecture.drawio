@@ -1,0 +1,167 @@
+<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    
+    <!-- Title -->
+    <mxCell id="title" value="Data Flow: Request Delegation Sequence" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="300" y="20" width="500" height="40" as="geometry" />
+    </mxCell>
+    
+    <!-- Timeline labels -->
+    <mxCell id="t1" value="1. Request" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="20" y="80" width="100" height="20" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="t2" value="2. Queue" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="20" y="180" width="100" height="20" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="t3" value="3. Inject" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="20" y="280" width="100" height="20" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="t4" value="4. Process" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="20" y="380" width="100" height="20" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="t5" value="5. Log" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="20" y="480" width="100" height="20" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="t6" value="6. Poll" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="20" y="580" width="100" height="20" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="t7" value="7. Return" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="20" y="680" width="100" height="20" as="geometry" />
+    </mxCell>
+    
+    <!-- Actors -->
+    <mxCell id="claude" value="Claude\nCode" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="150" y="100" width="100" height="600" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="bridge" value="Bridge\nOrchestrator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="300" y="100" width="100" height="600" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="daemon" value="Codex\nDaemon" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="450" y="100" width="100" height="600" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="terminal" value="Tmux\nPane" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="600" y="100" width="100" height="600" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="codex" value="Codex\nCLI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="750" y="100" width="100" height="600" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="storage" value="Storage\nAdapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="900" y="100" width="100" height="600" as="geometry" />
+    </mxCell>
+    
+    <!-- Arrows and Labels -->
+    <!-- Step 1: Request -->
+    <mxCell id="a1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.1;exitDx=0;exitDy=0;entryX=0;entryY=0.1;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#009900" edge="1" parent="1" source="claude" target="bridge">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="l1" value="/omc-codex &amp;quot;Fix auth bug&amp;quot;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" vertex="1" connectable="0" parent="a1">
+      <mxGeometry x="-0.2" y="-15" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    
+    <!-- Step 2: Queue -->
+    <mxCell id="a2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#009900" edge="1" parent="1" source="bridge" target="daemon">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="l2" value="Queue Request\n(id: req_123)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" vertex="1" connectable="0" parent="a2">
+      <mxGeometry x="-0.2" y="-15" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    
+    <!-- Step 3: Inject -->
+    <mxCell id="a3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.35;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#009900" edge="1" parent="1" source="daemon" target="terminal">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="l3" value="echo &amp;quot;Fix auth bug&amp;quot; \u003e fifo" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" vertex="1" connectable="0" parent="a3">
+      <mxGeometry x="-0.2" y="-15" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    
+    <!-- Step 4: Process -->
+    <mxCell id="a4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.45;exitDx=0;exitDy=0;entryX=0;entryY=0.45;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#666666;dashed=1" edge="1" parent="1" source="terminal" target="codex">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="l4" value="TUI Input\n(30-60s processing)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" vertex="1" connectable="0" parent="a4">
+      <mxGeometry x="-0.2" y="-15" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    
+    <!-- Step 5: Log -->
+    <mxCell id="a5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.6;exitDx=0;exitDy=0;entryX=0;entryY=0.6;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#666666;dashed=1" edge="1" parent="1" source="codex" target="storage">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="l5" value="Write to\nsession.jsonl" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" vertex="1" connectable="0" parent="a5">
+      <mxGeometry x="-0.2" y="-15" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    
+    <!-- Step 6: Poll (dashed reverse) -->
+    <mxCell id="a6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0066cc;dashed=1" edge="1" parent="1" source="daemon" target="storage">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="550" y="550" />
+          <mxPoint x="850" y="550" />
+        </Array>
+      </mxGeometry>
+    </mxCell>
+    
+    <mxCell id="l6" value="Watch log file\n(Poll every 1s)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" vertex="1" connectable="0" parent="a6">
+      <mxGeometry x="0" y="-20" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    
+    <!-- Step 7: Return -->
+    <mxCell id="a7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.85;exitDx=0;exitDy=0;entryX=1;entryY=0.85;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0066cc" edge="1" parent="1" source="daemon" target="bridge">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="l7" value="Return response\n(via IPC)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" vertex="1" connectable="0" parent="a7">
+      <mxGeometry x="0.2" y="-15" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    
+    <mxCell id="a8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.9;exitDx=0;exitDy=0;entryX=1;entryY=0.9;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#0066cc" edge="1" parent="1" source="bridge" target="claude">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="l8" value="Display result" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" vertex="1" connectable="0" parent="a8">
+      <mxGeometry x="0.2" y="-15" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+    
+    <!-- Immediate return -->
+    <mxCell id="imm" value="⚡ Immediate Return\n(&amp;lt; 100ms)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=2;fontColor=#009900" vertex="1" parent="1">
+      <mxGeometry x="280" y="130" width="120" height="40" as="geometry" />
+    </mxCell>
+    
+    <mxCell id="async" value="⏱️ Async Processing\n(30-60s)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=2;fontColor=#666666" vertex="1" parent="1">
+      <mxGeometry x="780" y="330" width="120" height="40" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>

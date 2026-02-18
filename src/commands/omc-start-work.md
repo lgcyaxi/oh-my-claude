@@ -83,6 +83,11 @@ No work plans found.
 Create a plan first by running: /omc-plan "your task description"
 ```
 
+## Memory Integration (MANDATORY)
+
+- **Before starting work**: call `mcp__oh-my-claude-background__recall` with the plan name and task keywords to retrieve prior context from previous sessions.
+- **After completing tasks**: call `mcp__oh-my-claude-background__remember` to store decisions made, problems solved, and patterns discovered during execution.
+
 ## Critical Rules
 
 1. **ALWAYS update boulder.json** before starting work

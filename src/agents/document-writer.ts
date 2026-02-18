@@ -1,6 +1,6 @@
 /**
  * Document Writer - Technical documentation specialist
- * Uses MiniMax-M2.1 via MCP (async)
+ * Uses MiniMax-M2.5 via MCP (async)
  */
 
 import type { AgentDefinition } from "./types";
@@ -150,7 +150,7 @@ export const documentWriterAgent: AgentDefinition = {
     "A technical writer who crafts clear, comprehensive documentation. Specializes in README files, API docs, architecture docs, and user guides.",
   prompt: DOCUMENT_WRITER_PROMPT,
   defaultProvider: "minimax",
-  defaultModel: "MiniMax-M2.1",
+  defaultModel: "MiniMax-M2.5",
   defaultTemperature: 0.5,
   executionMode: "mcp",
 };

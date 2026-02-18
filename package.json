@@ -1,18 +1,30 @@
 {
   "name": "@lgcyaxi/oh-my-claude",
-  "version": "1.4.1",
+  "version": "2.1.0",
   "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist/cli.js",
+    "dist/index.js",
+    "dist/*.wasm",
+    "dist/mcp/",
+    "dist/hooks/",
+    "dist/statusline/",
+    "dist/proxy/",
+    "bin/",
+    "src/commands/",
+    "src/styles/*.md"
+  ],
   "bin": {
     "oh-my-claude": "bin/oh-my-claude.js"
   },
   "scripts": {
-    "prepare": "bun run build:all || echo 'Build skipped (bun not available or already built)'",
-    "build": "bun build src/index.ts src/cli.ts --outdir dist --target node --splitting",
-    "build:mcp": "bun build src/mcp/background-agent-server/server.ts --outdir dist/mcp --target node",
-    "build:hooks": "bun build src/hooks/comment-checker.ts src/hooks/todo-continuation.ts src/hooks/task-notification.ts src/hooks/task-tracker.ts src/hooks/memory-awareness.ts src/hooks/auto-memory.ts src/hooks/session-logger.ts --outdir dist/hooks --target node",
+    "prepack": "bun run build:all",
+    "build": "bun build src/index.ts src/cli.ts --outdir dist --target node",
+    "build:mcp": "bun build src/mcp/background-agent-server/server.ts --outdir dist/mcp --target node && bun run scripts/copy-wasm.ts",
+    "build:hooks": "bun build src/hooks/comment-checker.ts src/hooks/todo-continuation.ts src/hooks/task-notification.ts src/hooks/task-tracker.ts src/hooks/memory-awareness.ts src/hooks/session-logger.ts src/hooks/context-memory.ts src/hooks/preference-awareness.ts --outdir dist/hooks --target node",
     "build:statusline": "bun build src/statusline/statusline.ts --outdir dist/statusline --target node",
     "build:proxy": "bun build src/proxy/server.ts --outdir dist/proxy --target bun",
     "build:all": "bun run build && bun run build:mcp && bun run build:hooks && bun run build:statusline && bun run build:proxy",
@@ -22,13 +34,16 @@
     "install-local": "bun run build:all && bun run src/cli.ts install",
     "uninstall-local": "bun run src/cli.ts uninstall",
     "status": "bun run src/cli.ts status",
-    "doctor": "bun run src/cli.ts doctor"
+    "doctor": "bun run src/cli.ts doctor",
+    "menubar:dev": "cd apps/menubar && bun run tauri dev",
+    "menubar:build": "cd apps/menubar && bun run tauri build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.1",
     "@inquirer/prompts": "^7.2.0",
-    "zod": "^3.24.0",
-    "commander": "^14.0.2"
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "commander": "^14.0.2",
+    "sql.js-fts5": "^1.4.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
