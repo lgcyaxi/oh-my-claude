@@ -182,6 +182,18 @@ export async function install(options?: {
     if (!options?.skipAgents) {
       try {
         result.agents = generateAllAgentFiles();
+
+        // Clean up stale agent files from previous versions
+        const agentsDir = join(homedir(), ".claude", "agents");
+        const staleAgents = [
+          "frontend-ui-ux.md",  // replaced by ui-designer in v2.0
+        ];
+        for (const stale of staleAgents) {
+          const stalePath = join(agentsDir, stale);
+          if (existsSync(stalePath)) {
+            try { unlinkSync(stalePath); } catch { /* best-effort */ }
+          }
+        }
       } catch (error) {
         result.errors.push(`Failed to generate agents: ${error}`);
       }
@@ -215,11 +227,18 @@ export async function install(options?: {
 
           // Clean up deprecated/renamed command files
           const deprecatedCommands = [
-            "omc-compact.md",   // renamed → omc-mem-compact.md
-            "omc-clear.md",     // renamed → omc-mem-clear.md
-            "omc-summary.md",   // renamed → omc-mem-summary.md
-            "ulw.md",           // renamed → omc-ulw.md
-            "omc-team.md",      // removed — use native Agent Teams
+            "omc-compact.md",     // renamed → omc-mem-compact.md
+            "omc-clear.md",       // renamed → omc-mem-clear.md
+            "omc-summary.md",     // renamed → omc-mem-summary.md
+            "ulw.md",             // renamed → omc-ulw.md
+            "omc-team.md",        // removed — use native Agent Teams
+            "omc-explore.md",     // removed in v2.0 — use Explore subagent
+            "omc-scout.md",       // removed in v2.0 — use claude-scout subagent
+            "omc-oracle.md",      // removed in v2.0 — use oracle subagent via proxy
+            "omc-librarian.md",   // removed in v2.0 — use librarian subagent via proxy
+            "omc-reviewer.md",    // removed in v2.0 — use claude-reviewer subagent
+            "omc-hephaestus.md",  // removed in v2.0 — use hephaestus subagent via proxy
+            "omc-navigator.md",   // removed in v2.0 — use navigator subagent via proxy
           ];
           for (const deprecated of deprecatedCommands) {
             const oldPath = join(commandsDir, deprecated);
