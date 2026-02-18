@@ -27,12 +27,12 @@ export const HOOKS = {
     matcher: "",
     source: "./memory-awareness.ts",
   },
-  "auto-memory": {
-    name: "auto-memory",
-    description: "Auto-captures session learnings via cheap external model at session end",
-    type: "Stop",
+  "context-memory": {
+    name: "context-memory",
+    description: "Unified session writer: threshold checkpoints (PostToolUse) + session-end capture (Stop)",
+    type: "PostToolUse|Stop",
     matcher: ".*",
-    source: "./auto-memory.ts",
+    source: "./context-memory.ts",
   },
   "session-logger": {
     name: "session-logger",

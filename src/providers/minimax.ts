@@ -2,8 +2,8 @@
  * MiniMax API client (Anthropic-compatible)
  *
  * Models:
- * - MiniMax-M2.1: Latest model for writing and documentation
- * - MiniMax-M2: Previous generation model
+ * - MiniMax-M2.5: Latest flagship model for coding & agent tasks
+ * - MiniMax-M2.1: Previous generation model
  *
  * Endpoint: https://api.minimaxi.com/anthropic (China)
  *           https://api.minimax.io/anthropic (International)
@@ -24,7 +24,7 @@ export function createMiniMaxClient(): AnthropicCompatibleClient {
     "MiniMax",
     MINIMAX_BASE_URL,
     MINIMAX_API_KEY_ENV,
-    "MiniMax-M2.1"
+    "MiniMax-M2.5"
   );
 }
 

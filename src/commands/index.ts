@@ -11,15 +11,22 @@ import { join, dirname } from "node:path";
 // Agent activation commands (omc- prefix)
 export const agentCommands = [
   "omc-sisyphus",
-  "omc-oracle",
-  "omc-librarian",
-  "omc-reviewer",
-  "omc-scout",
-  "omc-explore",
   "omc-plan",
   "omc-start-work",
   "omc-status",
   "omc-switch",
+  "omc-mem-compact",
+  "omc-mem-clear",
+  "omc-mem-daily",
+  "omc-mem-summary",
+  "omc-ulw",
+  "omc-opencode",
+  "omc-codex",
+  "omc-pref",
+  "omc-up",
+  "omc-down",
+  "omc-pend",
+  "omc-status-bridge",
 ] as const;
 
 // Quick action commands (omcx- prefix)
@@ -31,9 +38,8 @@ export const actionCommands = [
   "omcx-issue",
 ] as const;
 
-// Special mode commands
+// Special mode commands (kept for backward compat, but primary names are in agentCommands)
 export const modeCommands = [
-  "ulw", // Ultrawork mode - work until done
 ] as const;
 
 // All commands

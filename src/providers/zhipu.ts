@@ -2,8 +2,8 @@
  * ZhiPu GLM API client (Anthropic-compatible)
  *
  * Models:
- * - glm-4.7: Latest general-purpose model (most capable)
- * - glm-4.5-air: Fast, cost-efficient model
+ * - GLM-5: Latest flagship model (coding & agent focused)
+ * - glm-4.7-Flash: Fast, cost-efficient model
  * - glm-4v-flash: Vision model for UI/UX work
  *
  * Endpoint: https://open.bigmodel.cn/api/anthropic
@@ -20,7 +20,7 @@ export function createZhiPuClient(): AnthropicCompatibleClient {
     "ZhiPu",
     ZHIPU_BASE_URL,
     ZHIPU_API_KEY_ENV,
-    "glm-4.7"
+    "GLM-5"
   );
 }
 

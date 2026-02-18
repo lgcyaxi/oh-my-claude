@@ -3,26 +3,50 @@
  *
  * Provides HTTP endpoints for health checks, status queries,
  * and switch control from CLI or MCP tools.
+ *
+ * Session isolation: endpoints accept an optional `?session=ID` query
+ * parameter. When present, operations target the in-memory session state.
+ * When absent, operations target the global file-based state (backward compat).
  */
 
 import { readSwitchState, writeSwitchState, resetSwitchState } from "./state";
-import { getProxyStats } from "./handler";
+import {
+  readSessionState,
+  writeSessionState,
+  resetSessionState,
+  getActiveSessionCount,
+  getActiveSessions,
+} from "./session";
+import { getProxyStats, getProviderRequestCounts } from "./handler";
 import type { ProxySwitchState } from "./types";
-import { DEFAULT_PROXY_CONFIG } from "./types";
 import { loadConfig, isProviderConfigured } from "../config";
+
+/** Shutdown function set by server.ts */
+let shutdownProxy: (() => void) | null = null;
+
+/** Register shutdown function from server */
+export function registerShutdown(fn: () => void) {
+  shutdownProxy = fn;
+}
 
 /**
  * Handle control API requests
  *
  * Endpoints:
- * - GET  /health  → { status: "ok", uptime, requestCount }
- * - GET  /status  → current ProxySwitchState
+ * - GET  /health   → { status: "ok", uptime, requestCount, activeSessions }
+ * - GET  /status   → current ProxySwitchState (session or global)
+ * - GET  /sessions → list all active sessions with state
+ * - GET  /usage    → per-provider request counts
  * - POST /switch  → activate switch (body: { provider, model, requests?, timeout_ms? })
  * - POST /revert  → reset to passthrough
+ * - POST /stop    → shutdown proxy
+ *
+ * All endpoints accept optional `?session=ID` query parameter for session isolation.
  */
 export async function handleControl(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
+  const sessionId = url.searchParams.get("session") || undefined;
 
   // CORS headers for local development
   const corsHeaders = {
@@ -36,6 +60,8 @@ export async function handleControl(req: Request): Promise<Response> {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
+  const sessionTag = sessionId ? ` [s:${sessionId.slice(0, 8)}]` : " [global]";
+
   try {
     switch (path) {
       case "/health": {
@@ -46,6 +72,7 @@ export async function handleControl(req: Request): Promise<Response> {
             uptime: stats.uptime,
             uptimeHuman: formatUptime(stats.uptime),
             requestCount: stats.requestCount,
+            activeSessions: getActiveSessionCount(),
           },
           200,
           corsHeaders
@@ -53,8 +80,32 @@ export async function handleControl(req: Request): Promise<Response> {
       }
 
       case "/status": {
-        const state = readSwitchState();
-        return jsonResponse(state, 200, corsHeaders);
+        const state = sessionId
+          ? readSessionState(sessionId)
+          : readSwitchState();
+        return jsonResponse(
+          { ...state, sessionId: sessionId ?? null },
+          200,
+          corsHeaders
+        );
+      }
+
+      case "/sessions": {
+        const activeSessions = getActiveSessions();
+        return jsonResponse(
+          { sessions: activeSessions, count: activeSessions.length },
+          200,
+          corsHeaders
+        );
+      }
+
+      case "/usage": {
+        const providerCounts = getProviderRequestCounts();
+        return jsonResponse(
+          { providers: providerCounts },
+          200,
+          corsHeaders
+        );
       }
 
       case "/switch": {
@@ -69,8 +120,6 @@ export async function handleControl(req: Request): Promise<Response> {
         const body = (await req.json()) as {
           provider?: string;
           model?: string;
-          requests?: number;
-          timeout_ms?: number;
         };
 
         if (!body.provider || !body.model) {
@@ -107,35 +156,31 @@ export async function handleControl(req: Request): Promise<Response> {
         // Warn if API key not configured (still allow — handler will fallback)
         const providerConfigured = isProviderConfigured(config, body.provider);
 
-        const now = Date.now();
-        const requests = body.requests ?? DEFAULT_PROXY_CONFIG.defaultRequests;
-        const isUnlimited = requests < 0;
-        const timeoutMs = body.timeout_ms ?? (isUnlimited ? 0 : DEFAULT_PROXY_CONFIG.defaultTimeoutMs);
-
         const state: ProxySwitchState = {
           switched: true,
           provider: body.provider,
           model: body.model,
-          requestsRemaining: requests,
-          switchedAt: now,
-          timeoutAt: timeoutMs > 0 ? now + timeoutMs : undefined,
+          switchedAt: Date.now(),
         };
 
-        writeSwitchState(state);
+        // Write to session-scoped or global state
+        if (sessionId) {
+          writeSessionState(sessionId, state);
+        } else {
+          writeSwitchState(state);
+        }
 
         const warning = !providerConfigured
           ? `Warning: ${body.provider} API key not set. Requests will fallback to native Claude.`
           : undefined;
 
         console.error(
-          `[control] Switched to ${body.provider}/${body.model} ` +
-          `(requests: ${requests === 0 ? "unlimited" : requests}, ` +
-          `timeout: ${timeoutMs}ms)` +
+          `[control]${sessionTag} Switched to ${body.provider}/${body.model}` +
           (warning ? ` [${warning}]` : "")
         );
 
         return jsonResponse(
-          { ...state, ...(warning && { warning }) },
+          { ...state, sessionId: sessionId ?? null, ...(warning && { warning }) },
           200,
           corsHeaders
         );
@@ -150,21 +195,58 @@ export async function handleControl(req: Request): Promise<Response> {
           );
         }
 
-        resetSwitchState();
-        console.error("[control] Reverted to passthrough");
+        if (sessionId) {
+          resetSessionState(sessionId);
+        } else {
+          resetSwitchState();
+        }
+
+        console.error(`[control]${sessionTag} Reverted to passthrough`);
 
         return jsonResponse(
-          { switched: false, message: "Reverted to passthrough" },
+          { switched: false, sessionId: sessionId ?? null, message: "Reverted to passthrough" },
           200,
           corsHeaders
         );
+      }
+
+      case "/stop": {
+        if (req.method !== "POST") {
+          return jsonResponse(
+            { error: "Method not allowed. Use POST." },
+            405,
+            corsHeaders
+          );
+        }
+
+        console.error("[control] Stopping proxy server...");
+
+        // Send response before actually shutting down
+        const response = jsonResponse(
+          { message: "Proxy server stopping" },
+          200,
+          corsHeaders
+        );
+
+        // Shutdown asynchronously after response
+        setTimeout(() => {
+          if (shutdownProxy) {
+            shutdownProxy();
+          } else {
+            console.error("[control] Warning: No shutdown handler registered");
+            process.exit(0);
+          }
+        }, 100);
+
+        return response;
       }
 
       default:
         return jsonResponse(
           {
             error: "Not found",
-            endpoints: ["/health", "/status", "/switch", "/revert"],
+            endpoints: ["/health", "/status", "/sessions", "/usage", "/switch", "/revert", "/stop"],
+            hint: "Add ?session=ID for session-scoped operations",
           },
           404,
           corsHeaders

@@ -212,7 +212,7 @@ export const librarianAgent: AgentDefinition = {
     "Specialized codebase understanding agent for multi-repository analysis, searching remote codebases, retrieving official documentation, and finding implementation examples.",
   prompt: LIBRARIAN_PROMPT,
   defaultProvider: "zhipu",
-  defaultModel: "glm-4.7",
+  defaultModel: "GLM-5",
   defaultTemperature: 0.3,
   executionMode: "mcp",
   restrictedTools: ["Edit", "Write"],

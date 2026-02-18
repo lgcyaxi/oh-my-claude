@@ -58,4 +58,6 @@ export interface ProviderClientOptions {
   defaultModel?: string;
   /** Request timeout in ms */
   timeout?: number;
+  /** Async token resolver for OAuth providers (called before each request) */
+  tokenResolver?: () => Promise<string>;
 }

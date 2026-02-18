@@ -42,8 +42,23 @@ Thumbs.db
 # oh-my-claude session state
 .sisyphus/
 
+# Tauri build artifacts
+apps/menubar/src-tauri/target/
+apps/menubar/src-tauri/gen/
+apps/menubar/dist/
+
+# oh-my-claude project memory
+# Notes are git-tracked (curated knowledge)
+# Sessions, index DB, and drafts are gitignored
+.claude/mem/sessions/
+.claude/mem/index.db
+.claude/mem/*.db-journal
+
 # lock files (optional - bun.lock is committed)
 # bun.lock
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+/.claude
+apps/menubar/bun.lock
+apps/menubar/src-tauri/Cargo.lock

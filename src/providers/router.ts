@@ -10,10 +10,11 @@ import { AnthropicCompatibleClient } from "./anthropic-client";
 import { createDeepSeekClient } from "./deepseek";
 import { createZhiPuClient } from "./zhipu";
 import { createMiniMaxClient } from "./minimax";
-import { createOpenRouterClient } from "./openrouter";
+import { createOpenAIClient } from "./openai-native";
 import {
   loadConfig,
   resolveProviderForAgent,
+  resolveProviderForAgentWithFallback,
   resolveProviderForCategory,
   getProviderDetails,
   isProviderConfigured,
@@ -50,8 +51,8 @@ function getProviderClient(
         `Provider "${providerName}" uses Claude subscription and cannot be used with MCP background tasks`
       );
 
-    case "openrouter":
-      client = createOpenRouterClient();
+    case "openai-oauth":
+      client = createOpenAIClient();
       break;
 
     case "anthropic-compatible": {
@@ -93,7 +94,9 @@ export async function routeByAgent(
   }
 ): Promise<ChatCompletionResponse> {
   const config = loadConfig();
-  const agentConfig = resolveProviderForAgent(config, agentName);
+
+  // Use fallback-aware resolution (tries primary, then fallback if not configured)
+  const agentConfig = resolveProviderForAgentWithFallback(config, agentName);
 
   if (!agentConfig) {
     throw new Error(`No configuration found for agent: ${agentName}`);
@@ -111,7 +114,7 @@ export async function routeByAgent(
   if (!isProviderConfigured(config, agentConfig.provider)) {
     const envVar = providerDetails?.apiKeyEnv ?? `${agentConfig.provider.toUpperCase()}_API_KEY`;
     throw new Error(
-      `Provider "${agentConfig.provider}" is not configured. Set ${envVar} environment variable.`
+      `Provider "${agentConfig.provider}" is not configured. Set ${envVar} environment variable or run 'oh-my-claude auth login ${agentConfig.provider}'.`
     );
   }
 
@@ -229,10 +232,9 @@ export function getProvidersStatus(): Record<
     if (providerConfig.type === "claude-subscription") {
       // Claude subscription is always "configured" (handled by Claude Code)
       configured = true;
-    } else if (providerConfig.api_key_env) {
-      // Check if API key is set
-      const apiKey = process.env[providerConfig.api_key_env];
-      configured = !!apiKey && apiKey.length > 0;
+    } else {
+      // Check if provider is configured using the same logic as isProviderConfigured
+      configured = isProviderConfigured(config, name);
     }
 
     status[name] = {

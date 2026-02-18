@@ -42,6 +42,10 @@ Task(
 - Ask ONE question at a time, wait for answer
 - Record all decisions to draft file as you go
 
+**Memory Integration (MANDATORY):**
+- BEFORE planning, call mcp__oh-my-claude-background__recall with task keywords to check for prior decisions and context.
+- AFTER generating the plan, call mcp__oh-my-claude-background__remember to store the planning rationale and key decisions.
+
 Begin by understanding what the user wants to achieve. If task description is provided, start gathering context for it."
 )
 ```

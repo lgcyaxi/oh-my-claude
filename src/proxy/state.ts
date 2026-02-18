@@ -42,10 +42,7 @@ export function readSwitchState(): ProxySwitchState {
       switched: parsed.switched,
       provider: parsed.provider,
       model: parsed.model,
-      requestsRemaining: parsed.requestsRemaining ?? 0,
       switchedAt: parsed.switchedAt,
-      timeoutAt: parsed.timeoutAt,
-      skipInitialRequests: parsed.skipInitialRequests,
     };
   } catch {
     return { ...DEFAULT_SWITCH_STATE };
@@ -77,62 +74,4 @@ export function writeSwitchState(state: ProxySwitchState): void {
  */
 export function resetSwitchState(): void {
   writeSwitchState({ ...DEFAULT_SWITCH_STATE });
-}
-
-/**
- * Decrement the request counter and auto-reset if exhausted or timed out.
- *
- * Respects skipInitialRequests: when > 0, the first N requests after switch
- * activation are "free" (not counted). This accounts for slash command
- * overhead (MCP tool call cycle + confirmation response).
- *
- * @returns true if still switched, false if reverted to passthrough
- */
-export function decrementAndCheck(): boolean {
-  const state = readSwitchState();
-
-  if (!state.switched) {
-    return false;
-  }
-
-  // Check timeout
-  if (state.timeoutAt && Date.now() > state.timeoutAt) {
-    resetSwitchState();
-    return false;
-  }
-
-  // Skip initial requests (slash command overhead)
-  if (state.skipInitialRequests && state.skipInitialRequests > 0) {
-    state.skipInitialRequests -= 1;
-    writeSwitchState(state);
-    return true;
-  }
-
-  // requestsRemaining < 0 means unlimited (manual revert only)
-  if (state.requestsRemaining < 0) {
-    return true;
-  }
-
-  // Decrement counter
-  state.requestsRemaining -= 1;
-
-  if (state.requestsRemaining <= 0) {
-    // Exhausted — revert to passthrough
-    resetSwitchState();
-    return false;
-  }
-
-  // Still has remaining requests
-  writeSwitchState(state);
-  return true;
-}
-
-/**
- * Check if the switch state has timed out without modifying state
- */
-export function isTimedOut(state: ProxySwitchState): boolean {
-  if (!state.switched || !state.timeoutAt) {
-    return false;
-  }
-  return Date.now() > state.timeoutAt;
 }

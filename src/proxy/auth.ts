@@ -133,13 +133,19 @@ export function getPassthroughAuth(): {
   };
 }
 
+/** OAuth provider types that use token resolution instead of env var API keys */
+const OAUTH_PROVIDER_TYPES = new Set(["openai-oauth"]);
+
 /**
- * Get provider auth for a switched request
- * Resolves API key and base URL from oh-my-claude config
+ * Get provider auth for a switched request.
+ * Resolves API key and base URL from oh-my-claude config.
+ *
+ * For OAuth providers (openai), resolves token asynchronously
+ * via the token manager. For API key providers, reads from env.
  */
-export function getProviderAuth(
+export async function getProviderAuth(
   providerName: string
-): { apiKey: string; baseUrl: string } {
+): Promise<{ apiKey: string; baseUrl: string; providerType: string }> {
   const config = loadConfig();
   const providerConfig = config.providers[providerName];
 
@@ -153,7 +159,28 @@ export function getProviderAuth(
     );
   }
 
-  // Resolve API key from environment variable
+  const baseUrl = providerConfig.base_url;
+  if (!baseUrl) {
+    throw new Error(`Provider "${providerName}" has no base_url configured.`);
+  }
+
+  // OAuth providers — resolve token dynamically
+  if (OAUTH_PROVIDER_TYPES.has(providerConfig.type)) {
+    try {
+      const { getAccessToken } = await import("../auth/token-manager");
+      const providerKey = providerName as "openai";
+      const token = await getAccessToken(providerKey);
+      return { apiKey: token, baseUrl, providerType: providerConfig.type };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `OAuth token resolution failed for "${providerName}": ${msg}. ` +
+        `Run 'oh-my-claude auth login ${providerName}' to authenticate.`
+      );
+    }
+  }
+
+  // API key providers — resolve from environment variable
   const apiKeyEnv = providerConfig.api_key_env;
   if (!apiKeyEnv) {
     throw new Error(`Provider "${providerName}" has no api_key_env configured.`);
@@ -167,12 +194,7 @@ export function getProviderAuth(
     );
   }
 
-  const baseUrl = providerConfig.base_url;
-  if (!baseUrl) {
-    throw new Error(`Provider "${providerName}" has no base_url configured.`);
-  }
-
-  return { apiKey, baseUrl };
+  return { apiKey, baseUrl, providerType: providerConfig.type };
 }
 
 /**

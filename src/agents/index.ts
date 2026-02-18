@@ -3,7 +3,8 @@
  *
  * Agents are organized by execution mode:
  * - Task tool agents (Claude subscription): sisyphus, claude-reviewer, claude-scout
- * - MCP background agents (external APIs): oracle, analyst, librarian, frontend-ui-ux, document-writer
+ * - MCP background agents (external APIs): oracle, analyst, librarian, document-writer
+ * - External CLI agents (task mode): opencode, codex-cli
  *
  * Original agents (MIT Licensed) are available in ./original/
  */
@@ -19,23 +20,35 @@ export { claudeReviewerAgent } from "./claude-reviewer";
 export { claudeScoutAgent } from "./claude-scout";
 export { prometheusAgent } from "./prometheus";
 
-// External API agents (MCP - async)
+// External CLI agents (Task tool - external CLI tools)
+export { opencodeAgent } from "./opencode";
+export { codexCliAgent } from "./codex-cli";
+
+// Fallback agents (Task tool - when external CLI unavailable)
+export { uiDesignerAgent } from "./ui-designer";
+
+// MCP background agents (async - external APIs)
 export { oracleAgent } from "./oracle";
 export { librarianAgent } from "./librarian";
 export { analystAgent } from "./analyst";
-export { frontendUiUxAgent } from "./frontend-ui-ux";
 export { documentWriterAgent } from "./document-writer";
+export { navigatorAgent } from "./navigator";
+export { hephaestusAgent } from "./hephaestus";
 
 // Re-export individual agents
 import { sisyphusAgent } from "./sisyphus";
 import { claudeReviewerAgent } from "./claude-reviewer";
 import { claudeScoutAgent } from "./claude-scout";
 import { prometheusAgent } from "./prometheus";
+import { opencodeAgent } from "./opencode";
+import { codexCliAgent } from "./codex-cli";
+import { uiDesignerAgent } from "./ui-designer";
 import { oracleAgent } from "./oracle";
 import { librarianAgent } from "./librarian";
 import { analystAgent } from "./analyst";
-import { frontendUiUxAgent } from "./frontend-ui-ux";
 import { documentWriterAgent } from "./document-writer";
+import { navigatorAgent } from "./navigator";
+import { hephaestusAgent } from "./hephaestus";
 import type { AgentDefinition } from "./types";
 
 /**
@@ -48,18 +61,34 @@ export const agents: Record<string, AgentDefinition> = {
   "claude-scout": claudeScoutAgent,
   prometheus: prometheusAgent,
 
-  // External API agents
+  // External CLI agents
+  opencode: opencodeAgent,
+  "codex-cli": codexCliAgent,
+
+  // Fallback agents
+  "ui-designer": uiDesignerAgent,
+
+  // MCP background agents
   oracle: oracleAgent,
   analyst: analystAgent,
   librarian: librarianAgent,
-  "frontend-ui-ux": frontendUiUxAgent,
   "document-writer": documentWriterAgent,
+  navigator: navigatorAgent,
+  hephaestus: hephaestusAgent,
 };
 
 /**
  * Agents that run via Claude Code Task tool (sync, uses Claude subscription)
  */
-export const taskAgents = [sisyphusAgent, claudeReviewerAgent, claudeScoutAgent, prometheusAgent];
+export const taskAgents = [
+  sisyphusAgent,
+  claudeReviewerAgent,
+  claudeScoutAgent,
+  prometheusAgent,
+  opencodeAgent,
+  codexCliAgent,
+  uiDesignerAgent,
+];
 
 /**
  * Agents that run via MCP background server (async, uses external APIs)
@@ -68,8 +97,9 @@ export const mcpAgents = [
   oracleAgent,
   analystAgent,
   librarianAgent,
-  frontendUiUxAgent,
   documentWriterAgent,
+  navigatorAgent,
+  hephaestusAgent,
 ];
 
 /**

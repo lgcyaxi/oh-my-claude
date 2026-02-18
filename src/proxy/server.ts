@@ -9,14 +9,19 @@
  * - Proxy (default: 18910) — Claude Code connects here via ANTHROPIC_BASE_URL
  * - Control (default: 18911) — health/status/switch/revert endpoints
  *
+ * Session isolation:
+ * - URLs like /s/{sessionId}/v1/messages use per-session in-memory state
+ * - URLs like /v1/messages use global file-based state (backward compat)
+ *
  * Usage:
  *   bun run src/proxy/server.ts
  *   bun run src/proxy/server.ts --port 18910 --control-port 18911
  */
 
 import { handleMessages, handleOtherRequest } from "./handler";
-import { handleControl } from "./control";
+import { handleControl, registerShutdown } from "./control";
 import { readSwitchState, resetSwitchState } from "./state";
+import { parseSessionFromPath, cleanupStaleSessions, getCleanupIntervalMs } from "./session";
 import { DEFAULT_PROXY_CONFIG } from "./types";
 
 // Parse CLI arguments
@@ -45,22 +50,34 @@ function parseArgs(): { port: number; controlPort: number } {
 async function main() {
   const { port, controlPort } = parseArgs();
 
-  // Ensure clean state on startup
+  // Ensure clean global state on startup
   resetSwitchState();
 
   // Start proxy server
   const proxy = Bun.serve({
     port,
+    // SSE streaming responses from Claude API can take 30-120+ seconds.
+    // Bun's default idleTimeout is 10s which causes premature disconnects.
+    idleTimeout: 255, // max allowed by Bun (seconds)
     fetch(req: Request): Promise<Response> | Response {
       const url = new URL(req.url);
+      let pathname = url.pathname;
+      let sessionId: string | undefined;
+
+      // Check for session prefix: /s/{sessionId}/...
+      const sessionInfo = parseSessionFromPath(pathname);
+      if (sessionInfo) {
+        sessionId = sessionInfo.sessionId;
+        pathname = sessionInfo.strippedPath;
+      }
 
       // Route /v1/messages to the switching handler
-      if (url.pathname === "/v1/messages") {
-        return handleMessages(req);
+      if (pathname === "/v1/messages") {
+        return handleMessages(req, sessionId);
       }
 
       // All other paths — passthrough to Anthropic
-      return handleOtherRequest(req);
+      return handleOtherRequest(req, sessionId);
     },
     error(error: Error): Response {
       console.error(`[proxy] Server error: ${error.message}`);
@@ -99,15 +116,26 @@ async function main() {
   console.error(
     `  Mode: ${state.switched ? `switched → ${state.provider}/${state.model}` : "passthrough → Anthropic"}`
   );
+  console.error("  Session isolation: enabled (path-based /s/{id}/...)");
+  if (process.env.OMC_PROXY_DEBUG === "1") {
+    console.error("  Debug: ON (verbose logging for all endpoints)");
+  }
+
+  // Periodic cleanup of stale sessions
+  const cleanupTimer = setInterval(cleanupStaleSessions, getCleanupIntervalMs());
 
   // Handle graceful shutdown
   const shutdown = () => {
     console.error("\n[proxy] Shutting down...");
+    clearInterval(cleanupTimer);
     resetSwitchState();
     proxy.stop();
     control.stop();
     process.exit(0);
   };
+
+  // Register shutdown for /stop endpoint
+  registerShutdown(shutdown);
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);

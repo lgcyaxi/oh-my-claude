@@ -38,6 +38,31 @@ Create a well-crafted git commit for the current changes.
    <body - optional, explains WHY>
    ```
 
+### Documentation Updates (Delegate to MiniMax!)
+
+**IMPORTANT**: When the user asks to update changelogs, READMEs, or other documentation as part of the commit, **delegate the writing to document-writer (MiniMax)** instead of writing it yourself. This saves significant tokens.
+
+**How to delegate doc writing:**
+
+**Preferred: Direct switch via proxy**
+```
+mcp__oh-my-claude-background__switch_model with:
+- provider: "minimax"
+- model: "MiniMax-M2.5"
+```
+Then write the documentation directly using Edit/Write tools.
+When finished: `mcp__oh-my-claude-background__switch_revert`
+
+**Requires proxy** — launch via `oh-my-claude cc`. If switch fails, inform the user: "Proxy required. Launch via `oh-my-claude cc`."
+
+**What to include in the document-writer prompt:**
+- The git diff summary (what files changed, lines added/removed)
+- Current content of files to update (changelog, README sections)
+- Project documentation conventions (from CLAUDE.md)
+- The version number to use
+- Specific sections to add/update
+- Whether to update both EN and zh-CN READMEs
+
 ### Commit Types
 
 | Type | Use For |

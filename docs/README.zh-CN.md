@@ -4,21 +4,25 @@
 
 为 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 打造的多供应商 MCP 服务器，提供专业化的智能体工作流。
 
-通过 Anthropic 兼容 API 将后台任务路由到多个 AI 供应商（DeepSeek、智谱 GLM、MiniMax），同时充分利用 Claude Code 的原生能力。
+通过 Anthropic 兼容 API 将后台任务路由到多个 AI 供应商（DeepSeek、智谱 GLM、MiniMax、Kimi、Google Gemini、OpenAI、GitHub Copilot），同时充分利用 Claude Code 的原生能力。
 
 ## 特性
 
-- **多供应商 MCP 服务器** - 支持 DeepSeek、智谱 GLM、MiniMax 的后台任务执行
+- **多供应商 MCP 服务器** - 支持 DeepSeek、智谱 GLM、MiniMax、Google Gemini、OpenAI 的后台任务执行
+- **OAuth 认证** - 一键登录 Google Gemini（多账号）、OpenAI Codex 和 GitHub Copilot — 无需 API 密钥
 - **并发后台任务** - 支持多智能体并行运行，可配置并发限制
-- **专业化智能体工作流** - 预配置的专业智能体（Sisyphus、Oracle、Librarian 等）
+- **专业化智能体工作流** - 预配置的专业智能体（Sisyphus、Oracle、Hephaestus、Librarian 等）
 - **斜杠命令** - 快捷操作（`/omcx-commit`、`/omcx-implement`）和智能体激活（`/omc-sisyphus`、`/omc-plan`）
 - **实时状态栏** - 显示活跃智能体、任务进度和并发槽位
 - **规划系统** - 使用 Prometheus 智能体进行战略规划和巨石状态追踪
 - **官方 MCP 一键安装** - 一条命令安装 Sequential Thinking、MiniMax 和 GLM MCP 服务
 - **Hook 集成** - 代码质量检查和待办追踪
 - **输出样式管理器** - 通过 CLI 在内置和自定义输出样式之间切换
-- **记忆系统** - 基于 Markdown 的持久化记忆，支持 MCP 工具（remember、recall、forget）
-- **实时模型切换** - HTTP 代理实现对话中模型切换，支持外部供应商（DeepSeek、智谱 GLM、MiniMax）
+- **语义记忆** - 三层搜索架构（混合 FTS5+向量、FTS5、传统），支持去重和摘要式召回
+- **记忆时间线** - 自动维护的时间顺序索引，注入智能体上下文实现跨会话感知
+- **实时模型切换** - HTTP 代理实现对话中模型切换，支持外部供应商（DeepSeek、智谱 GLM、MiniMax、Kimi、Google Gemini、OpenAI、Copilot）
+- **代理感知智能体委派** - 智能体命令自动检测代理并使用 switch+Task 获取完整工具访问（Edit、Write、Bash）；代理不可用时回退到 MCP
+- **终端配置** - 一键配置 WezTerm/tmux，支持 zsh 自动检测、跨平台剪贴板和分屏 Bridge 布局
 - **配套工具** - 一键安装 UI UX Pro Max、CCometixLine 等工具
 
 ## 快速开始
@@ -53,7 +57,37 @@ export ZHIPU_API_KEY=your-zhipu-api-key
 
 # MiniMax（用于 Document-Writer 智能体）
 export MINIMAX_API_KEY=your-minimax-api-key
+
+# Kimi（用于代理模型切换）
+export KIMI_API_KEY=your-kimi-api-key
 ```
+
+### OAuth 认证（可选）
+
+支持 OAuth 的供应商可以免 API 密钥使用：
+
+```bash
+# Google Gemini（支持多账号配额轮转）
+oh-my-claude auth login google
+oh-my-claude auth add-account google          # 添加更多账号
+oh-my-claude auth switch-account google       # 列出账号
+oh-my-claude auth switch-account google 2     # 切换活跃账号
+
+# OpenAI
+oh-my-claude auth login openai
+oh-my-claude auth login openai --headless  # 用于 SSH/远程环境
+
+# GitHub Copilot
+oh-my-claude auth login copilot
+
+# MiniMax（用于配额显示）
+oh-my-claude auth login minimax  # 打开浏览器进行二维码登录
+
+# 列出已认证的供应商
+oh-my-claude auth list
+```
+
+认证后，使用 `/omc-switch gm`（Gemini）、`/omc-switch gpt`（OpenAI）或 `/omc-switch cp`（Copilot）通过这些供应商路由请求。
 
 ### 安装官方 MCP 服务
 
@@ -95,7 +129,13 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omc-plan` | 使用 Prometheus 开始战略规划 |
 | `/omc-start-work` | 开始执行现有计划 |
 | `/omc-status` | 显示 MCP 后台智能体状态仪表板 |
+| `/omc-hephaestus` | 激活 Hephaestus - 代码锻造专家 |
+| `/omc-navigator` | 激活 Navigator - 多模态 & 视觉转代码 |
 | `/omc-switch` | 切换到外部供应商模型（如 `/omc-switch ds-r 3`） |
+| `/omc-mem-compact` | AI 辅助记忆压缩 |
+| `/omc-mem-clear` | AI 驱动选择性记忆清理 |
+| `/omc-mem-summary` | 按日期范围整合记忆为时间线 |
+| `/omc-ulw` | **超级工作模式** - 最高性能，工作到完成 |
 
 ### 快捷操作命令（`/omcx-*`）
 
@@ -107,16 +147,11 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | `/omcx-docs` | 生成或更新文档 |
 | `/omcx-issue` | 向 oh-my-claude GitHub Issues 报告 Bug |
 
-### 模式命令
-
-| 命令 | 描述 |
-|------|------|
-| `/ulw` | **超级工作模式** - 最高性能，工作到完成 |
-
-#### 超级工作模式（`/ulw`）
+#### 超级工作模式（`/omc-ulw`）
 
 超级工作模式激活**最高性能执行**，采用零容忍完成策略：
 
+- **自动权限接受** - 启动前提示用户启用自动接受权限，确保不中断执行
 - **100% 交付** - 不允许部分完成、不允许缩小范围、不允许占位符
 - **激进并行化** - 同时启动多个智能体
 - **强制验证** - 代码编译、测试通过、构建成功
@@ -124,12 +159,13 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 
 **使用方法：**
 ```bash
-/ulw 根据计划实现认证系统
-/ulw 修复代码库中的所有类型错误
-/ulw 为 API 添加全面的测试覆盖
+/omc-ulw 根据计划实现认证系统
+/omc-ulw 修复代码库中的所有类型错误
+/omc-ulw 为 API 添加全面的测试覆盖
 ```
 
 **核心特性：**
+- 启动前请求自动接受权限以实现不间断执行
 - 自动创建全面的待办列表
 - 同步智能体（Task 工具）和异步智能体（MCP）并行使用
 - 每个步骤验证后才标记完成
@@ -290,7 +326,7 @@ description: 我的自定义输出样式
 
 ## 记忆系统
 
-oh-my-claude 内置基于 Markdown 的记忆系统，可跨会话持久化知识。记忆以人类可读的 `.md` 文件存储 — 支持 Git 版本控制、手动编辑，索引始终可从源文件重建。
+oh-my-claude 内置语义记忆系统，支持跨会话持久化知识。记忆以人类可读的 `.md` 文件存储 — 支持 Git 版本控制、手动编辑。派生 SQLite 索引提供 FTS5 BM25 搜索 + 可选向量相似度，实现上下文高效召回。
 
 ### 存储结构
 
@@ -304,11 +340,87 @@ oh-my-claude 内置基于 Markdown 的记忆系统，可跨会话持久化知识
 
 | 工具 | 说明 |
 |------|------|
-| `remember` | 存储记忆，可选标题、类型和标签 |
-| `recall` | 按文本查询搜索记忆，支持相关度排序 |
-| `forget` | 按 ID 删除特定记忆 |
-| `list_memories` | 浏览记忆，支持类型和日期过滤 |
-| `memory_status` | 显示记忆存储统计信息 |
+| `remember` | 存储记忆，自动去重检查（哈希精确匹配跳过、近似重复标记） |
+| `recall` | 搜索记忆，返回摘要片段（~300 字符），支持相关度排序 |
+| `get_memory` | 按 ID 读取完整记忆内容（从 recall 摘要深入查看） |
+| `forget` | 按 ID 删除记忆（同时清理 SQLite 索引） |
+| `list_memories` | 浏览记忆，支持类型、日期和范围过滤 |
+| `memory_status` | 显示记忆统计，包括索引健康状态和搜索层级 |
+| `compact_memories` | AI 辅助记忆压缩（分组合并相关记忆） |
+
+### 记忆时间线（自动上下文）
+
+oh-my-claude 自动维护一个 `TIMELINE.md` 文件，作为所有记忆的时间顺序目录。这使 AI 智能体拥有**持续的跨会话感知能力**，无需先调用 `recall()`。
+
+**工作原理：**
+1. 每次记忆变更（`remember`、`forget`、`compact`、`clear`、`summarize`）都会重新生成 `TIMELINE.md`
+2. 记忆感知 Hook 在每次用户提示时读取时间线
+3. 时间线内容自动注入到智能体的系统上下文中
+
+**时间线示例：**
+```markdown
+# Memory Timeline
+> 12 memories | Updated: 2026-02-10T15:30:00Z
+
+## Today (Feb 10)
+- 15:30 [note] **代理 thinking block 修复** `proxy, bug-fix`
+- 14:00 [note] **摘要自动删除 + 标签** `memory, enhancement`
+
+## Yesterday (Feb 9)
+- 18:45 [session] **会话摘要 2026-02-09** `auto-capture`
+
+## This Week (Feb 3-8)
+- Feb 7 [note] **Hook 重复安装修复** `installer, hooks`
+
+## Earlier This Month
+3 memories (2 notes, 1 session) | tags: memory, search, indexer
+
+## January 2026
+8 memories (5 notes, 3 sessions) | tags: memory, embeddings, proxy
+```
+
+**存储位置：** `TIMELINE.md` 存放在 `.claude/mem/` 和 `~/.claude/oh-my-claude/memory/` 的根目录 — 位于 `notes/` 和 `sessions/` 之外，因此对记忆操作不可见（不会被索引、去重或列出）。
+
+**自动缩放：** 条目从底部开始逐步折叠（今天/昨天 = 完整详情，本周 = 最多显示 10 条，更早 = 折叠摘要，更早月份 = 每月一行）。总输出上限为 120 行。
+
+### 嵌入供应商（语义搜索）
+
+语义搜索需要嵌入供应商。在配置中显式选择：
+
+```json
+{
+  "memory": {
+    "embedding": {
+      "provider": "custom"
+    }
+  }
+}
+```
+
+| 供应商 | 配置值 | 所需环境变量 | 模型 |
+|--------|--------|-------------|------|
+| **自定义** (Ollama, vLLM, LM Studio 等) | `"custom"` (默认) | `EMBEDDING_API_BASE` | 任意 OpenAI 兼容 |
+| **智谱** | `"zhipu"` | `ZHIPU_API_KEY` | `embedding-3` (1024维) |
+| **OpenRouter** | `"openrouter"` | `OPENROUTER_API_KEY` | `text-embedding-3-small` (1536维) |
+| **禁用** | `"none"` | — | 仅 FTS5 关键词搜索（Tier 2） |
+
+**自定义供应商** 支持任意 OpenAI 兼容的 `/v1/embeddings` 端点：
+
+```bash
+# 必填：端点 URL（激活自定义供应商）
+export EMBEDDING_API_BASE=http://localhost:11434/v1
+
+# 可选：模型名称（默认：text-embedding-3-small）
+export EMBEDDING_MODEL=qwen3-embedding
+
+# 可选：API 密钥（Ollama 等本地端点无需设置）
+export EMBEDDING_API_KEY=your-key
+
+# 可选：向量维度（未设置时通过探测调用自动检测）
+export EMBEDDING_DIMENSIONS=4096
+```
+
+如果选定的供应商无法初始化（缺少环境变量、连接错误），系统降级为 FTS5 关键词搜索（Tier 2）。不会静默切换到其他供应商 — 查看 MCP stderr 日志获取明确的诊断信息。
 
 ### CLI 命令
 
@@ -344,45 +456,70 @@ oh-my-claude 内置 HTTP 代理，支持**对话中模型切换** — 将 Claude
 ### 工作原理
 
 ```
-  Claude Code
+  Claude Code（使用 Anthropic API）
        │  ANTHROPIC_BASE_URL=http://localhost:18910
        ▼
-  ┌─────────────────────────────────────────────┐
-  │  oh-my-claude 代理 (localhost:18910)         │
-  │                                              │
-  │  switched=false?  → 透传到 Anthropic         │
-  │  switched=true?   → 转发到外部供应商          │
-  │                     (DeepSeek/智谱/MiniMax)  │
-  └─────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────┐
+  │  oh-my-claude 代理 (localhost:18910)                         │
+  │                                                              │
+  │  switched=false?  → 透传到 Anthropic                         │
+  │  switched=true?   → 三路格式路由：                            │
+  │    ├─ Google     → Antigravity（Gemini 原生 + 信封包装）      │
+  │    ├─ OpenAI     → Responses API（input/instructions）       │
+  │    ├─ Copilot    → OpenAI Chat Completions（messages）       │
+  │    └─ DS/ZP/MM/KM → Anthropic /v1/messages（直通）           │
+  └──────────────────────────────────────────────────────────────┘
 ```
 
-所有目标供应商使用 **Anthropic 兼容**的 `/v1/messages` 端点。代理仅重写：目标主机、API 密钥头和模型字段 — 无需格式转换。
+**格式转换**：API 密钥供应商（DeepSeek、智谱、MiniMax、Kimi）使用 Anthropic 兼容的 `/v1/messages` — 无需转换。OAuth 供应商各需不同转换：
+- **Google Gemini**：Antigravity API + Gemini 原生格式，429 时自动轮转账号
+- **OpenAI Codex**：Responses API 格式（`input` 数组 + `instructions`）
+- **Copilot/OpenRouter**：标准 OpenAI Chat Completions（`messages` 数组）
 
 ### 快速开始
 
+**一键启动**（推荐）：
+
 ```bash
-# 1. 启用代理
-oh-my-claude proxy enable
-
-# 2. 启动代理服务器
-oh-my-claude proxy start
-
-# 3. 设置环境变量（代理启动时会打印）
-export ANTHROPIC_BASE_URL=http://localhost:18910   # Linux/macOS
-set ANTHROPIC_BASE_URL=http://localhost:18910      # Windows
-
-# 4. 正常使用 Claude Code — 所有请求透传到 Anthropic
+oh-my-claude cc                    # 自动启动每会话代理 + 启动 Claude Code
+oh-my-claude cc -- --resume        # 转发参数给 claude
+oh-my-claude cc -d                 # 启用调试日志
+oh-my-claude cc -p ds              # 直连 DeepSeek（无代理，单供应商）
+oh-my-claude cc -p km              # 直连 Kimi（无代理，单供应商）
 ```
 
-> **Windows**：代理 CLI 完全跨平台。健康检查使用 Node 的 `http` 模块（无需 `curl`），进程管理使用 PID 文件和 `wmic` 回退（无需 `pgrep`）。
+每个 `cc` 会话都有自己独立的代理实例和隔离的状态。多个会话可以同时运行互不干扰。
+
+**多 AI 桥接** — 在主会话旁生成 CC 工作节点：
+
+```bash
+oh-my-claude bridge up cc                    # 生成带独立代理会话的 CC
+oh-my-claude bridge up cc --switch ds        # CC 工作节点自动切换至 DeepSeek
+oh-my-claude bridge up cc cc:2 cc:3          # 多个独立 CC 实例
+oh-my-claude bridge send cc "research task"  # 委派任务并轮询响应
+oh-my-claude bridge status                   # 查看运行中的桥接工作节点
+oh-my-claude bridge down all                 # 停止所有桥接工作节点
+```
+
+CC 桥接工作节点可将团队任务路由至低成本外部模型（DeepSeek、ZhiPu、MiniMax），而非消耗 Opus 令牌。每个 CC 实例拥有独立的代理会话，支持隔离的 `switch_model` 调用。同时支持 `codex`、`opencode` 和 `gemini` 作为桥接工作节点。
+
+**`cc -p` 供应商快捷名：**
+
+| 快捷名 | 供应商 | 端点 |
+|--------|--------|------|
+| `ds` / `deepseek` | DeepSeek | api.deepseek.com/anthropic |
+| `zp` / `zhipu` | 智谱 | open.bigmodel.cn/api/anthropic |
+| `mm` / `minimax` | MiniMax | api.minimaxi.com/anthropic |
+| `km` / `kimi` | Kimi | api.kimi.com/coding |
+
+> **Windows**：代理 CLI 完全跨平台。健康检查使用 Node 的 `http` 模块（无需 `curl` 依赖）。
 
 ### 切换模型
 
-**通过斜杠命令**（最简单 — 在 Claude Code 对话中）：
+**通过斜杠命令**（在 Claude Code 对话中）：
 ```
-/omc-switch ds-r 3          # 3 个请求通过 DeepSeek Reasoner
-/omc-switch deepseek deepseek-chat
-/omc-switch zhipu glm-4.7 5
+/omc-switch ds-r             # 切换到 DeepSeek Reasoner
+/omc-switch zp               # 切换到智谱 GLM-5
 /omc-switch revert           # 切换回原生 Claude
 ```
 
@@ -392,24 +529,26 @@ set ANTHROPIC_BASE_URL=http://localhost:18910      # Windows
 |--------|--------|------|
 | `ds` | deepseek | deepseek-chat |
 | `ds-r` | deepseek | deepseek-reasoner |
-| `zp` | zhipu | glm-4.7 |
-| `mm` | minimax | MiniMax-M2.1 |
+| `zp` | zhipu | GLM-5 |
+| `mm` | minimax | MiniMax-M2.5 |
+| `km` | kimi | K2.5 |
+| `gm` | google | gemini-3-flash |
+| `gm-p` | google | gemini-3-pro |
+| `gpt` | openai | gpt-5.2 |
+| `cx` | openai | gpt-5.3-codex |
+| `cp` | copilot | gpt-5.2 |
+
+**通过 CLI**（会话 ID 支持前缀匹配）：
+```bash
+oh-my-claude proxy switch                      # 显示会话和可用模型
+oh-my-claude proxy switch 505a GLM-5           # 将会话 505a... 切换到 GLM-5
+oh-my-claude proxy switch 505 deep             # 前缀匹配：deepseek-reasoner
+oh-my-claude proxy revert 505a                 # 恢复会话到原生 Claude
+```
 
 **通过 MCP 工具：**
 ```
-switch_model(provider="deepseek", model="deepseek-chat", requests=3)
-```
-
-**通过 CLI：**
-```bash
-oh-my-claude proxy switch deepseek deepseek-chat
-```
-
-**通过控制 API：**
-```bash
-curl -X POST http://localhost:18911/switch \
-  -H "Content-Type: application/json" \
-  -d '{"provider":"deepseek","model":"deepseek-chat","requests":3}'
+switch_model(provider="deepseek", model="deepseek-chat")
 ```
 
 ### MCP 工具
@@ -420,41 +559,87 @@ curl -X POST http://localhost:18911/switch \
 | `switch_status` | 查询当前代理切换状态 |
 | `switch_revert` | 立即恢复为原生 Claude |
 
+### 智能体委派模式
+
+当代理运行时，智能体命令（`/omc-hephaestus`、`/omc-oracle`、`/omc-librarian`、`/omc-navigator`）自动使用 **switch+Task** 获取完整工具访问：
+
+1. `switch_model(provider, model, requests=-1)` — 静默切换
+2. 使用匹配的 `subagent_type` 调用 Task 工具 — 完整的 Claude Code 工具访问
+3. `switch_revert` — 自动清理
+
+这使外部模型可以使用 Edit、Write、Bash、Glob 和 Grep — 不同于只能返回文本的 MCP 后台任务。切换是静默的（无需用户确认），因为用户已明确调用了智能体命令。
+
+代理不可用时，命令自动回退到 MCP `launch_background_task`。
+
+| 智能体 | 供应商/模型 |
+|--------|-----------|
+| Hephaestus | openai/gpt-5.3-codex |
+| Oracle | openai/gpt-5.3-codex |
+| Librarian | zhipu/GLM-5 |
+| Navigator | kimi/K2.5 |
+| Analyst | deepseek/deepseek-chat |
+| Document-Writer | minimax/MiniMax-M2.5 |
+| Frontend-UI-UX | google/gemini-3-pro |
+
 ### 安全特性
 
-- **自动恢复**：N 个请求后（默认：1），自动恢复为原生 Claude
-- **斜杠命令开销跳过**：切换后前 2 个请求不计数（补偿斜杠命令内部 API 调用）
-- **超时机制**：切换在超时后过期（默认：10 分钟）
+- **会话隔离**：每个 `oh-my-claude cc` 会话拥有独立的代理实例 — 会话间互不干扰
+- **永久切换**：模型切换持续有效，直到显式恢复（无请求计数）
+- **Google 429 自动轮转**：多账号配额耗尽时自动轮转账号（最多重试 3 次）
+- **DeepSeek Reasoner 兼容**：对话中途切换到 DeepSeek Reasoner 时，代理自动注入所需的 `thinking` 块
 - **优雅降级**：如果供应商 API 密钥缺失，静默回退到原生 Claude
 - **错误恢复**：供应商请求失败时自动回退到原生 Claude
-- **默认关闭**：代理默认禁用，需显式启用
 
 ### 代理 CLI 命令
 
 ```bash
-oh-my-claude proxy start                          # 启动代理守护进程
-oh-my-claude proxy stop                           # 停止代理守护进程
-oh-my-claude proxy status                         # 显示代理状态
-oh-my-claude proxy enable                         # 在配置中启用
-oh-my-claude proxy disable                        # 在配置中禁用
-oh-my-claude proxy switch <供应商> <模型>          # 手动切换模型
+oh-my-claude proxy                                # 显示概览（会话 + 状态）
+oh-my-claude proxy status                         # 显示活跃会话摘要
+oh-my-claude proxy sessions                       # 详细会话列表（含模型信息）
+oh-my-claude proxy switch                         # 显示会话和可用模型
+oh-my-claude proxy switch <会话> <模型>            # 切换会话到指定模型（前缀匹配）
+oh-my-claude proxy revert [会话]                   # 恢复为原生 Claude
 ```
 
-### 配置
+### 菜单栏应用（GUI 会话管理器）
 
-添加到 `~/.claude/oh-my-claude.json`：
+oh-my-claude 内置基于 Tauri 的菜单栏应用，提供可视化会话管理。
 
-```json
-{
-  "proxy": {
-    "port": 18910,
-    "controlPort": 18911,
-    "defaultRequests": 1,
-    "defaultTimeoutMs": 600000,
-    "enabled": false
-  }
-}
+```bash
+oh-my-claude menubar                              # 启动已构建的应用
+oh-my-claude menubar --dev                        # 以开发模式运行
+oh-my-claude menubar --build                      # 构建发布版应用
 ```
+
+**前置要求**：构建需要 [Rust](https://rustup.rs/) 和 [Tauri 前置依赖](https://v2.tauri.app/start/prerequisites/)。
+
+菜单栏应用显示所有活跃会话及其当前模型，支持一键切换模型 — 与 `proxy sessions` 数据相同，但提供可视化界面。
+
+## 终端配置
+
+oh-my-claude 提供一键终端配置，针对 AI 编程会话进行了优化。
+
+### WezTerm
+
+```bash
+oh-my-claude wezterm-config              # 写入 ~/.wezterm.lua
+oh-my-claude wezterm-config --force      # 覆盖已有配置
+oh-my-claude wezterm-config --show       # 预览但不写入
+```
+
+**主要配置：** 50k 滚动缓冲、JetBrains Mono 字体、Dracula 主题、WebGpu 渲染、vi 风格复制模式（`Ctrl+Shift+X`）、快速选择（`Ctrl+Shift+Space`）、正则搜索（`Ctrl+Shift+F`）、窗格分割（`Ctrl+Shift+|` / `Ctrl+Shift+_`）。
+
+**Shell 自动检测（Windows）：** 优先级：zsh > Git Bash > PowerShell。如果在 Git Bash 目录中检测到 zsh（`bin/` 或 `usr/bin/`），WezTerm 会通过 `bash -i -l -c zsh` 自动启动 zsh。Git Bash 位置通过多个候选路径和 `where git` 回退检测。
+
+### tmux
+
+```bash
+oh-my-claude tmux-config                 # 写入 ~/.tmux.conf
+oh-my-claude tmux-config --force         # 覆盖已有配置
+oh-my-claude tmux-config --show          # 预览但不写入
+```
+
+**主要配置：** 50k 滚动缓冲、鼠标模式、256 色、零转义延迟、vi 复制模式。跨平台剪贴板自动检测：`pbcopy`（macOS）、`clip.exe`（Windows/WSL）、`xclip`/`xsel`（Linux）。
 
 ## 智能体工作流
 
@@ -478,17 +663,19 @@ oh-my-claude 提供两种类型的智能体：
 
 | 智能体 | 供应商 | 模型 | 角色 |
 |--------|--------|------|------|
-| **Oracle** | Claude | claude-sonnet-4.5 | 深度推理 |
+| **Oracle** | OpenAI | gpt-5.2 | 深度推理 |
 | **Analyst** | DeepSeek | deepseek-chat | 快速代码分析 |
-| **Librarian** | 智谱 | glm-4.7 | 外部研究 |
-| **Frontend-UI-UX** | 智谱 | glm-4v-flash | 视觉/UI 设计 |
-| **Document-Writer** | MiniMax | MiniMax-M2.1 | 文档编写 |
+| **Librarian** | 智谱 | GLM-5 | 外部研究 |
+| **Frontend-UI-UX** | Google | gemini-3-pro | 视觉/UI 设计 |
+| **Document-Writer** | MiniMax | MiniMax-M2.5 | 文档编写 |
+| **Navigator** | Kimi | K2.5 | 视觉转代码 & 多步骤任务 |
+| **Hephaestus** | OpenAI | gpt-5.3-codex | 代码锻造专家 |
 
 **调用方式：** `launch_background_task(agent="oracle", prompt="...")` 或 `execute_agent(agent="oracle", prompt="...")`
 
 **直接模型访问：** `execute_with_model(provider="deepseek", model="deepseek-reasoner", prompt="...")` — 绕过智能体路由，直接调用模型，节省 Token 开销。
 
-> **注意：** 如果供应商的 API 密钥未配置，使用该供应商的任务将失败。在使用依赖特定供应商的智能体前，请先设置所需的环境变量（如 `DEEPSEEK_API_KEY`）。
+> **代理路由：** 当代理运行时，MCP 智能体会自动通过代理路由 — 支持 OAuth 供应商（OpenAI、Google、Copilot）无需 API 密钥。回退链：代理 → 直接 API → Claude 直通 → Claude Code Task 工具。无代理时，仅 API 密钥供应商（DeepSeek、ZhiPu、MiniMax、Kimi）可直接使用。
 
 ## 官方 MCP 服务
 
@@ -554,13 +741,37 @@ npx @lgcyaxi/oh-my-claude memory list             # 列出所有记忆
 npx @lgcyaxi/oh-my-claude memory show <id>        # 查看记忆内容
 npx @lgcyaxi/oh-my-claude memory delete <id>      # 删除记忆
 
-# 代理（实时模型切换）
-npx @lgcyaxi/oh-my-claude proxy start             # 启动代理守护进程
-npx @lgcyaxi/oh-my-claude proxy stop              # 停止代理守护进程
-npx @lgcyaxi/oh-my-claude proxy status            # 显示代理状态
-npx @lgcyaxi/oh-my-claude proxy enable            # 在配置中启用代理
-npx @lgcyaxi/oh-my-claude proxy disable           # 在配置中禁用代理
-npx @lgcyaxi/oh-my-claude proxy switch <供应商> <模型>  # 切换到供应商/模型
+# 终端配置
+npx @lgcyaxi/oh-my-claude wezterm-config            # 写入 WezTerm 配置 (~/.wezterm.lua)
+npx @lgcyaxi/oh-my-claude wezterm-config --force    # 覆盖已有配置
+npx @lgcyaxi/oh-my-claude tmux-config               # 写入 tmux 配置 (~/.tmux.conf)
+npx @lgcyaxi/oh-my-claude tmux-config --force       # 覆盖已有配置
+
+# 启动 Claude Code
+npx @lgcyaxi/oh-my-claude cc                      # 自动启动代理 + 启动 claude
+npx @lgcyaxi/oh-my-claude cc -p ds                # 直连 DeepSeek
+npx @lgcyaxi/oh-my-claude cc -p km                # 直连 Kimi
+npx @lgcyaxi/oh-my-claude cc -- --resume           # 转发参数给 claude
+
+# 认证（OAuth）
+npx @lgcyaxi/oh-my-claude auth login <供应商>      # 认证（google/openai/copilot/minimax）
+npx @lgcyaxi/oh-my-claude auth logout <供应商>     # 移除凭证
+npx @lgcyaxi/oh-my-claude auth list               # 列出已认证供应商
+npx @lgcyaxi/oh-my-claude auth add-account google        # 添加 Google 账号（配额轮转）
+npx @lgcyaxi/oh-my-claude auth switch-account google     # 列出 / 切换活跃 Google 账号
+
+# 代理（实时模型切换 — 每会话自动管理）
+npx @lgcyaxi/oh-my-claude proxy                    # 显示会话概览
+npx @lgcyaxi/oh-my-claude proxy status             # 活跃会话摘要
+npx @lgcyaxi/oh-my-claude proxy sessions           # 详细会话列表
+npx @lgcyaxi/oh-my-claude proxy switch             # 显示会话 + 可用模型
+npx @lgcyaxi/oh-my-claude proxy switch <会话> <模型>  # 切换会话到指定模型
+npx @lgcyaxi/oh-my-claude proxy revert [会话]      # 恢复为原生 Claude
+
+# 菜单栏（GUI 会话管理器）
+npx @lgcyaxi/oh-my-claude menubar                  # 启动菜单栏应用
+npx @lgcyaxi/oh-my-claude menubar --dev            # 以开发模式运行
+npx @lgcyaxi/oh-my-claude menubar --build          # 构建发布版应用
 ```
 
 ## 配置
@@ -588,12 +799,38 @@ npx @lgcyaxi/oh-my-claude proxy switch <供应商> <模型>  # 切换到供应�
       "type": "anthropic-compatible",
       "base_url": "https://api.minimaxi.com/anthropic",
       "api_key_env": "MINIMAX_API_KEY"
+    },
+    "kimi": {
+      "type": "anthropic-compatible",
+      "base_url": "https://api.kimi.com/coding",
+      "api_key_env": "KIMI_API_KEY"
+    },
+    "google": {
+      "type": "google-oauth",
+      "note": "通过 oh-my-claude auth login google 认证"
+    },
+    "openai": {
+      "type": "openai-oauth",
+      "note": "通过 oh-my-claude auth login openai 认证"
+    },
+    "copilot": {
+      "type": "copilot-oauth",
+      "note": "通过 oh-my-claude auth login copilot 认证"
     }
   },
   "agents": {
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
-    "oracle": { "provider": "claude", "model": "claude-sonnet-4.5" },
-    "librarian": { "provider": "zhipu", "model": "glm-4.7" }
+    "oracle": { "provider": "openai", "model": "gpt-5.2" },
+    "hephaestus": { "provider": "openai", "model": "gpt-5.3-codex" },
+    "librarian": { "provider": "zhipu", "model": "GLM-5" }
+  },
+  "concurrency": {
+    "global": 10,
+    "per_provider": {
+      "deepseek": 5,
+      "zhipu": 5,
+      "minimax": 3
+    }
   }
 }
 ```
@@ -608,8 +845,8 @@ npx @lgcyaxi/oh-my-claude proxy switch <供应商> <模型>  # 切换到供应�
 │         │                                                                 │
 │    ┌────┴────┬─────────────────┬──────────────┐                          │
 │    ▼         ▼                 ▼              ▼                          │
-│  Task 工具   MCP 服务器     Hooks          代理                           │
-│  (同步)      (异步)        (生命周期)     (拦截)                          │
+│  Task 工具   MCP 服务器     Hooks       每会话代理                       │
+│  (同步)      (异步)        (生命周期)  (自动管理)                        │
 │    │           │                │              │                          │
 │    ▼           ▼                ▼              ▼                          │
 │  Claude      多供应商       settings.json  API 请求路由器                  │
@@ -619,7 +856,9 @@ npx @lgcyaxi/oh-my-claude proxy switch <供应商> <模型>  # 切换到供应�
 │                ├── DeepSeek          Anthropic   外部供应商                │
 │                ├── 智谱 GLM          (默认)     (已切换)                   │
 │                ├── MiniMax                                                │
-│                └── OpenRouter                                            │
+│                ├── Kimi                                                   │
+│                ├── Google (OAuth)      菜单栏应用                          │
+│                └── OpenAI (OAuth)      (GUI 会话管理器)                   │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 

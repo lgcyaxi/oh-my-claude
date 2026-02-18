@@ -149,14 +149,23 @@ function parseFrontmatter(raw: string): MemoryFrontmatter {
     // created
     const createdMatch = trimmed.match(/^created:\s*(.+)$/);
     if (createdMatch?.[1]) {
-      result.created = createdMatch[1].trim();
+      // Strip surrounding quotes if present (some files have "2026-01-29T10:00:00.000Z")
+      let value = createdMatch[1].trim();
+      if (value.startsWith('"') && value.endsWith('"')) {
+        value = value.slice(1, -1);
+      }
+      result.created = value;
       continue;
     }
 
     // updated
     const updatedMatch = trimmed.match(/^updated:\s*(.+)$/);
     if (updatedMatch?.[1]) {
-      result.updated = updatedMatch[1].trim();
+      let value = updatedMatch[1].trim();
+      if (value.startsWith('"') && value.endsWith('"')) {
+        value = value.slice(1, -1);
+      }
+      result.updated = value;
       continue;
     }
   }

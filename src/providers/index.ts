@@ -5,6 +5,10 @@
  * - DeepSeek: https://api.deepseek.com/anthropic
  * - ZhiPu GLM: https://open.bigmodel.cn/api/anthropic
  * - MiniMax: https://api.minimaxi.com/anthropic
+ * - Kimi: https://api.kimi.com/coding
+ *
+ * OAuth providers:
+ * - OpenAI/Codex: Codex OAuth
  */
 
 export * from "./types";
@@ -13,5 +17,5 @@ export * from "./anthropic-client";
 export * from "./deepseek";
 export * from "./zhipu";
 export * from "./minimax";
-export * from "./openrouter";
+export * from "./openai-native";
 export * from "./router";
