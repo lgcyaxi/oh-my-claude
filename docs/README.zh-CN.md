@@ -52,7 +52,7 @@ bun run install-local
 # DeepSeek（用于 Analyst 智能体）
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 
-# 智谱 GLM（用于 Librarian、Frontend-UI-UX 智能体）
+# 智谱 GLM（用于 Librarian 智能体）
 export ZHIPU_API_KEY=your-zhipu-api-key
 
 # MiniMax（用于 Document-Writer 智能体）
@@ -121,20 +121,21 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | 命令 | 描述 |
 |------|------|
 | `/omc-sisyphus` | 激活 Sisyphus - 完整实现编排器 |
-| `/omc-oracle` | 激活 Oracle - 深度推理和架构 |
-| `/omc-librarian` | 激活 Librarian - 外部研究和文档 |
-| `/omc-reviewer` | 激活 Claude-Reviewer - 代码审查和质量保证 |
-| `/omc-scout` | 激活 Claude-Scout - 快速探索 |
-| `/omc-explore` | 激活 Explore - 代码库搜索 |
 | `/omc-plan` | 使用 Prometheus 开始战略规划 |
 | `/omc-start-work` | 开始执行现有计划 |
 | `/omc-status` | 显示 MCP 后台智能体状态仪表板 |
-| `/omc-hephaestus` | 激活 Hephaestus - 代码锻造专家 |
-| `/omc-navigator` | 激活 Navigator - 多模态 & 视觉转代码 |
-| `/omc-switch` | 切换到外部供应商模型（如 `/omc-switch ds-r 3`） |
+| `/omc-status-bridge` | 显示桥接工作节点状态 |
+| `/omc-switch` | 切换到外部供应商模型（如 `/omc-switch ds-r`） |
+| `/omc-opencode` | 激活 OpenCode 进行重构和 UI 设计 |
+| `/omc-codex` | 激活 Codex CLI 进行脚手架和样板代码生成 |
+| `/omc-pref` | 管理持久偏好设置（始终/禁止规则） |
+| `/omc-up` | 点赞 — 标记响应为有帮助 |
+| `/omc-down` | 点踩 — 标记响应为无帮助 |
+| `/omc-pend` | 挂起 — 暂停当前任务稍后继续 |
 | `/omc-mem-compact` | AI 辅助记忆压缩 |
 | `/omc-mem-clear` | AI 驱动选择性记忆清理 |
 | `/omc-mem-summary` | 按日期范围整合记忆为时间线 |
+| `/omc-mem-daily` | 从会话记忆生成每日叙事 |
 | `/omc-ulw` | **超级工作模式** - 最高性能，工作到完成 |
 
 ### 快捷操作命令（`/omcx-*`）
@@ -561,15 +562,13 @@ switch_model(provider="deepseek", model="deepseek-chat")
 
 ### 智能体委派模式
 
-当代理运行时，智能体命令（`/omc-hephaestus`、`/omc-oracle`、`/omc-librarian`、`/omc-navigator`）自动使用 **switch+Task** 获取完整工具访问：
+当代理运行时，Sisyphus（`/omc-sisyphus`）可以使用 **switch+Task** 委派外部模型智能体，获取完整工具访问：
 
-1. `switch_model(provider, model, requests=-1)` — 静默切换
-2. 使用匹配的 `subagent_type` 调用 Task 工具 — 完整的 Claude Code 工具访问
+1. `switch_model(provider, model)` — 静默切换
+2. 使用匹配的 `subagent_type` 调用 Task 工具 — 完整的 Claude Code 工具访问（Edit、Write、Bash、Glob、Grep）
 3. `switch_revert` — 自动清理
 
-这使外部模型可以使用 Edit、Write、Bash、Glob 和 Grep — 不同于只能返回文本的 MCP 后台任务。切换是静默的（无需用户确认），因为用户已明确调用了智能体命令。
-
-代理不可用时，命令自动回退到 MCP `launch_background_task`。
+这使外部模型拥有完整的工具访问权限 — 不同于只能返回文本的 MCP 后台任务。代理不可用时，委派自动回退到 MCP `launch_background_task`。
 
 | 智能体 | 供应商/模型 |
 |--------|-----------|
@@ -652,8 +651,8 @@ oh-my-claude 提供两种类型的智能体：
 | 智能体 | 角色 | 调用方式 |
 |--------|------|----------|
 | **Sisyphus** | 主编排器 | `/omc-sisyphus` |
-| **Claude-Reviewer** | 代码审查、质量保证 | `/omc-reviewer` |
-| **Claude-Scout** | 快速探索 | `/omc-scout` |
+| **Claude-Reviewer** | 代码审查、质量保证 | `Task(subagent_type="claude-reviewer")` |
+| **Claude-Scout** | 快速探索 | `Task(subagent_type="claude-scout")` |
 | **Prometheus** | 战略规划 | `/omc-plan` |
 | **Explore** | 代码库搜索 | `Task(subagent_type="Explore")` |
 

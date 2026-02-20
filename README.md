@@ -52,7 +52,7 @@ bun run install-local
 # DeepSeek (for Analyst agent)
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 
-# ZhiPu GLM (for Librarian, Frontend-UI-UX agents)
+# ZhiPu GLM (for Librarian agent)
 export ZHIPU_API_KEY=your-zhipu-api-key
 
 # MiniMax (for Document-Writer agent)
@@ -121,20 +121,21 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | Command | Description |
 |---------|-------------|
 | `/omc-sisyphus` | Activate Sisyphus - full implementation orchestrator |
-| `/omc-oracle` | Activate Oracle - deep reasoning and architecture |
-| `/omc-librarian` | Activate Librarian - external research and docs |
-| `/omc-reviewer` | Activate Claude-Reviewer - code review and QA |
-| `/omc-scout` | Activate Claude-Scout - fast exploration |
-| `/omc-explore` | Activate Explore - codebase search |
 | `/omc-plan` | Start strategic planning with Prometheus |
 | `/omc-start-work` | Begin work on an existing plan |
 | `/omc-status` | Display MCP background agent status dashboard |
-| `/omc-hephaestus` | Activate Hephaestus - code forge specialist |
-| `/omc-navigator` | Activate Navigator - multimodal & visual-to-code |
-| `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r 3`) |
+| `/omc-status-bridge` | Display bridge worker status |
+| `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r`) |
+| `/omc-opencode` | Activate OpenCode for refactoring and UI design |
+| `/omc-codex` | Activate Codex CLI for scaffolding and boilerplate |
+| `/omc-pref` | Manage persistent preferences (always/never rules) |
+| `/omc-up` | Upvote — mark a response as helpful |
+| `/omc-down` | Downvote — mark a response as unhelpful |
+| `/omc-pend` | Pending — pause current task for later |
 | `/omc-mem-compact` | Compact memories with AI-assisted grouping |
 | `/omc-mem-clear` | AI-powered selective memory cleanup |
 | `/omc-mem-summary` | Consolidate memories into timeline summary |
+| `/omc-mem-daily` | Generate daily narrative from session memories |
 | `/omc-ulw` | **Ultrawork Mode** - Maximum performance, work until done |
 
 ### Quick Action Commands (`/omcx-*`)
@@ -605,15 +606,13 @@ switch_model(provider="deepseek", model="deepseek-chat")
 
 ### Agent Delegation Mode
 
-When the proxy is running, agent commands (`/omc-hephaestus`, `/omc-oracle`, `/omc-librarian`, `/omc-navigator`) automatically use **switch+Task** for full tool access:
+When the proxy is running, Sisyphus (`/omc-sisyphus`) can delegate to external model agents using **switch+Task** for full tool access:
 
-1. `switch_model(provider, model, requests=-1)` — silent switch
-2. Task tool with matching `subagent_type` — full Claude Code tool access
+1. `switch_model(provider, model)` — silent switch
+2. Task tool with matching `subagent_type` — full Claude Code tool access (Edit, Write, Bash, Glob, Grep)
 3. `switch_revert` — automatic cleanup
 
-This gives external models access to Edit, Write, Bash, Glob, and Grep — unlike MCP background tasks which only return text. The switch is silent (no user confirmation) since the user explicitly invoked the agent command.
-
-When proxy is unavailable, commands fall back to MCP `launch_background_task` automatically.
+This gives external models full tool access — unlike MCP background tasks which only return text. When proxy is unavailable, delegation falls back to MCP `launch_background_task` automatically.
 
 | Agent | Provider/Model |
 |-------|---------------|
@@ -696,8 +695,8 @@ These agents run via Claude Code's native Task tool. **Model selection is contro
 | Agent | Role | Invocation |
 |-------|------|------------|
 | **Sisyphus** | Primary orchestrator | `/omc-sisyphus` |
-| **Claude-Reviewer** | Code review, QA | `/omc-reviewer` |
-| **Claude-Scout** | Fast exploration | `/omc-scout` |
+| **Claude-Reviewer** | Code review, QA | `Task(subagent_type="claude-reviewer")` |
+| **Claude-Scout** | Fast exploration | `Task(subagent_type="claude-scout")` |
 | **Prometheus** | Strategic planning | `/omc-plan` |
 | **Explore** | Codebase search | `Task(subagent_type="Explore")` |
 
