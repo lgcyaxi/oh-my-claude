@@ -7,6 +7,9 @@ All notable changes to oh-my-claude are documented here.
 ### Fixed
 
 - **Proxy Auth Auto-Init**: Proxy auto-initializes auth on startup, fixing 502 errors when using `oh-my-claude cc`
+- **Doctor UI UX Pro Max**: Detection now checks both global and project-local skill paths
+- **Setup-Tools Install Path**: UI UX Pro Max skill now installs globally instead of CWD-relative
+- **Dev Workflow**: `install-local` now includes `npm link` for consistent CLI binary during development
 
 ## [2.1.0](changelog/v2.1.x.md) - 2026-02-18
 
