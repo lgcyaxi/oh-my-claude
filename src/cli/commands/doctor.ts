@@ -255,10 +255,12 @@ export function registerDoctorCommand(program: Command) {
       if (detail) {
         console.log(`\n${header("Companion Tools:")}`);
 
-        // Check UI UX Pro Max
-        const skillDir = join(homedir(), ".claude", "skills", "ui-ux-pro-max");
-        const skillExists = existsSync(skillDir);
-        console.log(`  ${skillExists ? ok("UI UX Pro Max skill") : dimText("○ UI UX Pro Max (not installed)")}`);
+        // Check UI UX Pro Max (global ~/.claude/skills/ or project-local .claude/skills/)
+        const globalSkillDir = join(homedir(), ".claude", "skills", "ui-ux-pro-max");
+        const localSkillDir = join(process.cwd(), ".claude", "skills", "ui-ux-pro-max");
+        const skillDir = existsSync(globalSkillDir) ? globalSkillDir : existsSync(localSkillDir) ? localSkillDir : null;
+        const skillExists = skillDir !== null;
+        console.log(`  ${skillExists ? ok("UI UX Pro Max") : dimText("○ UI UX Pro Max (not installed)")}`);
         if (skillExists) {
           const skillMd = join(skillDir, "SKILL.md");
           console.log(`    Path: ${dimText(skillDir)}`);

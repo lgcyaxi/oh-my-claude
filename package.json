@@ -31,7 +31,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "dev": "bun run --watch src/index.ts",
-    "install-local": "bun run build:all && bun run src/cli.ts install",
+    "install-local": "bun run build:all && npm link && bun run src/cli.ts install",
     "uninstall-local": "bun run src/cli.ts uninstall",
     "status": "bun run src/cli.ts status",
     "doctor": "bun run src/cli.ts doctor",

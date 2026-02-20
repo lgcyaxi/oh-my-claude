@@ -256,10 +256,10 @@ try {
             continue;
           }
 
-          // Step 2: Initialize for Claude Code
+          // Step 2: Initialize for Claude Code (run from $HOME so skill installs to ~/.claude/skills/)
           console.log("Initializing UI UX Pro Max for Claude Code...");
           try {
-            execSync("npx uipro-cli init --ai claude", { stdio: "inherit", timeout: 60000 });
+            execSync("npx uipro-cli init --ai claude", { stdio: "inherit", timeout: 60000, cwd: homedir() });
             console.log(ok("UI UX Pro Max initialized for Claude Code"));
           } catch (error) {
             console.log(fail("Failed to initialize UI UX Pro Max"));
