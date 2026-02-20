@@ -22,6 +22,7 @@ import { handleMessages, handleOtherRequest } from "./handler";
 import { handleControl, registerShutdown } from "./control";
 import { readSwitchState, resetSwitchState } from "./state";
 import { parseSessionFromPath, cleanupStaleSessions, getCleanupIntervalMs } from "./session";
+import { initializeAuth } from "./auth";
 import { DEFAULT_PROXY_CONFIG } from "./types";
 
 // Parse CLI arguments
@@ -49,6 +50,10 @@ function parseArgs(): { port: number; controlPort: number } {
  */
 async function main() {
   const { port, controlPort } = parseArgs();
+
+  // Ensure auth config exists (auto-detects api-key vs oauth mode)
+  const authConfig = initializeAuth();
+  const authModeLabel = authConfig.authMode === "oauth" ? "oauth (subscription)" : "api-key";
 
   // Ensure clean global state on startup
   resetSwitchState();
@@ -113,6 +118,7 @@ async function main() {
 
   // Log initial state
   const state = readSwitchState();
+  console.error(`  Auth:  ${authModeLabel}`);
   console.error(
     `  Mode: ${state.switched ? `switched → ${state.provider}/${state.model}` : "passthrough → Anthropic"}`
   );

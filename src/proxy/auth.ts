@@ -122,7 +122,7 @@ export function getPassthroughAuth(): {
   const authConfig = readAuthConfig();
   if (!authConfig) {
     throw new Error(
-      "Proxy auth not configured. Run 'oh-my-claude proxy enable' first."
+      "Proxy auth not configured. Launch via 'oh-my-claude cc' or restart the proxy."
     );
   }
 

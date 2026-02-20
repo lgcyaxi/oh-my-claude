@@ -2,6 +2,12 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.1.1](changelog/v2.1.x.md) - 2026-02-19
+
+### Fixed
+
+- **Proxy Auth Auto-Init**: Proxy auto-initializes auth on startup, fixing 502 errors when using `oh-my-claude cc`
+
 ## [2.1.0](changelog/v2.1.x.md) - 2026-02-18
 
 ### Highlights

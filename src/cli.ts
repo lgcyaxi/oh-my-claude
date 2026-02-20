@@ -39,7 +39,7 @@ import { registerWezTermConfigCommand } from "./cli/commands/wezterm-config";
 program
   .name("oh-my-claude")
   .description("Multi-agent orchestration plugin for Claude Code")
-  .version("2.1.1-beta.0");
+  .version("2.1.1-beta.1");
 
 // Register all commands
 registerInstallCommands(program);    // install, uninstall, status

@@ -66,9 +66,7 @@ If the user says "revert", "back to claude", or "switch back", call switch_rever
 
 The oh-my-claude proxy must be running. If the switch fails, suggest:
 ```
-oh-my-claude proxy enable
-oh-my-claude proxy start
-export ANTHROPIC_BASE_URL=http://localhost:18910
+oh-my-claude cc
 ```
 
 Now parse the user's arguments and execute the switch.
