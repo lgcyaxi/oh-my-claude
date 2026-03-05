@@ -99,7 +99,7 @@ async function collectModeData(_context: SegmentContext): Promise<SegmentData | 
 
     return {
       primary: label,
-      metadata: { newLine: "true" },
+      metadata: {},
       color,
     };
   } catch {

@@ -194,10 +194,13 @@ async function main() {
 
     // Build final output
     if (segmentOutput) {
-      // Prefix with brand (includes [debug] when OMC_DEBUG=1)
-      console.log(`${BRAND_PREFIX} ${segmentOutput}`);
+      // Prefix row 1 with brand; indent subsequent rows to align visually
+      const lines = segmentOutput.split("\n");
+      const branded = lines
+        .map((line, i) => i === 0 ? `${BRAND_PREFIX} ${line}` : `    ${line}`)
+        .join("\n");
+      console.log(branded);
     } else {
-      // No segments produced output - show ready status
       console.log(formatReadyStatus());
     }
   } catch {

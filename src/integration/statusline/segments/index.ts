@@ -8,7 +8,7 @@ import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Segment, SegmentId, SegmentContext, StatusLineConfig, StyleConfig } from "./types";
-import { PRESETS, DEFAULT_SEGMENT_POSITIONS } from "./types";
+import { PRESETS, DEFAULT_SEGMENT_POSITIONS, DEFAULT_SEGMENT_ROWS } from "./types";
 
 // Debug mode: set DEBUG_STATUSLINE=1 to enable error logging
 const DEBUG_STATUSLINE = process.env.DEBUG_STATUSLINE === "1";
@@ -72,12 +72,12 @@ export function getAllSegments(): Segment[] {
 }
 
 /**
- * Get enabled segments based on config, sorted by position
+ * Get enabled segments based on config, sorted by (row, position)
  */
 export function getEnabledSegments(config: StatusLineConfig): Segment[] {
   const enabledIds = Object.entries(config.segments)
     .filter(([_, segConfig]) => segConfig.enabled)
-    .sort(([, a], [, b]) => a.position - b.position)
+    .sort(([, a], [, b]) => a.row !== b.row ? a.row - b.row : a.position - b.position)
     .map(([id]) => id as SegmentId);
 
   return enabledIds
@@ -90,7 +90,7 @@ export function getEnabledSegments(config: StatusLineConfig): Segment[] {
  */
 export function applyPreset(
   preset: StatusLineConfig["preset"]
-): Record<SegmentId, { enabled: boolean; position: number }> {
+): Record<SegmentId, { enabled: boolean; position: number; row: number }> {
   const enabledSegments = PRESETS[preset];
   const allSegmentIds: SegmentId[] = [
     "model",
@@ -108,12 +108,13 @@ export function applyPreset(
     "usage",
   ];
 
-  const result: Record<SegmentId, { enabled: boolean; position: number }> = {} as any;
+  const result: Record<SegmentId, { enabled: boolean; position: number; row: number }> = {} as any;
 
   for (const id of allSegmentIds) {
     result[id] = {
       enabled: enabledSegments.includes(id),
       position: DEFAULT_SEGMENT_POSITIONS[id],
+      row: DEFAULT_SEGMENT_ROWS[id],
     };
   }
 
@@ -123,11 +124,9 @@ export function applyPreset(
 /**
  * Render all enabled segments
  *
- * Segments with metadata.newLine are rendered on separate lines.
- * - newLine="true" or "2" → line 2
- * - newLine="3" → line 3
- * The main line segments are joined with the configured separator.
- * Additional line segments are appended with a "\n" prefix.
+ * Row assignment is determined by config.segments[id].row.
+ * Segments on the same row are joined with the configured separator.
+ * Rows are joined with "\n".
  */
 export async function renderSegments(
   config: StatusLineConfig,
@@ -139,7 +138,6 @@ export async function renderSegments(
 
   const segments = getEnabledSegments(config);
   const lineParts: Map<number, string[]> = new Map();
-  lineParts.set(1, []);
 
   // Collect all segments in parallel so slow segments don't block fast ones
   const results = await Promise.allSettled(
@@ -151,7 +149,6 @@ export async function renderSegments(
   // Process results in original segment order (Promise.allSettled preserves order)
   for (const result of results) {
     if (result.status !== "fulfilled") {
-      // Log rejected promises in debug mode
       if (DEBUG_STATUSLINE) {
         logSegmentError("unknown", result.reason);
       }
@@ -162,32 +159,24 @@ export async function renderSegments(
     try {
       const formatted = segment.format(data, config.segments[segment.id], config.style);
       if (formatted) {
-        const nl = data.metadata.newLine;
-        let lineNum = 1;
-        if (nl === "true" || nl === "2") lineNum = 2;
-        else if (nl) lineNum = parseInt(nl, 10) || 1;
-
-        if (!lineParts.has(lineNum)) lineParts.set(lineNum, []);
-        lineParts.get(lineNum)!.push(formatted);
+        const rowNum = config.segments[segment.id]?.row ?? 1;
+        if (!lineParts.has(rowNum)) lineParts.set(rowNum, []);
+        lineParts.get(rowNum)!.push(formatted);
       }
     } catch (error) {
-      // Log errors in debug mode, otherwise graceful degradation
       if (DEBUG_STATUSLINE) {
         logSegmentError(segment.id, error);
       }
     }
   }
 
-  // Join lines in order: line 1, line 2, line 3, ...
   const sortedLines = [...lineParts.entries()]
     .filter(([_, parts]) => parts.length > 0)
     .sort(([a], [b]) => a - b);
 
-  let output = sortedLines
+  return sortedLines
     .map(([_, parts]) => parts.join(config.style.separator))
     .join("\n");
-
-  return output;
 }
 
 /**

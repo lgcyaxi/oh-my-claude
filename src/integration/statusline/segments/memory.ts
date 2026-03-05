@@ -86,7 +86,6 @@ async function collectMemoryData(context: SegmentContext): Promise<SegmentData |
         global: String(glob),
         notes: String(stats.byType.note),
         sessions: String(stats.byType.session),
-        newLine: "true",
       },
       color: stats.total > 0 ? "good" : "neutral",
     };

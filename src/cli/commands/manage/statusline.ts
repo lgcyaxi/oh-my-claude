@@ -50,24 +50,32 @@ export function registerStatuslineCommand(program: Command) {
             }
           }
 
-          // Show config details
+          // Show config details with row layout
           if (existsSync(configPath)) {
             const config = JSON.parse(readFileSync(configPath, "utf-8"));
             console.log(`\n${c.bold}Configuration${c.reset}`);
             console.log(`  Preset: ${c.cyan}${config.preset || "standard"}${c.reset}`);
-            console.log(`  Enabled segments:`);
+
             const segments = config.segments || {};
+            const ROW_LABELS: Record<number, string> = { 1: "Session & Identity", 2: "Workspace & Context", 3: "Infrastructure" };
+
+            // Group segments by row
+            const byRow = new Map<number, Array<{ id: string; enabled: boolean; position: number }>>();
             for (const [id, seg] of Object.entries(segments)) {
-              const s = seg as { enabled: boolean; position: number };
-              if (s.enabled) {
-                console.log(`    ${c.green}●${c.reset} ${id}`);
-              }
+              const s = seg as { enabled: boolean; position: number; row?: number };
+              const row = s.row ?? 1;
+              if (!byRow.has(row)) byRow.set(row, []);
+              byRow.get(row)!.push({ id, enabled: s.enabled, position: s.position });
             }
-            console.log(`  Disabled segments:`);
-            for (const [id, seg] of Object.entries(segments)) {
-              const s = seg as { enabled: boolean; position: number };
-              if (!s.enabled) {
-                console.log(`    ${c.dim}○${c.reset} ${id}`);
+
+            for (const [row, items] of [...byRow.entries()].sort(([a], [b]) => a - b)) {
+              const label = ROW_LABELS[row] ?? `Row ${row}`;
+              console.log(`\n  ${c.bold}Row ${row}: ${label}${c.reset}`);
+              items.sort((a, b) => a.position - b.position);
+              for (const item of items) {
+                const icon = item.enabled ? `${c.green}●${c.reset}` : `${c.dim}○${c.reset}`;
+                const pos = `${c.dim}pos:${item.position}${c.reset}`;
+                console.log(`    ${icon} ${item.id} ${pos}`);
               }
             }
           }
@@ -127,13 +135,25 @@ export function registerStatuslineCommand(program: Command) {
       try {
         const config = setPreset(name as "minimal" | "standard" | "full");
         console.log(`${c.green}✓${c.reset} Preset changed to: ${name}`);
-        console.log(`\nEnabled segments:`);
 
         const segments = config.segments || {};
+        const ROW_LABELS: Record<number, string> = { 1: "Session & Identity", 2: "Workspace & Context", 3: "Infrastructure" };
+
+        const byRow = new Map<number, Array<{ id: string; position: number }>>();
         for (const [id, seg] of Object.entries(segments)) {
-          const s = seg as { enabled: boolean };
-          if (s.enabled) {
-            console.log(`  ● ${id}`);
+          const s = seg as { enabled: boolean; position: number; row?: number };
+          if (!s.enabled) continue;
+          const row = s.row ?? 1;
+          if (!byRow.has(row)) byRow.set(row, []);
+          byRow.get(row)!.push({ id, position: s.position });
+        }
+
+        for (const [row, items] of [...byRow.entries()].sort(([a], [b]) => a - b)) {
+          const label = ROW_LABELS[row] ?? `Row ${row}`;
+          console.log(`\n  ${c.bold}Row ${row}: ${label}${c.reset}`);
+          items.sort((a, b) => a.position - b.position);
+          for (const item of items) {
+            console.log(`    ● ${item.id}`);
           }
         }
       } catch (error) {
@@ -145,9 +165,9 @@ export function registerStatuslineCommand(program: Command) {
   // Statusline toggle subcommand
   statuslineCmd
     .command("toggle <segment> [state]")
-    .description("Toggle a segment on/off (model, git, directory, context, session, output-style, memory, proxy, bridge, usage, preferences)")
+    .description("Toggle a segment on/off (model, git, directory, context, session, output-style, memory, mode, proxy, bridge, usage, preferences, codex)")
     .action((segment: string, state?: string) => {
-      const validSegments = ["model", "git", "directory", "context", "session", "output-style", "memory", "proxy", "bridge", "usage", "preferences"];
+      const validSegments = ["model", "git", "directory", "context", "session", "output-style", "memory", "mode", "proxy", "bridge", "usage", "preferences", "codex"];
       if (!validSegments.includes(segment)) {
         console.log(`Invalid segment: ${segment}`);
         console.log(`Valid segments: ${validSegments.join(", ")}`);

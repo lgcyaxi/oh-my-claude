@@ -9,12 +9,13 @@ import { join, dirname } from "node:path";
 import { homedir, platform } from "node:os";
 import { z } from "zod";
 import type { StatusLineConfig, SegmentId } from "./segments/types";
-import { PRESETS, DEFAULT_SEGMENT_POSITIONS } from "./segments/types";
+import { PRESETS, DEFAULT_SEGMENT_POSITIONS, DEFAULT_SEGMENT_ROWS } from "./segments/types";
 
 // Zod schema for segment config
 const SegmentConfigSchema = z.object({
   enabled: z.boolean(),
   position: z.number().int().min(1).max(20),
+  row: z.number().int().min(1).max(5).default(1),
 });
 
 // Zod schema for style config
@@ -30,19 +31,22 @@ export const StatusLineConfigSchema = z.object({
   preset: z.enum(["minimal", "standard", "full"]).default("standard"),
   segments: z
     .object({
-      model: SegmentConfigSchema.default({ enabled: true, position: 1 }),
-      git: SegmentConfigSchema.default({ enabled: true, position: 2 }),
-      directory: SegmentConfigSchema.default({ enabled: true, position: 3 }),
-      context: SegmentConfigSchema.default({ enabled: true, position: 4 }),
-      session: SegmentConfigSchema.default({ enabled: true, position: 5 }),
-      "output-style": SegmentConfigSchema.default({ enabled: false, position: 6 }),
-      mode: SegmentConfigSchema.default({ enabled: true, position: 7 }),
-      proxy: SegmentConfigSchema.default({ enabled: true, position: 8 }),
-      bridge: SegmentConfigSchema.default({ enabled: true, position: 9 }),
-      memory: SegmentConfigSchema.default({ enabled: false, position: 10 }),
-      preferences: SegmentConfigSchema.default({ enabled: false, position: 11 }),
-      codex: SegmentConfigSchema.default({ enabled: false, position: 12 }),
-      usage: SegmentConfigSchema.default({ enabled: false, position: 13 }),
+      // Row 1: Session & Identity
+      proxy: SegmentConfigSchema.default({ enabled: true, position: 1, row: 1 }),
+      session: SegmentConfigSchema.default({ enabled: true, position: 2, row: 1 }),
+      model: SegmentConfigSchema.default({ enabled: true, position: 3, row: 1 }),
+      mode: SegmentConfigSchema.default({ enabled: true, position: 4, row: 1 }),
+      // Row 2: Workspace & Context
+      git: SegmentConfigSchema.default({ enabled: true, position: 1, row: 2 }),
+      directory: SegmentConfigSchema.default({ enabled: true, position: 2, row: 2 }),
+      context: SegmentConfigSchema.default({ enabled: true, position: 3, row: 2 }),
+      memory: SegmentConfigSchema.default({ enabled: false, position: 4, row: 2 }),
+      preferences: SegmentConfigSchema.default({ enabled: false, position: 5, row: 2 }),
+      "output-style": SegmentConfigSchema.default({ enabled: false, position: 6, row: 2 }),
+      // Row 3: Infrastructure
+      bridge: SegmentConfigSchema.default({ enabled: true, position: 1, row: 3 }),
+      codex: SegmentConfigSchema.default({ enabled: false, position: 2, row: 3 }),
+      usage: SegmentConfigSchema.default({ enabled: false, position: 3, row: 3 }),
     })
     .default({}),
   style: StyleConfigSchema.default({}),
@@ -73,11 +77,12 @@ export function getDefaultConfig(preset: StatusLineConfig["preset"] = "standard"
     "codex",
   ];
 
-  const segments: Record<SegmentId, { enabled: boolean; position: number }> = {} as any;
+  const segments: Record<SegmentId, { enabled: boolean; position: number; row: number }> = {} as any;
   for (const id of allSegmentIds) {
     segments[id] = {
       enabled: enabledSegments.includes(id),
       position: DEFAULT_SEGMENT_POSITIONS[id],
+      row: DEFAULT_SEGMENT_ROWS[id],
     };
   }
 
@@ -111,10 +116,14 @@ export function loadConfig(): StatusLineConfig {
       parsed.segments ? Object.keys(parsed.segments) : []
     );
 
+    // Detect if any existing segment has a `row` field — if none do, this is a pre-row config
+    const hasRowField = parsed.segments
+      ? Object.values(parsed.segments).some((s: any) => typeof s?.row === "number")
+      : false;
+
     const validated = StatusLineConfigSchema.parse(parsed);
 
-    // Backfill segments that were missing from the file with preset-aware defaults
-    return applyPresetToConfig(validated as StatusLineConfig, rawSegmentKeys);
+    return applyPresetToConfig(validated as StatusLineConfig, rawSegmentKeys, hasRowField);
   } catch {
     // Return default on any error - graceful degradation
     return getDefaultConfig("standard");
@@ -122,12 +131,15 @@ export function loadConfig(): StatusLineConfig {
 }
 
 /**
- * Apply preset to config - backfill missing segments from defaults
+ * Apply preset to config - backfill missing segments and migrate row field.
  * This ensures configs created before new segments were added get them automatically.
  * Zod fills missing keys with schema defaults (enabled: false), so we compare against
  * the raw file keys to detect truly missing segments and apply preset-aware defaults.
+ *
+ * When `hasRowField` is false, the config predates the row redesign — migrate all
+ * segments to the new row/position layout while preserving enabled state.
  */
-function applyPresetToConfig(config: StatusLineConfig, rawSegmentKeys: Set<string>): StatusLineConfig {
+function applyPresetToConfig(config: StatusLineConfig, rawSegmentKeys: Set<string>, hasRowField: boolean): StatusLineConfig {
   const presetSegments = PRESETS[config.preset] ?? PRESETS.standard;
   const allSegmentIds: SegmentId[] = [
     "model", "git", "directory", "context", "session",
@@ -135,18 +147,33 @@ function applyPresetToConfig(config: StatusLineConfig, rawSegmentKeys: Set<strin
   ];
 
   let modified = false;
-  for (const id of allSegmentIds) {
-    if (!rawSegmentKeys.has(id)) {
-      // Segment was NOT in the original file — override Zod default with preset-aware value
+
+  if (!hasRowField && rawSegmentKeys.size > 0) {
+    // Pre-row config: migrate all segments to new row/position layout, preserve enabled state
+    for (const id of allSegmentIds) {
+      const wasEnabled = rawSegmentKeys.has(id)
+        ? config.segments[id]?.enabled ?? presetSegments.includes(id)
+        : presetSegments.includes(id);
       config.segments[id] = {
-        enabled: presetSegments.includes(id),
+        enabled: wasEnabled,
         position: DEFAULT_SEGMENT_POSITIONS[id],
+        row: DEFAULT_SEGMENT_ROWS[id],
       };
-      modified = true;
+    }
+    modified = true;
+  } else {
+    for (const id of allSegmentIds) {
+      if (!rawSegmentKeys.has(id)) {
+        config.segments[id] = {
+          enabled: presetSegments.includes(id),
+          position: DEFAULT_SEGMENT_POSITIONS[id],
+          row: DEFAULT_SEGMENT_ROWS[id],
+        };
+        modified = true;
+      }
     }
   }
 
-  // Persist backfilled config so next load won't repeat this
   if (modified) {
     saveConfig(config);
   }

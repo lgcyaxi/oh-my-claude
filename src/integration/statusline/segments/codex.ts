@@ -7,7 +7,7 @@
  * - State is "idle"
  * - Signal is stale (> 30s for thinking/error, > 5s for complete)
  *
- * When active, renders on line 4 (metadata.newLine = "4"):
+ * When active, renders on row 3 (Infrastructure):
  *   thinking  → [⟳ Codex]  (yellow)
  *   complete  → [✓ Codex]  (green)
  *   error     → [✗ Codex]  (red)
@@ -89,7 +89,6 @@ async function collectCodexData(_context: SegmentContext): Promise<SegmentData |
   return {
     primary,
     metadata: {
-      newLine: "true", // Render on row 2 (after bridge/session/mem/pref)
       state: signal.state,
       model: signal.model ?? "",
     },

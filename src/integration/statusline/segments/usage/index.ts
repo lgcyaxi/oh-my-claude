@@ -15,7 +15,7 @@
  * - Yellow: warning (balance low or usage 50-80%)
  * - Red: critical (balance near-zero or usage > 80%)
  *
- * Output includes metadata.newLine = "3" to signal third-row rendering.
+ * Renders on row 3 (Infrastructure) via config.segments.usage.row.
  */
 
 import type { Segment, SegmentData, SegmentContext, SegmentConfig, StyleConfig } from "../types";
@@ -271,9 +271,7 @@ async function collectUsageData(_context: SegmentContext): Promise<SegmentData |
     }
 
     // Store individual parts in metadata for per-part coloring in format()
-    const metadata: Record<string, string> = {
-      newLine: "3",
-    };
+    const metadata: Record<string, string> = {};
     for (const p of parts) {
       metadata[`${p.abbrev}_display`] = p.display;
       metadata[`${p.abbrev}_color`] = p.color;

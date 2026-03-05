@@ -72,7 +72,6 @@ async function collectPreferencesData(context: SegmentContext): Promise<SegmentD
       primary: `pref:${breakdown}`,
       metadata: {
         count: String(total),
-        newLine: "true",
       },
       color: countToColor(total),
     };
@@ -94,7 +93,7 @@ export async function renderPreferencesSegment(context: SegmentContext): Promise
   const data = await collectPreferencesData(context);
   if (!data) return "";
 
-  const defaultConfig: SegmentConfig = { enabled: true, position: 11 };
+  const defaultConfig: SegmentConfig = { enabled: true, position: 5, row: 2 };
   const defaultStyle: StyleConfig = { separator: " ", brackets: true, colors: true };
 
   return formatPreferencesSegment(data, defaultConfig, defaultStyle);

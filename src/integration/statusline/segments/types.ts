@@ -72,6 +72,7 @@ export interface ClaudeCodeInput {
 export interface SegmentConfig {
   enabled: boolean;
   position: number;
+  row: number;
 }
 
 // Style configuration
@@ -103,22 +104,29 @@ export const PRESETS: Record<StatusLineConfig["preset"], SegmentId[]> = {
   full: ["model", "git", "directory", "context", "session", "output-style", "memory", "mode", "proxy", "bridge", "usage", "preferences", "codex"],
 };
 
-// Default segment positions
-// Line 1: positions 1-6 (model, git, directory, context, session, output-style)
-// Line 2: positions 7-12 (mode, proxy, memory, preferences, bridge, codex) — metadata.newLine="true"
-// Line 3: position 13 (usage) — metadata.newLine="3"
-export const DEFAULT_SEGMENT_POSITIONS: Record<SegmentId, number> = {
+// Default segment rows — semantically grouped
+// Row 1: Session & Identity (what session, what model)
+// Row 2: Workspace & Context (what am I working on)
+// Row 3: Infrastructure (background systems)
+export const DEFAULT_SEGMENT_ROWS: Record<SegmentId, number> = {
+  proxy: 1,
+  session: 1,
   model: 1,
+  mode: 1,
   git: 2,
-  directory: 3,
-  context: 4,
-  session: 5,
-  "output-style": 6,
-  mode: 7,
-  proxy: 8,
-  memory: 9,
-  preferences: 10,
-  bridge: 11,
-  codex: 12,
-  usage: 13,
+  directory: 2,
+  context: 2,
+  memory: 2,
+  preferences: 2,
+  "output-style": 2,
+  bridge: 3,
+  codex: 3,
+  usage: 3,
+};
+
+// Default segment positions — order within each row (1-based)
+export const DEFAULT_SEGMENT_POSITIONS: Record<SegmentId, number> = {
+  proxy: 1, session: 2, model: 3, mode: 4,
+  git: 1, directory: 2, context: 3, memory: 4, preferences: 5, "output-style": 6,
+  bridge: 1, codex: 2, usage: 3,
 };

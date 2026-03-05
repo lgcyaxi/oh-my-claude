@@ -143,35 +143,31 @@ async function collectProxyData(_context: SegmentContext): Promise<SegmentData |
         const providerLabel = PROVIDER_DISPLAY[state.provider] ?? state.provider;
 
         if (isBridgeWorker) {
-          // Bridge worker — compact format: [session ~Provider]
           return {
             primary: `session ~${providerLabel}`,
-            metadata: { newLine: "true" },
+            metadata: {},
             color: "neutral",
           };
         }
 
-        // Main session — explicit switch active
         return {
           primary: `s:${sessionId.slice(0, 8)} →${providerLabel}`,
-          metadata: { newLine: "true" },
+          metadata: {},
           color: "warning",
         };
       }
 
       if (isBridgeWorker) {
-        // Bridge worker passthrough — just show session tag
         return {
           primary: `session`,
-          metadata: { newLine: "true" },
+          metadata: {},
           color: "neutral",
         };
       }
 
-      // Plain proxy session (passthrough)
       return {
         primary: `s:${sessionId.slice(0, 8)}`,
-        metadata: { newLine: "true" },
+        metadata: {},
         color: "neutral",
       };
     }

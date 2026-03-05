@@ -9,7 +9,7 @@
  *   - ⟳ prefix = worker is thinking, ✗ prefix = error
  *   - · separator between workers
  *
- * Renders on row 2 (metadata.newLine = "true"), no brackets — the segment
+ * Renders on row 3 (Infrastructure), no brackets — the segment
  * reads as a presence indicator rather than a status box.
  *
  * Stale-entry pruning: entries whose PID is no longer alive are filtered out.
@@ -92,20 +92,19 @@ async function collectBridgeData(_context: SegmentContext): Promise<SegmentData 
     const workerId = process.env.OMC_BRIDGE_WORKER_ID;
     const sessionId = process.env.OMC_SESSION_ID;
     if (workerId) {
-      // Show worker ID with short session ID (first 8 chars)
       const shortSession = sessionId ? sessionId.slice(0, 8) : null;
       const primary = shortSession
         ? `worker: ${workerId} [s:${shortSession}]`
         : `worker: ${workerId}`;
       return {
         primary,
-        metadata: { newLine: "true" },
+        metadata: {},
         color: "neutral",
       };
     }
     return {
       primary: `worker`,
-      metadata: { newLine: "true" },
+      metadata: {},
       color: "neutral",
     };
   }
@@ -149,9 +148,7 @@ async function collectBridgeData(_context: SegmentContext): Promise<SegmentData 
 
   return {
     primary,
-    metadata: {
-      newLine: "true", // Row 2, first position
-    },
+    metadata: {},
     color,
   };
 }
