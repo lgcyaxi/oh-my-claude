@@ -12,7 +12,6 @@ import { existsSync, cpSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execSync } from "node:child_process";
-import { homedir } from "node:os";
 import { createFormatters } from "../../utils/colors";
 import { INSTALL_DIR } from "../../utils/paths";
 
