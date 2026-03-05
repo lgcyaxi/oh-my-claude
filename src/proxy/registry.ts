@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, renameSync, unlinkSync, mkdirSync, existsS
 import { join, dirname, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
-import { PROXY_REGISTRY } from "../cli/utils/paths";
+import { PROXY_REGISTRY, getWindowsProxyRegistryPath } from "../cli/utils/paths";
 
 /** A registered proxy session entry */
 export interface ProxySessionEntry {
@@ -33,6 +33,8 @@ export interface ProxySessionEntry {
   terminalBackend?: string;
   /** Whether proxy was spawned as a detached daemon */
   detached?: boolean;
+  /** Session origin: "wsl2" for WSL sessions, undefined for native */
+  source?: "wsl2";
 }
 
 /**
@@ -72,6 +74,39 @@ function writeRegistryAtomic(entries: ProxySessionEntry[]): void {
 }
 
 /**
+ * Read a proxy registry from an arbitrary path.
+ */
+function readRegistryAt(path: string): ProxySessionEntry[] {
+  try {
+    if (!existsSync(path)) return [];
+    const content = readFileSync(path, "utf-8");
+    const parsed = JSON.parse(content);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as ProxySessionEntry[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Atomic write to an arbitrary registry path.
+ */
+function writeRegistryAtomicAt(path: string, entries: ProxySessionEntry[]): void {
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  const tmpFile = join(dir, `.proxy-sessions.${randomBytes(4).toString("hex")}.tmp`);
+  try {
+    writeFileSync(tmpFile, JSON.stringify(entries, null, 2), "utf-8");
+    renameSync(tmpFile, path);
+  } catch (err) {
+    try { unlinkSync(tmpFile); } catch {}
+    throw err;
+  }
+}
+
+/**
  * Check if a PID is alive.
  */
 function isPidAlive(pid: number): boolean {
@@ -92,6 +127,20 @@ export function registerProxySession(entry: ProxySessionEntry): void {
   );
   entries.push(entry);
   writeRegistryAtomic(entries);
+
+  // Dual-write to Windows-side registry when running in WSL2
+  const winPath = getWindowsProxyRegistryPath();
+  if (winPath) {
+    try {
+      const winEntries = readRegistryAt(winPath).filter(
+        (e) => e.sessionId !== entry.sessionId
+      );
+      winEntries.push({ ...entry, source: "wsl2" });
+      writeRegistryAtomicAt(winPath, winEntries);
+    } catch {
+      // Best-effort — don't fail the session if Windows write fails
+    }
+  }
 }
 
 /**
@@ -102,6 +151,19 @@ export function unregisterProxySession(sessionId: string): void {
     (e) => e.sessionId !== sessionId
   );
   writeRegistryAtomic(entries);
+
+  // Remove from Windows-side registry too
+  const winPath = getWindowsProxyRegistryPath();
+  if (winPath) {
+    try {
+      const winEntries = readRegistryAt(winPath).filter(
+        (e) => e.sessionId !== sessionId
+      );
+      writeRegistryAtomicAt(winPath, winEntries);
+    } catch {
+      // Best-effort
+    }
+  }
 }
 
 /**

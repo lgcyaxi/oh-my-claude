@@ -1,6 +1,6 @@
 {
   "name": "@lgcyaxi/oh-my-claude",
-  "version": "2.1.0",
+  "version": "2.1.3-beta.42",
   "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
   "type": "module",
   "main": "dist/index.js",
@@ -13,28 +13,32 @@
     "dist/hooks/",
     "dist/statusline/",
     "dist/proxy/",
+    "dist/bridge-bus/",
     "bin/",
     "src/commands/",
-    "src/styles/*.md"
+    "src/styles/*.md",
+    "apps/menubar/builds/"
   ],
   "bin": {
-    "oh-my-claude": "bin/oh-my-claude.js"
+    "oh-my-claude": "bin/oh-my-claude.js",
+    "omc": "bin/oh-my-claude.js"
   },
   "scripts": {
     "prepack": "bun run build:all",
-    "build": "bun build src/index.ts src/cli.ts --outdir dist --target node",
-    "build:mcp": "bun build src/mcp/background-agent-server/server.ts --outdir dist/mcp --target node && bun run scripts/copy-wasm.ts",
-    "build:hooks": "bun build src/hooks/comment-checker.ts src/hooks/todo-continuation.ts src/hooks/task-notification.ts src/hooks/task-tracker.ts src/hooks/memory-awareness.ts src/hooks/session-logger.ts src/hooks/context-memory.ts src/hooks/preference-awareness.ts --outdir dist/hooks --target node",
-    "build:statusline": "bun build src/statusline/statusline.ts --outdir dist/statusline --target node",
+    "build": "bun build src/index.ts src/cli/cli.ts --outdir dist --target node",
+    "build:mcp": "bun build src/mcp/server/index.ts --outdir dist/mcp --target node && mv dist/mcp/index.js dist/mcp/server.js && bun run scripts/copy-wasm.ts",
+    "build:hooks": "bun build src/integration/hooks/comment-checker.ts src/integration/hooks/todo-continuation.ts src/integration/hooks/task-notification.ts src/integration/hooks/task-tracker.ts src/integration/hooks/memory-awareness.ts src/integration/hooks/session-logger.ts src/integration/hooks/context-memory.ts src/integration/hooks/preference-awareness.ts src/integration/hooks/post-tool.ts --outdir dist/hooks --entry-naming [name].js --target node",
+    "build:statusline": "bun build src/integration/statusline/statusline.ts --outdir dist/statusline --target node",
     "build:proxy": "bun build src/proxy/server.ts --outdir dist/proxy --target bun",
-    "build:all": "bun run build && bun run build:mcp && bun run build:hooks && bun run build:statusline && bun run build:proxy",
+    "build:bus": "bun build src/workers/bridge/bus/server.ts --outdir dist/bridge-bus --target bun",
+    "build:all": "bun run build && bun run build:mcp && bun run build:hooks && bun run build:statusline && bun run build:proxy && bun run build:bus",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "dev": "bun run --watch src/index.ts",
-    "install-local": "bun run build:all && bun run src/cli.ts install",
-    "uninstall-local": "bun run src/cli.ts uninstall",
-    "status": "bun run src/cli.ts status",
-    "doctor": "bun run src/cli.ts doctor",
+    "install-local": "bun run build:all && npm link && bun run src/cli/cli.ts install",
+    "uninstall-local": "bun run src/cli/cli.ts uninstall",
+    "status": "bun run src/cli/cli.ts status",
+    "doctor": "bun run src/cli/cli.ts doctor",
     "menubar:dev": "cd apps/menubar && bun run tauri dev",
     "menubar:build": "cd apps/menubar && bun run tauri build"
   },
@@ -47,6 +51,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "playwright": "^1.58.2",
     "typescript": "^5.7.3"
   },
   "keywords": [

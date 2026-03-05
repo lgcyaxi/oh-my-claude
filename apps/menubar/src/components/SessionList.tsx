@@ -63,6 +63,7 @@ export function SessionList({ sessions, onSwitch, onRevert, switching }: Session
                   currentModel={session.model}
                   switched={session.switched}
                   disabled={switching || !session.healthy}
+                  controlPort={session.controlPort}
                   onSwitch={(provider, model) =>
                     onSwitch(session.controlPort, session.sessionId, provider, model)
                   }

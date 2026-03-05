@@ -39,6 +39,8 @@ export function parseMemoryFile(id: string, raw: string): MemoryEntry | null {
     title: frontmatter.title || id,
     type: frontmatter.type,
     tags: frontmatter.tags,
+    ...(frontmatter.concepts && frontmatter.concepts.length > 0 && { concepts: frontmatter.concepts }),
+    ...(frontmatter.files && frontmatter.files.length > 0 && { files: frontmatter.files }),
     content,
     createdAt: frontmatter.created,
     updatedAt: frontmatter.updated,
@@ -51,16 +53,25 @@ export function parseMemoryFile(id: string, raw: string): MemoryEntry | null {
 export function serializeMemoryFile(entry: MemoryEntry): string {
   const tagsStr = entry.tags.length > 0 ? `[${entry.tags.join(", ")}]` : "[]";
 
-  return `---
-title: ${entry.title}
-type: ${entry.type}
-tags: ${tagsStr}
-created: ${entry.createdAt}
-updated: ${entry.updatedAt}
----
+  const lines = [
+    "---",
+    `title: ${entry.title}`,
+    `type: ${entry.type}`,
+    `tags: ${tagsStr}`,
+  ];
 
-${entry.content}
-`;
+  if (entry.concepts && entry.concepts.length > 0) {
+    lines.push(`concepts: [${entry.concepts.join(", ")}]`);
+  }
+  if (entry.files && entry.files.length > 0) {
+    lines.push(`files: [${entry.files.join(", ")}]`);
+  }
+
+  lines.push(`created: ${entry.createdAt}`);
+  lines.push(`updated: ${entry.updatedAt}`);
+  lines.push("---");
+
+  return lines.join("\n") + `\n\n${entry.content}\n`;
 }
 
 /**
@@ -104,6 +115,15 @@ export function nowISO(): string {
   return new Date().toISOString();
 }
 
+/**
+ * Strip private blocks from content.
+ * Removes everything between `<!-- private -->` and `<!-- /private -->` markers.
+ * Private content stays in raw markdown files but is excluded from indexing and API responses.
+ */
+export function stripPrivateBlocks(content: string): string {
+  return content.replace(/<!--\s*private\s*-->[\s\S]*?<!--\s*\/private\s*-->/g, "").trim();
+}
+
 // ---- Internal helpers ----
 
 /**
@@ -142,7 +162,21 @@ function parseFrontmatter(raw: string): MemoryFrontmatter {
     // tags (supports [tag1, tag2] and tag1, tag2 formats)
     const tagsMatch = trimmed.match(/^tags:\s*(.+)$/);
     if (tagsMatch?.[1]) {
-      result.tags = parseTags(tagsMatch[1].trim());
+      result.tags = parseBracketArray(tagsMatch[1].trim());
+      continue;
+    }
+
+    // concepts (same bracket-array format as tags)
+    const conceptsMatch = trimmed.match(/^concepts:\s*(.+)$/);
+    if (conceptsMatch?.[1]) {
+      result.concepts = parseBracketArray(conceptsMatch[1].trim());
+      continue;
+    }
+
+    // files (same bracket-array format as tags)
+    const filesMatch = trimmed.match(/^files:\s*(.+)$/);
+    if (filesMatch?.[1]) {
+      result.files = parseBracketArray(filesMatch[1].trim());
       continue;
     }
 
@@ -177,7 +211,7 @@ function parseFrontmatter(raw: string): MemoryFrontmatter {
  * Parse a tags string into an array
  * Supports: [tag1, tag2], "tag1, tag2", [tag1,tag2]
  */
-function parseTags(raw: string): string[] {
+function parseBracketArray(raw: string): string[] {
   // Strip brackets
   const stripped = raw.replace(/^\[/, "").replace(/\]$/, "").trim();
   if (!stripped) return [];

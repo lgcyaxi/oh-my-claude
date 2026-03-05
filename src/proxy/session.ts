@@ -30,6 +30,15 @@ interface SessionEntry {
 /** In-memory session state map: sessionId -> SessionEntry */
 const sessions = new Map<string, SessionEntry>();
 
+/**
+ * Process-local default switch state.
+ * Set at proxy startup via OMC_PROXY_SWITCH_PROVIDER env var (bridge workers).
+ * Any session that hasn't been explicitly switched inherits this default.
+ * This avoids the session ID mismatch problem: the worker's cc generates a new
+ * session ID at launch, but the pre-switch was written before that ID existed.
+ */
+let processDefaultSwitchState: ProxySwitchState | null = null;
+
 /** Stale session TTL: 2 hours */
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -60,11 +69,16 @@ export function parseSessionFromPath(pathname: string): {
 
 /**
  * Read session switch state from in-memory store.
- * Returns default passthrough state if session doesn't exist.
+ * Falls back to process-local default (set by pre-switch env vars) if session
+ * doesn't exist. Returns passthrough state only if no default is set.
  */
 export function readSessionState(sessionId: string): ProxySwitchState {
   const entry = sessions.get(sessionId);
   if (!entry) {
+    // Fall back to process-local default (bridge worker pre-switch)
+    if (processDefaultSwitchState) {
+      return { ...processDefaultSwitchState };
+    }
     return { ...DEFAULT_SWITCH_STATE };
   }
 
@@ -121,6 +135,22 @@ export function cleanupStaleSessions(): number {
   }
 
   return cleaned;
+}
+
+/**
+ * Set the process-local default switch state.
+ * Used by server.ts at startup for bridge workers with OMC_PROXY_SWITCH_PROVIDER.
+ * Any session without explicit switch state inherits this default.
+ */
+export function setDefaultSwitchState(state: ProxySwitchState): void {
+  processDefaultSwitchState = { ...state };
+}
+
+/**
+ * Get the process-local default switch state (for status reporting).
+ */
+export function getDefaultSwitchState(): ProxySwitchState | null {
+  return processDefaultSwitchState ? { ...processDefaultSwitchState } : null;
 }
 
 /**

@@ -7,8 +7,8 @@
 
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { getCredential } from "../../auth/store";
-import { loadConfig } from "../../config/loader";
+import { getCredential } from "../../shared/auth/store";
+import { loadConfig } from "../../shared/config/loader";
 
 /**
  * Capability flags for external tools
@@ -26,8 +26,12 @@ export interface Capabilities {
   /** API key providers configured */
   deepseek: boolean;
   zhipu: boolean;
+  "zhipu-global": boolean;
   minimax: boolean;
+  "minimax-cn": boolean;
   kimi: boolean;
+  aliyun: boolean;
+  ollama: boolean;
 }
 
 let cachedCapabilities: Capabilities | null = null;
@@ -70,11 +74,17 @@ export function detectCapabilities(): Capabilities {
   // Check API key providers (check env vars)
   const deepseek = !!process.env.DEEPSEEK_API_KEY;
   const zhipu = !!process.env.ZHIPU_API_KEY;
+  const zhipuGlobal = !!process.env.ZAI_API_KEY;
   const minimax = !!process.env.MINIMAX_API_KEY;
+  const minimaxCn = !!process.env.MINIMAX_CN_API_KEY;
   const kimi = !!process.env.KIMI_API_KEY;
+  const aliyun = !!process.env.ALIYUN_API_KEY;
+
+  // Ollama: configured if OLLAMA_API_KEY is set OR Ollama is running locally (no key needed)
+  const ollama = !!process.env.OLLAMA_API_KEY || !!process.env.OLLAMA_HOST || !!process.env.OLLAMA_API_BASE;
 
   // MCP is available if any API provider is configured
-  const mcp = deepseek || zhipu || minimax || kimi || openaiAuth;
+  const mcp = deepseek || zhipu || zhipuGlobal || minimax || minimaxCn || kimi || aliyun || openaiAuth || ollama;
 
    cachedCapabilities = {
      opencode,
@@ -84,8 +94,12 @@ export function detectCapabilities(): Capabilities {
      minimaxAuth,
      deepseek,
      zhipu,
+     "zhipu-global": zhipuGlobal,
      minimax,
+     "minimax-cn": minimaxCn,
      kimi,
+     aliyun,
+     ollama,
    };
 
   cachedAt = now;
@@ -117,12 +131,16 @@ export function getCapabilitySummary(): string {
    lines.push("Providers:");
   lines.push(`  DeepSeek: ${caps.deepseek ? "✓" : "✗"}`);
   lines.push(`  ZhiPu: ${caps.zhipu ? "✓" : "✗"}`);
+  lines.push(`  Z.AI: ${caps["zhipu-global"] ? "✓" : "✗"}`);
   lines.push(`  MiniMax: ${caps.minimax ? "✓" : "✗"}`);
+  lines.push(`  MiniMax CN: ${caps["minimax-cn"] ? "✓" : "✗"}`);
   lines.push(`  Kimi: ${caps.kimi ? "✓" : "✗"}`);
+  lines.push(`  Aliyun: ${caps.aliyun ? "✓" : "✗"}`);
+  lines.push(`  Ollama: ${caps.ollama ? "✓" : "✗"}`);
   lines.push("");
   lines.push("OAuth:");
   lines.push(`  OpenAI: ${caps.openaiAuth ? "✓" : "✗"}`);
-  lines.push(`  MiniMax (quota display only): ${caps.minimaxAuth ? "✓" : "✗"}`);
+  lines.push(`  MiniMax OAuth (quota display only): ${caps.minimaxAuth ? "✓" : "✗"}`);
 
   return lines.join("\n");
 }

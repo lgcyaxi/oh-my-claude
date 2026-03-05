@@ -24,7 +24,7 @@ export type {
   MemoryIndexStatus,
 } from "./types";
 
-// Store (CRUD)
+// Store (CRUD + project detection)
 export {
   getMemoryDir,
   getProjectMemoryDir,
@@ -38,6 +38,7 @@ export {
   deleteMemory,
   listMemories,
   getMemoryStats,
+  resolveCanonicalRoot,
 } from "./store";
 
 // Parser
@@ -47,6 +48,7 @@ export {
   generateMemoryId,
   generateTitle,
   nowISO,
+  stripPrivateBlocks,
 } from "./parser";
 
 // Search
@@ -61,6 +63,7 @@ export type {
   FTSSearchResult,
   ChunkingOptions,
   MemoryIndexerOptions,
+  TokenStats,
 } from "./indexer";
 
 // Embeddings

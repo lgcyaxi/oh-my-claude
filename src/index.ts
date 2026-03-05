@@ -12,13 +12,13 @@
  */
 
 // Configuration
-export * from "./config";
+export * from "./shared/config";
 
 // Agents
-export * from "./agents";
+export * from "./assets/agents";
 
 // Providers
-export * from "./providers";
+export * from "./shared/providers";
 
 // Generators (excluding generateAgentMarkdown which is already exported from agents)
 export {
@@ -27,13 +27,13 @@ export {
   getAgentsDirectory,
   getInstalledAgents,
   removeAgentFiles,
-} from "./generators";
+} from "./integration/generators";
 
 // Installer
-export * from "./installer";
+export * from "./integration/installer";
 
 // Daemon layer
-export * from "./daemon";
+export * from "./workers/daemon";
 
 // Bridge orchestrator (explicit re-export to avoid BridgeConfig conflict with config module)
 export type {
@@ -46,5 +46,5 @@ export type {
   SystemStatus,
   DaemonFactory,
   BridgeOrchestrator,
-} from "./bridge/types";
-export { DaemonRegistry, BridgeOrchestratorImpl, getBridgeOrchestrator, resetBridgeOrchestrator } from "./bridge";
+} from "./workers/bridge/types";
+export { DaemonRegistry, BridgeOrchestratorImpl, getBridgeOrchestrator, resetBridgeOrchestrator } from "./workers/bridge";

@@ -12,7 +12,7 @@ import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import type { ProxyAuthConfig } from "./types";
-import { loadConfig } from "../config";
+import { loadConfig } from "../shared/config";
 
 /** Path to the proxy auth config file */
 export function getAuthConfigPath(): string {
@@ -122,7 +122,7 @@ export function getPassthroughAuth(): {
   const authConfig = readAuthConfig();
   if (!authConfig) {
     throw new Error(
-      "Proxy auth not configured. Run 'oh-my-claude proxy enable' first."
+      "Proxy auth not configured. Launch via 'oh-my-claude cc' or restart the proxy."
     );
   }
 
@@ -159,7 +159,14 @@ export async function getProviderAuth(
     );
   }
 
-  const baseUrl = providerConfig.base_url;
+  let baseUrl = providerConfig.base_url;
+  // Ollama: respect OLLAMA_HOST / OLLAMA_API_BASE env vars for remote instances
+  if (providerName === "ollama") {
+    const envHost = process.env.OLLAMA_HOST || process.env.OLLAMA_API_BASE;
+    if (envHost) {
+      baseUrl = envHost.replace(/\/v1\/?$/, "");
+    }
+  }
   if (!baseUrl) {
     throw new Error(`Provider "${providerName}" has no base_url configured.`);
   }
@@ -167,7 +174,7 @@ export async function getProviderAuth(
   // OAuth providers — resolve token dynamically
   if (OAUTH_PROVIDER_TYPES.has(providerConfig.type)) {
     try {
-      const { getAccessToken } = await import("../auth/token-manager");
+      const { getAccessToken } = await import("../shared/auth/token-manager");
       const providerKey = providerName as "openai";
       const token = await getAccessToken(providerKey);
       return { apiKey: token, baseUrl, providerType: providerConfig.type };
@@ -186,12 +193,28 @@ export async function getProviderAuth(
     throw new Error(`Provider "${providerName}" has no api_key_env configured.`);
   }
 
-  const apiKey = process.env[apiKeyEnv];
+  const apiKey = process.env[apiKeyEnv] ?? "";
+
+  // Allow empty API key for local providers (e.g. Ollama on localhost or remote via env var)
   if (!apiKey) {
-    throw new Error(
-      `API key not set for provider "${providerName}". ` +
-      `Set the ${apiKeyEnv} environment variable.`
-    );
+    const isOllamaWithEnv = providerName === "ollama" && (process.env.OLLAMA_HOST || process.env.OLLAMA_API_BASE);
+    try {
+      const url = new URL(baseUrl);
+      const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+      if (!isLocal && !isOllamaWithEnv) {
+        throw new Error(
+          `API key not set for provider "${providerName}". ` +
+          `Set the ${apiKeyEnv} environment variable.`
+        );
+      }
+      // Local provider or Ollama with explicit host — proceed with empty key
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("API key not set")) throw e;
+      throw new Error(
+        `API key not set for provider "${providerName}". ` +
+        `Set the ${apiKeyEnv} environment variable.`
+      );
+    }
   }
 
   return { apiKey, baseUrl, providerType: providerConfig.type };

@@ -84,11 +84,14 @@ export async function searchMemories(
     try {
       const limit = options.limit ?? 5;
 
-      // Augment query with tags for better FTS/vector matching.
-      // Tags like ["ulw", "permissions"] become extra search terms.
+      // Augment query with tags and concepts for better FTS/vector matching.
+      // Tags like ["ulw", "permissions"] and concepts like ["authentication"] become extra search terms.
       let augmentedQuery = options.query;
       if (options.tags && options.tags.length > 0) {
         augmentedQuery = `${options.query} ${options.tags.join(" ")}`;
+      }
+      if (options.concepts && options.concepts.length > 0) {
+        augmentedQuery = `${augmentedQuery} ${options.concepts.join(" ")}`;
       }
 
       if (tier === "hybrid" && embeddingProvider) {
@@ -184,13 +187,14 @@ async function searchHybrid(
   );
 
   // Convert to SearchResult format
-  return convertChunkResults(
+  return await convertChunkResults(
     merged.slice(0, limit),
     ftsResults,
     "hybrid",
     snippetMaxChars,
     options,
     projectRoot,
+    indexer,
   );
 }
 
@@ -216,7 +220,7 @@ async function searchFTS5(
     return searchLegacy(options, projectRoot);
   }
 
-  return convertChunkResults(
+  const results = await convertChunkResults(
     ftsResults.map((f) => ({
       chunkId: f.chunkId,
       score: normalizeRank(f.rank),
@@ -228,7 +232,9 @@ async function searchFTS5(
     snippetMaxChars,
     options,
     projectRoot,
-  ).slice(0, limit);
+    indexer,
+  );
+  return results.slice(0, limit);
 }
 
 // ---- Tier 3: Legacy In-Memory ----
@@ -287,8 +293,12 @@ function searchLegacy(
 /**
  * Convert chunk-level results to SearchResult format.
  * Deduplicates by file (takes highest-scoring chunk per file).
+ *
+ * When indexer is available, uses batch SQL lookup for metadata (title, type, tags, concepts, createdAt)
+ * instead of reading every file from disk via listMemories(). This is the "progressive disclosure"
+ * optimization — recall returns lightweight snippets, get_memory provides full content.
  */
-function convertChunkResults(
+async function convertChunkResults(
   mergedResults: Array<{
     chunkId: string;
     score: number;
@@ -300,11 +310,29 @@ function convertChunkResults(
   snippetMaxChars: number,
   options: MemorySearchOptions,
   projectRoot?: string,
-): SearchResult[] {
+  indexer?: MemoryIndexer,
+): Promise<SearchResult[]> {
   // Build lookup from chunkId to FTS result for metadata
   const chunkMap = new Map<string, FTSSearchResult>();
   for (const f of ftsResults) {
     chunkMap.set(f.chunkId, f);
+  }
+
+  // Collect unique file paths for batch lookup
+  const uniquePaths = new Set<string>();
+  for (const merged of mergedResults) {
+    const chunk = chunkMap.get(merged.chunkId);
+    if (chunk) uniquePaths.add(chunk.path);
+  }
+
+  // Batch metadata lookup from index (single SQL query, no disk reads)
+  let indexedFiles: Map<string, import("./indexer").IndexedFile> | undefined;
+  if (indexer?.isReady()) {
+    try {
+      indexedFiles = await indexer.getFilesByPaths(Array.from(uniquePaths));
+    } catch {
+      // Fall through to legacy enrichment
+    }
   }
 
   // Deduplicate by file path (take best chunk per file)
@@ -326,34 +354,52 @@ function convertChunkResults(
         ? chunk.text
         : chunk.text.slice(0, snippetMaxChars) + "...";
 
-    // Build a minimal MemoryEntry for compatibility
+    // Build a minimal MemoryEntry — use snippet as content (not full file)
     const entry: MemoryEntry = {
       id: fileId,
-      title: fileId, // Will be enriched if we have the file metadata
+      title: fileId,
       type: "note",
       tags: [],
-      content: chunk.text,
+      content: snippet,
       createdAt: "",
       updatedAt: "",
     };
 
-    // Try to enrich from store
-    try {
-      const entries = listMemories(
-        { scope: options.scope ?? "all" },
-        projectRoot,
-      );
-      const fullEntry = entries.find((e) => e.id === fileId);
-      if (fullEntry) {
-        entry.title = fullEntry.title;
-        entry.type = fullEntry.type;
-        entry.tags = fullEntry.tags;
-        entry.createdAt = fullEntry.createdAt;
-        entry.updatedAt = fullEntry.updatedAt;
-        entry.content = fullEntry.content;
+    // Enrich from index metadata (preferred — no disk reads)
+    const indexed = indexedFiles?.get(chunk.path);
+    if (indexed) {
+      if (indexed.title) entry.title = indexed.title;
+      if (indexed.type) entry.type = indexed.type as "note" | "session";
+      if (indexed.tags) {
+        try { entry.tags = JSON.parse(indexed.tags); } catch { /* ignore */ }
       }
-    } catch {
-      // ignore enrichment errors
+      if (indexed.concepts) {
+        try { entry.concepts = JSON.parse(indexed.concepts); } catch { /* ignore */ }
+      }
+      if (indexed.filesTouched) {
+        try { entry.files = JSON.parse(indexed.filesTouched); } catch { /* ignore */ }
+      }
+      if (indexed.createdAt) entry.createdAt = indexed.createdAt;
+    } else {
+      // Fallback: enrich from store (disk reads)
+      try {
+        const entries = listMemories(
+          { scope: options.scope ?? "all" },
+          projectRoot,
+        );
+        const fullEntry = entries.find((e) => e.id === fileId);
+        if (fullEntry) {
+          entry.title = fullEntry.title;
+          entry.type = fullEntry.type;
+          entry.tags = fullEntry.tags;
+          if (fullEntry.concepts) entry.concepts = fullEntry.concepts;
+          if (fullEntry.files) entry.files = fullEntry.files;
+          entry.createdAt = fullEntry.createdAt;
+          entry.updatedAt = fullEntry.updatedAt;
+        }
+      } catch {
+        // ignore enrichment errors
+      }
     }
 
     seenFiles.set(chunk.path, {

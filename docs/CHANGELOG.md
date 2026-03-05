@@ -2,6 +2,107 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.1.3-beta.42](changelog/v2.1.3-beta.md) - 2026-03-05
+
+### Highlights
+
+- **Memory System Fixes** — Timeline flood cleanup (bridge workers skip auto-capture), improved format (concepts shown), noise tag filtering, tag corruption fix
+- **Proxy Session Isolation** — Per-process default switch state eliminates session ID mismatch; CLI aliases (`zp`) resolve to config provider names (`zhipu`)
+- **Bridge Delivery Fix** — Bus path disabled; all workers use legacy path for reliable auto-spawn + text injection
+- **Worker Statusline** — Model/proxy segments now correctly show switched provider via process-local default state
+
+## [2.1.3-beta.39](changelog/v2.1.3-beta.md) - 2026-03-04
+
+### Highlights
+
+- **Bridge Stability** — Fixed pane visibility (right-split in current window), provider pre-switch flag ordering, anti-recursion guards, and statusline segment hiding inside bridge workers
+- **Installer Cleanup** — Legacy MCP name "oh-my-claude-background" → "oh-my-claude" in both ~/.claude/settings.json and ~/.claude.json
+- **Build Fix** — MCP server build output renamed index.js → server.js to match installed path
+- **Proxy Pre-Switch** — `-p` flag now writes session state so menubar shows correct model
+- **Config Correction** — `cc:kimi` switchProvider corrected from "openrouter" to "kimi"
+- **Command Refactor** — Slash commands updated to reference mcp__oh-my-claude__ (not background)
+
+## [2.1.3-beta.21](changelog/v2.1.3-beta.21.md) - 2026-03-04
+
+### Highlights
+
+- **Bridge Statusline Visual Upgrade** - Mode labels now render without brackets and use icons (`⚡ ULW`, `◈ BRIDGE`, `⚡◈ ULW+BRIDGE`), with role-aware bridge worker indicators and thinking prefixes
+- **Bridge Reliability + Readiness** - Fixed bridge state path to `~/.claude/oh-my-claude/bridge-state.json`, added PID stale-pruning, and introduced `bridge_ready` signaling for CC worker startup synchronization
+- **Codex Flow + Observability Improvements** - Completed codex idle/thinking/complete animation cycle, upgraded codex-log formatting, rewired `/omc-codex` to `bridge_send` auto-start flow, and added structured `task_spec`/`bridge_status` MCP support
+
+## [2.1.3-beta.4](changelog/v2.1.x.md) - 2026-03-03
+
+### Highlights
+
+- **Pre-configured Switch for Bridge Workers** — `oh-my-claude bridge up cc --switch mm-cn` spawns workers pre-switched to target provider, avoiding rate limits from post-spawn API calls
+- **WezTerm Ctrl+W Fix** — Now closes current pane (not window/tab)
+- **Windows Bridge Compatibility** — Path sanitization for `:` in directory names, cmd.exe for bridge workers, Node v12 compatibility
+
+## [2.1.3-beta.3](changelog/v2.1.x.md) - 2026-03-03
+
+### Highlights
+
+- **Bridge State Race Condition Fix** — Async mutex locking prevents concurrent `bridge_up` calls from corrupting bridge state
+- **Command Delegation Cascade** — `omcx-commit` and `omcx-docs` now use 3-tier cascade: bridge_send → execute_with_model → self. Workers read files autonomously
+- **Sisyphus Tool Selection Rules** — New decision table: bridge_send (single+bridge), execute_with_model (single, no bridge), switch_model (sustained 3+ turns only)
+- **Stronger Bridge Constraints** — memory-awareness.ts uses system-override tags, FORBIDDEN/ALLOWED tool lists, cost rationale for deterministic enforcement
+- **MCP Tool Descriptions** — switch_model warns "prefer execute_with_model", execute_with_model marked as PREFERRED
+
+## [2.1.3-beta.1](changelog/v2.1.x.md) - 2026-03-03
+
+### Highlights
+
+- **Proxy Response Capture (Phase 1)** — SSE streaming responses captured with text, usage tokens. `GET /response?session=ID` returns clean API output without TUI chrome pollution. Bridge workers use proxy capture first, pane polling as fallback
+- **Real-Time Streaming (Phase 3)** — `GET /stream?session=ID` SSE endpoint for live text delta forwarding. Event listener registry for real-time notifications
+- **Dynamic Bridge Workers (Phase 2)** — `bridge_up` / `bridge_down` MCP tools for mid-session worker management without restarting Claude Code
+- **Bridge State Path Migration** — Moved from temp directory to `~/.claude/oh-my-claude/bridge-state.json`. Persistent, easy to inspect
+- **Bridge Mode Token Optimization** — Full constraint block on first prompt (~150 tokens), then short reminder (~15 tokens). Saves ~135 tokens/turn
+- **Bun TransformStream Bug Fix** — Manual reader-based piping avoids chained `pipeThrough()` bug in Bun 1.x
+
+## [2.1.2-beta.8](changelog/v2.1.x.md) - 2026-03-02
+
+### Highlights
+
+- **Bridge Mode (`cc -bridge`)** — Auto-spawn CC workers (Kimi/MiniMax/GLM) alongside main session with task delegation enforced. Workers auto-detected from configured providers
+- **Mode Statusline Segment** — Shows `[ULW]`, `[BRIDGE]`, or `[ULW+BRIDGE]` in statusline
+- **ULW Mode Rewrite** — 4-phase workflow with permission gate, info gathering, execution, completion
+- **Bridge Cleanup Fixes** — Workers reliably torn down on session close across all tmux/wezterm paths
+- **Bridge Workers Skip Permissions** — No more permission prompts during auto-switch
+
+## [2.1.2-beta.7](changelog/v2.1.x.md) - 2026-03-02
+
+### Highlights
+
+- **Kimi Sanitizer Restored** - Fixed 400 errors when switching to Kimi mid-session via `/omc-switch`. Strips thinking blocks and unsupported content types
+- **Model ID Cleanup** - `GLM-5` → `glm-5` (lowercase), added `glm-4.7`, removed discontinued `glm-4v-flash`
+
+## [2.1.2-beta.4](changelog/v2.1.x.md) - 2026-02-28
+
+### Highlights
+
+- **System Prompt Identity Rewriting** - External models no longer claim to be Claude. Dedicated `identity.ts` rewrites 5 identity patterns + prepends explicit identity directive
+- **Per-Provider Sanitizer Architecture** - Refactored into `sanitizers/` folder. Default = no sanitization. Only DeepSeek has a registered sanitizer
+- **Direct Provider Connection** - `oh-my-claude cc -p` now supports all providers: `ds`, `zp`, `zai`, `mm`, `mm-cn`, `km`, `ay`
+- **Preferences Scope Breakdown** - Statusline shows `[pref:2g/1p]` with global/project counts
+- **DeepSeek Quota Precision** - Balance shows 2 decimal places for amounts under ¥1000
+- **Menubar No Dedup** - All configured providers shown as-is, no family dedup
+
+## [2.1.1](changelog/v2.1.x.md) - 2026-02-25
+
+### Highlights
+
+- **Ollama Local Provider** - Native Anthropic-compatible Ollama support with auto-model-discovery, non-LLM filtering, no API key needed for localhost
+- **Menubar Available-Only Filtering** - ModelPicker shows only configured providers via proxy `/providers` endpoint; empty states for unconfigured setups
+- **ZhiPu/MiniMax CN + Global** - Both providers now have CN and global endpoint variants: `zhipu` / `zhipu-global` (Z.ai), `minimax` (global) / `minimax-cn`. Separate API keys per endpoint
+- **Models Registry SSoT** - Single `models-registry.json` drives config schema, menubar, and cross-provider routing. No more duplicated agent/model definitions
+- **Cross-Provider Hub Routing** - Aliyun serves GLM-5, MiniMax-M2.5, K2.5 from other providers. Agents auto-route through Aliyun when primary provider is unconfigured
+- **`/model` for External Providers** - Claude Code's native `/model` command works when switched to Aliyun (or any provider). Mid-session model switching across all 8 Aliyun models
+- **Runtime Menubar Models** - Menubar reads provider list from JSON at runtime instead of hardcoded Rust. No rebuild needed for model changes
+- **Pre-Built Binaries** - Menubar (macOS arm64 + Windows x64) and patched WezTerm (Windows) bundled. No Rust/Tauri toolchain or WezTerm install needed
+- **Hidden Proxy on Windows** - Proxy no longer flashes a console window; reliably auto-terminates when Claude Code exits (taskkill on Windows)
+- **CC Inline in WezTerm** - Running `cc` inside WezTerm stays inline in your shell (bash/zsh) instead of spawning a cmd.exe tab
+- **Installer Stability** - Fixed hang inside Claude Code sessions, fixed EACCES on Windows, tmux cc fix
+
 ## [2.1.0](changelog/v2.1.x.md) - 2026-02-18
 
 ### Highlights
@@ -29,7 +130,7 @@ All notable changes to oh-my-claude are documented here.
 - **OAuth Authentication** - Full OAuth PKCE flow for Google Gemini (multi-account quota rotation), OpenAI Codex (browser + headless), and GitHub Copilot (device code). `oh-my-claude auth login <provider>` to authenticate, then use models through the proxy without API keys
 - **Proxy Format Converters** - Three format converters for OAuth providers: Antigravity (Google Gemini native via Cloud Code endpoints), Responses API (OpenAI Codex), and Chat Completions (Copilot/OpenRouter). Each with bidirectional request + SSE stream conversion
 - **Universal Agent Fallback** - When primary provider is not configured, agents automatically try fallback → any configured provider. No more hard failures when a single API key is missing
-- **Hephaestus Agent** - Code forge specialist (OpenAI/gpt-5.3-codex) for multi-file features, deep refactoring, and code synthesis. `/omc-hephaestus` slash command
+- **Hephaestus Agent** - Code forge specialist (Kimi/K2.5) for multi-file features, deep refactoring, and code synthesis. `/omc-hephaestus` slash command
 - **New Switch Shortcuts** - `/omc-switch gm` (Gemini Flash), `gm-p` (Gemini Pro), `gpt` (GPT-5.2), `cx` (Codex), `cp` (Copilot)
 - **Provider Usage Statusline** - Second-row statusline showing provider balance/quota: DeepSeek CNY balance, ZhiPu token usage %, Google Antigravity-style account status (available/total with exhaustion tracking), plus local request counts for proxy-routed providers. Unconfigured providers are hidden entirely
 
@@ -169,6 +270,8 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v2.1.3-beta.41 | 2026-03-05 | Beta | Bridge bus server, worker auto-switching, pane liveness, statusline fixes, TS fixes |
+| v2.1.3-beta.39 | 2026-03-04 | Beta | Bridge stability, installer cleanup, build fixes, proxy pre-switch, config corrections |
 | v2.1.0-beta.1 | 2026-02-18 | Beta | Kimi proxy fix - strip unsupported tool_reference content blocks from full-compat providers |
 | v2.0.0-beta.13 | 2026-02-17 | Beta | Native TeamCreate integration, bridge-aware Sisyphus, machine-parseable team templates |
 | v2.0.0-beta.3 | 2026-02-13 | Beta | Proxy-aware agent delegation: switch+Task over MCP for full tool access |

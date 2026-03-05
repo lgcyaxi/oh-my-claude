@@ -92,7 +92,8 @@ async fn handle_action(app: &tauri::AppHandle, id: &str) {
             let control_port: u16 = parts[1].parse().unwrap_or(0);
             let session_id = parts[2];
             let provider = parts[3];
-            let model = parts[4];
+            // Rejoin remaining parts — model IDs can contain colons (e.g. "qwen3.5:35b-a3b")
+            let model = &parts[4..].join(":");
                 match client.switch_model(control_port, session_id, provider, model).await {
                 Ok(_) => { let _ = refresh_tray(app).await; }
                 Err(e) => eprintln!("[tray] Switch error: {}", e),
@@ -180,10 +181,12 @@ pub async fn refresh_tray(app: &tauri::AppHandle) -> Result<(), String> {
                 "Claude (native)".to_string()
             };
 
+            let wsl_badge = if session.source.as_deref() == Some("wsl2") { " [WSL]" } else { "" };
             let session_label = format!(
-                "{} - {}",
+                "{} - {}{}",
                 &session.session_id[..session.session_id.len().min(8)],
-                current_model
+                current_model,
+                wsl_badge
             );
 
             // Create submenu for this session — each needs a unique ID
@@ -195,8 +198,12 @@ pub async fn refresh_tray(app: &tauri::AppHandle) -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
 
-            // Add model switch options
-            let providers = crate::commands::get_providers_inner();
+            // Fetch providers from *this session's* proxy control API.
+            // Each proxy knows its own configured providers (API keys, OAuth, localhost).
+            // This is essential for WSL2 sessions whose env differs from the menubar's.
+            let client = ProxyClient::new();
+            let providers = client.get_providers(session.control_port).await
+                .unwrap_or_else(|_| crate::commands::get_providers_inner());
             for provider in &providers {
                 for model in &provider.models {
                     let action = format!(

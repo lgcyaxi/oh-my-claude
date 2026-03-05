@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getProviders, type ProviderInfo } from "../lib/api";
+import { getAvailableProviders, type ProviderInfo } from "../lib/api";
 
 interface ModelPickerProps {
   currentProvider: string | null;
@@ -8,6 +8,7 @@ interface ModelPickerProps {
   onRevert: () => void;
   switched: boolean;
   disabled: boolean;
+  controlPort: number;
 }
 
 export function ModelPicker({
@@ -17,21 +18,33 @@ export function ModelPicker({
   onRevert,
   switched,
   disabled,
+  controlPort,
 }: ModelPickerProps) {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
 
   useEffect(() => {
-    getProviders().then(setProviders).catch(console.error);
-  }, []);
+    getAvailableProviders(controlPort).then(setProviders).catch(console.error);
+  }, [controlPort]);
 
   return (
     <div className="space-y-1.5">
+      {providers.length === 0 && (
+        <div className="text-xs text-gray-500 px-1 py-2">
+          No providers configured
+        </div>
+      )}
+
       {providers.map((provider) => (
         <div key={provider.name}>
           <div className="text-[10px] uppercase tracking-wider text-gray-500 px-1 mb-0.5">
             {provider.name}
           </div>
           <div className="space-y-0.5">
+            {provider.models.length === 0 && (
+              <div className="text-xs text-gray-600 px-2.5 py-1">
+                No models available
+              </div>
+            )}
             {provider.models.map((model) => {
               const isActive =
                 switched && currentProvider === provider.name && currentModel === model.id;

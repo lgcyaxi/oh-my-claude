@@ -2,10 +2,10 @@
  * Proxy request handler — core routing logic
  *
  * Routing priority (highest first):
- * 1. Route directive in system prompt [omc-route:provider/model]
- * 2. Session-scoped state (if session ID present in URL path)
- * 3. Global state (file-based, backward compatible)
- * 4. Passthrough to Anthropic (default)
+ * 1.  Route directive in system prompt [omc-route:provider/model]
+ * 2.  Session-scoped state (if session ID present in URL path)
+ * 3.  Global state (file-based, backward compatible)
+ * 4.  Passthrough to Anthropic (default)
  *
  * Body consumption strategy: the request body is read ONCE at the top
  * of handleMessages() and passed as a string through all handlers.
@@ -27,11 +27,22 @@ import {
 import { extractRouteDirective } from "./route-directive";
 import { getPassthroughAuth, getProviderAuth } from "./auth";
 import { forwardToUpstream, createStreamingResponse } from "./stream";
-import { loadConfig, isProviderConfigured } from "../config";
+import { loadConfig, isProviderConfigured } from "../shared/config";
 import { sanitizeRequestBody, stripThinkingFromBody } from "./sanitize";
-import { convertAnthropicToOpenAI, OpenAIToAnthropicStreamConverter, isOpenAIFormatProvider } from "./format-converter";
-import { convertAnthropicToResponses, ResponsesToAnthropicStreamConverter } from "./responses-converter";
+import { rewriteSystemIdentity } from "./identity";
+import { isOpenAIFormatProvider } from "./format-converter";
+import { convertAnthropicToOpenAI } from "./format-converter";
+import { convertAnthropicToResponses } from "./responses-converter";
+import { wrapWithCapture } from "./response-cache";
+import { resolveEffectiveModel } from "./model-resolver";
+import { forwardToProvider } from "./provider-forward";
+import {
+  createOpenAIToAnthropicResponse,
+  createResponsesToAnthropicResponse,
+  collectStreamToAnthropicJson,
+} from "./response-builders";
 import type { ProxySwitchState } from "./types";
+import modelsRegistry from "../shared/config/models-registry.json";
 
 /** Startup timestamp for uptime tracking */
 const startedAt = Date.now();
@@ -86,6 +97,11 @@ export async function handleMessages(req: Request, sessionId?: string): Promise<
         return await handleDirectiveRoute(req, reqId, bodyText, parsedBody, directive.provider, directive.model, sessionTag, sessionId);
       }
     }
+
+    // --- Priority 1.5: DISABLED ---
+    // Auto-route by body model ID was removed because it silently intercepted requests
+    // without updating session switch state, causing the menubar and statusline to show
+    // incorrect model info. Use explicit switch (switch_model / -p flag) instead.
 
     // --- Priority 2 & 3: Session state → global state → passthrough ---
     let state: ProxySwitchState;
@@ -172,6 +188,9 @@ async function handleDirectiveRoute(
     const useResponsesAPI = RESPONSES_API_PROVIDERS.has(providerType);
     const openAIFormat = isOpenAIFormatProvider(providerType);
 
+    // Rewrite Claude identity in system prompt before any conversion
+    rewriteSystemIdentity(parsedBody, model);
+
     let targetUrl: string;
     let forwardBody: Record<string, unknown>;
 
@@ -214,20 +233,24 @@ async function handleDirectiveRoute(
     providerRequestCounts.set(provider, (providerRequestCounts.get(provider) ?? 0) + 1);
     if (sessionId) recordSessionProviderRequest(sessionId, provider);
 
+    let result: Response;
     if (useResponsesAPI) {
       // Codex always streams — if caller requested non-streaming, buffer the SSE into JSON
       if (!requestStream) {
-        return await collectStreamToAnthropicJson(
+        result = await collectStreamToAnthropicJson(
           await createResponsesToAnthropicResponse(upstreamResponse, originalModel),
           originalModel,
         );
+      } else {
+        result = await createResponsesToAnthropicResponse(upstreamResponse, originalModel);
       }
-      return await createResponsesToAnthropicResponse(upstreamResponse, originalModel);
+    } else if (openAIFormat) {
+      result = await createOpenAIToAnthropicResponse(upstreamResponse, originalModel, sessionId, provider);
+    } else {
+      result = createStreamingResponse(upstreamResponse, undefined, originalModel, model);
     }
-    if (openAIFormat) {
-      return await createOpenAIToAnthropicResponse(upstreamResponse, originalModel);
-    }
-    return createStreamingResponse(upstreamResponse, undefined, originalModel, model);
+
+    return wrapWithCapture(result, sessionId, provider, model);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(
@@ -264,16 +287,16 @@ async function handlePassthrough(
 
   console.error(`[proxy #${reqId}]${sessionTag} → Anthropic (passthrough${isOAuth ? "/oauth" : ""}) ${canonicalPath}`);
 
-  // Always strip thinking blocks from conversation history
+  // Always strip thinking blocks and handle adaptive thinking for contaminated history
   let bodyOverride: Record<string, unknown> | undefined;
   if (bodyText) {
     try {
       const body = JSON.parse(bodyText) as Record<string, unknown>;
-      const strippedCount = stripThinkingFromBody(body);
-      if (strippedCount > 0) {
+      const { strippedCount, modified } = stripThinkingFromBody(body);
+      if (modified) {
         bodyOverride = body;
         if (isDebug) {
-          console.error(`[proxy #${reqId}]${sessionTag} Stripped ${strippedCount} thinking blocks (passthrough)`);
+          console.error(`[proxy #${reqId}]${sessionTag} Sanitized body: ${strippedCount} thinking blocks stripped, thinking mode adjusted (passthrough)`);
         }
       }
     } catch {
@@ -318,40 +341,45 @@ async function handleSwitched(
     const useResponsesAPI = RESPONSES_API_PROVIDERS.has(providerType);
     const openAIFormat = isOpenAIFormatProvider(providerType);
 
-    // Parse body to rewrite the model field
+    // Parse body and resolve effective model (supports `/model` command)
     const body = JSON.parse(bodyText) as Record<string, unknown>;
     const originalModel = body.model as string;
+    const effectiveModel = resolveEffectiveModel(originalModel, model, provider);
+
+    // Rewrite Claude identity in system prompt before any conversion
+    rewriteSystemIdentity(body, effectiveModel);
 
     let targetUrl: string;
     let forwardBody: Record<string, unknown>;
 
     if (useResponsesAPI) {
       // Responses API provider (Codex): convert Anthropic → Responses API
-      forwardBody = convertAnthropicToResponses(body, model);
+      forwardBody = convertAnthropicToResponses(body, effectiveModel);
       targetUrl = `${baseUrl}/responses`;
 
       console.error(
-        `[proxy #${reqId}]${sessionTag} → ${provider}/${model} (switched/responses-api) /responses`
+        `[proxy #${reqId}]${sessionTag} → ${provider}/${effectiveModel} (switched/responses-api) /responses`
       );
     } else if (openAIFormat) {
       // OpenAI-format provider: convert Anthropic → OpenAI Chat Completions
-      forwardBody = convertAnthropicToOpenAI(body, model);
+      forwardBody = convertAnthropicToOpenAI(body, effectiveModel);
       targetUrl = `${baseUrl}/chat/completions`;
 
       console.error(
-        `[proxy #${reqId}]${sessionTag} → ${provider}/${model} (switched/openai-fmt) /chat/completions`
+        `[proxy #${reqId}]${sessionTag} → ${provider}/${effectiveModel} (switched/openai-fmt) /chat/completions`
       );
     } else {
-      // Anthropic-format provider: rewrite model and sanitize
-      body.model = model;
+      // Anthropic-format provider: set resolved model and sanitize
+      body.model = effectiveModel;
       sanitizeRequestBody(body, provider);
       forwardBody = body;
 
       const url = new URL(req.url);
       targetUrl = `${baseUrl}/v1/messages${url.search}`;
 
+      const modelNote = effectiveModel !== model ? ` (user: ${effectiveModel})` : "";
       console.error(
-        `[proxy #${reqId}]${sessionTag} → ${provider}/${model} (switched) /v1/messages`
+        `[proxy #${reqId}]${sessionTag} → ${provider}/${effectiveModel} (switched${modelNote}) /v1/messages`
       );
     }
 
@@ -361,13 +389,16 @@ async function handleSwitched(
     providerRequestCounts.set(provider, (providerRequestCounts.get(provider) ?? 0) + 1);
     if (sessionId) recordSessionProviderRequest(sessionId, provider);
 
+    let result: Response;
     if (useResponsesAPI) {
-      return await createResponsesToAnthropicResponse(upstreamResponse, originalModel);
+      result = await createResponsesToAnthropicResponse(upstreamResponse, originalModel);
+    } else if (openAIFormat) {
+      result = await createOpenAIToAnthropicResponse(upstreamResponse, originalModel, sessionId, provider);
+    } else {
+      result = createStreamingResponse(upstreamResponse, undefined, originalModel, effectiveModel);
     }
-    if (openAIFormat) {
-      return await createOpenAIToAnthropicResponse(upstreamResponse, originalModel);
-    }
-    return createStreamingResponse(upstreamResponse, undefined, originalModel, model);
+
+    return wrapWithCapture(result, sessionId, provider, effectiveModel);
   } catch (error) {
     // Provider request failed — fallback to native Claude
     const message = error instanceof Error ? error.message : String(error);
@@ -377,175 +408,6 @@ async function handleSwitched(
     );
     return await handlePassthrough(req, reqId, bodyText, sessionTag);
   }
-}
-
-/**
- * Forward a request to either an OpenAI-format or Anthropic-format upstream.
- *
- * For OpenAI/Responses API providers, uses Bearer auth and sets Content-Type.
- * For Anthropic-format providers, delegates to forwardToUpstream with x-api-key.
- *
- * Adds provider-specific headers (Codex).
- */
-async function forwardToProvider(
-  req: Request,
-  targetUrl: string,
-  apiKey: string,
-  body: Record<string, unknown>,
-  isOpenAIFormat: boolean,
-  provider?: string,
-  providerType?: string
-): Promise<Response> {
-  if (!isOpenAIFormat) {
-    return forwardToUpstream(req, targetUrl, apiKey, body);
-  }
-
-  // OpenAI-format: use Bearer token auth
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${apiKey}`,
-  };
-
-  // Forward accept header for streaming
-  const accept = req.headers.get("accept");
-  if (accept) headers["Accept"] = accept;
-
-  // Codex-specific headers (OpenAI OAuth)
-  if (providerType === "openai-oauth") {
-    headers["originator"] = "oh-my-claude";
-    // Add ChatGPT-Account-Id from stored credential
-    try {
-      const { getCredential } = await import("../auth/store");
-      const cred = getCredential("openai");
-      if (cred && cred.type === "oauth-openai" && cred.accountId) {
-        headers["ChatGPT-Account-Id"] = cred.accountId;
-      }
-    } catch {
-      // Non-critical — account ID is optional
-    }
-  }
-
-  return fetch(targetUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(5 * 60 * 1000), // 5 min timeout
-  });
-}
-
-/**
- * Create a streaming response that converts OpenAI SSE format to Anthropic SSE format.
- * Used when proxying to OpenAI-format providers (OpenAI).
- */
-async function createOpenAIToAnthropicResponse(
-  upstreamResponse: Response,
-  originalModel: string
-): Promise<Response> {
-  const contentType = upstreamResponse.headers.get("content-type") ?? "";
-
-  // Non-streaming response: convert OpenAI JSON → Anthropic JSON
-  if (!contentType.includes("text/event-stream") && contentType.includes("application/json")) {
-    const data = await upstreamResponse.json() as Record<string, unknown>;
-    const anthropic = convertOpenAIJsonToAnthropic(data, originalModel);
-    return new Response(JSON.stringify(anthropic), {
-      status: upstreamResponse.status,
-      headers: { "content-type": "application/json" },
-    });
-  }
-
-  // Streaming: pipe through converter
-  if (!upstreamResponse.body) {
-    return new Response(null, { status: upstreamResponse.status });
-  }
-
-  console.error(`[stream] Converting OpenAI SSE → Anthropic SSE (model: "${originalModel}")`);
-  const converter = new OpenAIToAnthropicStreamConverter(originalModel);
-  const transformedStream = upstreamResponse.body.pipeThrough(converter);
-
-  return new Response(transformedStream, {
-    status: 200,
-    headers: {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache",
-      "connection": "keep-alive",
-    },
-  });
-}
-
-/**
- * Create a streaming response that converts Responses API SSE format to Anthropic SSE format.
- * Used when proxying to Codex / OpenAI OAuth providers.
- */
-async function createResponsesToAnthropicResponse(
-  upstreamResponse: Response,
-  originalModel: string
-): Promise<Response> {
-  // Error response — log body for debugging, then pass through
-  if (upstreamResponse.status >= 400) {
-    let errorBody = "";
-    try {
-      errorBody = await upstreamResponse.text();
-      console.error(`[proxy] Codex API error: ${upstreamResponse.status} ${errorBody}`);
-    } catch {
-      console.error(`[proxy] Codex API error: ${upstreamResponse.status} (could not read body)`);
-    }
-    return new Response(errorBody || null, {
-      status: upstreamResponse.status,
-      headers: {
-        "content-type": upstreamResponse.headers.get("content-type") || "application/json",
-      },
-    });
-  }
-
-  if (!upstreamResponse.body) {
-    return new Response(null, { status: upstreamResponse.status });
-  }
-
-  // Non-streaming response: convert Responses API JSON → Anthropic JSON
-  const responseContentType = upstreamResponse.headers.get("content-type") ?? "";
-  if (responseContentType.includes("application/json") && !responseContentType.includes("text/event-stream")) {
-    const data = await upstreamResponse.json() as Record<string, unknown>;
-    const anthropic = convertResponsesJsonToAnthropic(data, originalModel);
-    return new Response(JSON.stringify(anthropic), {
-      status: upstreamResponse.status,
-      headers: { "content-type": "application/json" },
-    });
-  }
-
-  // Streaming: Codex API may not set Content-Type: text/event-stream despite returning SSE.
-  // We request stream: true, so assume streaming for all 2xx responses with a body.
-  console.error(`[stream] Converting Responses API SSE → Anthropic SSE (model: "${originalModel}")`);
-
-  // Use manual reader-based piping instead of pipeThrough.
-  // Bun 1.x has issues where TransformStream.transform() is never invoked
-  // when the input comes from a fetch Response body via pipeThrough.
-  const converter = new ResponsesToAnthropicStreamConverter(originalModel);
-  const writer = converter.writable.getWriter();
-  const reader = upstreamResponse.body.getReader();
-
-  // Pipe upstream → converter in the background
-  (async () => {
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        await writer.write(value);
-      }
-      await writer.close();
-    } catch (err) {
-      console.error(`[codex] Stream pipe error: ${err instanceof Error ? err.message : String(err)}`);
-      try { writer.abort(err); } catch { /* ignore */ }
-    }
-  })();
-
-  return new Response(converter.readable, {
-    status: 200,
-    headers: {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache",
-      "connection": "keep-alive",
-    },
-  });
 }
 
 /**
@@ -576,6 +438,12 @@ export async function handleOtherRequest(req: Request, sessionId?: string): Prom
     }
 
     const upstreamResponse = await forwardToUpstream(req, targetUrl, apiKey, undefined, isOAuth);
+
+    // Intercept /api/oauth/usage responses — cache for statusline
+    if (canonicalPath === "/api/oauth/usage" && upstreamResponse.ok) {
+      cacheUsageResponse(upstreamResponse.clone() as globalThis.Response).catch(() => {});
+    }
+
     return createStreamingResponse(upstreamResponse);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -584,6 +452,29 @@ export async function handleOtherRequest(req: Request, sessionId?: string): Prom
       JSON.stringify({ error: { type: "proxy_error", message } }),
       { status: 502, headers: { "content-type": "application/json" } }
     );
+  }
+}
+
+/**
+ * Cache OAuth usage response for statusline consumption.
+ * Writes to ~/.claude/oh-my-claude/cache/api_usage.json.
+ */
+async function cacheUsageResponse(response: globalThis.Response): Promise<void> {
+  try {
+    const data = await response.json() as { five_hour?: { utilization: number; resets_at?: string }; seven_day?: { utilization: number; resets_at?: string } };
+    if (!data.five_hour) return;
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const cacheDir = join(homedir(), ".claude", "oh-my-claude", "cache");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      join(cacheDir, "api_usage.json"),
+      JSON.stringify({ timestamp: Date.now(), five_hour: data.five_hour, seven_day: data.seven_day }),
+      "utf-8",
+    );
+  } catch {
+    // Non-critical — ignore cache write failures
   }
 }
 
@@ -604,165 +495,66 @@ export function getProviderRequestCounts(): Record<string, number> {
   return Object.fromEntries(providerRequestCounts);
 }
 
-// ── SSE-to-JSON buffer for always-streaming providers ───────────────
-
 /**
- * Collect a streaming SSE Anthropic response into a single JSON response.
+ * Handle GET /v1/models — return models from registry for the current session's provider.
  *
- * Used when the caller requests `stream: false` but the upstream provider
- * only supports streaming (e.g., Codex Responses API).
- *
- * Reads all SSE events, accumulates text deltas, and returns a complete
- * Anthropic Messages API JSON response.
+ * When switched to an external provider, returns that provider's models from the registry
+ * so that Claude Code's `/model` command shows the right options instead of Anthropic models.
+ * When not switched (passthrough mode), passthroughs to Anthropic.
  */
-async function collectStreamToAnthropicJson(
-  sseResponse: Response,
-  originalModel: string,
-): Promise<Response> {
-  if (!sseResponse.body) {
-    return new Response(JSON.stringify({
-      id: `msg_${Date.now()}`, type: "message", role: "assistant",
-      content: [{ type: "text", text: "" }], model: originalModel,
-      stop_reason: "end_turn", stop_sequence: null,
-      usage: { input_tokens: 0, output_tokens: 0 },
-    }), { status: 200, headers: { "content-type": "application/json" } });
-  }
+export async function handleModelsRequest(req: Request, sessionId?: string): Promise<Response> {
+  const config = loadConfig();
+  const now = Math.floor(Date.now() / 1000);
 
-  const reader = sseResponse.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let messageId = `msg_${Date.now()}`;
-  const textBlocks: string[] = [];
-  let stopReason = "end_turn";
-  let inputTokens = 0;
-  let outputTokens = 0;
+  // Always return all configured providers' models so /model picker shows everything
+  type RegistryModel = { id: string; label?: string };
+  type RegistryProvider = { name: string; models: RegistryModel[] };
+  type Registry = { providers: RegistryProvider[]; crossProviderAliases?: Record<string, Array<{ provider: string; model: string }>> };
+  const reg = modelsRegistry as unknown as Registry;
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const dataStr = line.slice(6).trim();
-        if (dataStr === "[DONE]") continue;
-
-        try {
-          const data = JSON.parse(dataStr) as Record<string, unknown>;
-          const type = data.type as string;
-
-          if (type === "message_start") {
-            const msg = data.message as Record<string, unknown> | undefined;
-            if (msg?.id) messageId = msg.id as string;
-            const usage = msg?.usage as Record<string, unknown> | undefined;
-            if (usage?.input_tokens) inputTokens = usage.input_tokens as number;
-          } else if (type === "content_block_delta") {
-            const delta = data.delta as Record<string, unknown> | undefined;
-            if (delta?.type === "text_delta") {
-              textBlocks.push(delta.text as string);
-            }
-          } else if (type === "message_delta") {
-            const delta = data.delta as Record<string, unknown> | undefined;
-            if (delta?.stop_reason) stopReason = delta.stop_reason as string;
-            const usage = data.usage as Record<string, unknown> | undefined;
-            if (usage?.output_tokens) outputTokens = usage.output_tokens as number;
-          }
-        } catch {
-          // Skip invalid JSON
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const result = {
-    id: messageId,
-    type: "message",
-    role: "assistant",
-    content: [{ type: "text", text: textBlocks.join("") }],
-    model: originalModel,
-    stop_reason: stopReason,
-    stop_sequence: null,
-    usage: { input_tokens: inputTokens, output_tokens: outputTokens },
-  };
-
-  console.error(`[proxy] Collected streaming response → JSON (${textBlocks.join("").length} chars)`);
-
-  return new Response(JSON.stringify(result), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-// ── Non-streaming JSON response converters ──────────────────────────
-
-/**
- * Convert OpenAI Chat Completions JSON response → Anthropic Messages API JSON.
- */
-function convertOpenAIJsonToAnthropic(
-  data: Record<string, unknown>,
-  originalModel: string
-): Record<string, unknown> {
-  const choices = data.choices as Array<Record<string, unknown>> | undefined;
-  const message = choices?.[0]?.message as Record<string, unknown> | undefined;
-  const text = (message?.content as string) ?? "";
-  const usage = data.usage as Record<string, unknown> | undefined;
-
-  return {
-    id: (data.id as string) ?? `msg_${Date.now()}`,
-    type: "message",
-    role: "assistant",
-    content: [{ type: "text", text }],
-    model: originalModel,
-    stop_reason: "end_turn",
-    stop_sequence: null,
-    usage: {
-      input_tokens: (usage?.prompt_tokens as number) ?? 0,
-      output_tokens: (usage?.completion_tokens as number) ?? 0,
-    },
-  };
-}
-
-/**
- * Convert OpenAI Responses API JSON response → Anthropic Messages API JSON.
- */
-function convertResponsesJsonToAnthropic(
-  data: Record<string, unknown>,
-  originalModel: string
-): Record<string, unknown> {
-  const output = data.output as Array<Record<string, unknown>> | undefined;
-  // Find first message output item with text content
-  let text = "";
-  if (output) {
-    for (const item of output) {
-      if (item.type === "message") {
-        const itemContent = item.content as Array<Record<string, unknown>> | undefined;
-        const textPart = itemContent?.find((c) => c.type === "output_text");
-        if (textPart) {
-          text = (textPart.text as string) ?? "";
-          break;
-        }
+  // Build alias winner map: modelId → winning provider name
+  const aliasWinners = new Map<string, string>();
+  for (const [modelId, targets] of Object.entries(reg.crossProviderAliases ?? {})) {
+    for (const target of targets) {
+      if (isProviderConfigured(config, target.provider)) {
+        aliasWinners.set(modelId, target.provider);
+        break;
       }
     }
   }
-  const usage = data.usage as Record<string, unknown> | undefined;
 
-  return {
-    id: (data.id as string) ?? `msg_${Date.now()}`,
-    type: "message",
-    role: "assistant",
-    content: [{ type: "text", text }],
-    model: originalModel,
-    stop_reason: "end_turn",
-    stop_sequence: null,
-    usage: {
-      input_tokens: (usage?.input_tokens as number) ?? 0,
-      output_tokens: (usage?.output_tokens as number) ?? 0,
-    },
-  };
+  const seen = new Set<string>();
+  const models: Array<{ type: "model"; id: string; display_name: string; created_at: number }> = [];
+
+  for (const p of reg.providers) {
+    if (!isProviderConfigured(config, p.name)) continue;
+    if (p.name === "ollama") continue; // dynamic list, unknown at build time
+
+    for (const m of p.models) {
+      if (seen.has(m.id)) continue; // already emitted by a higher-priority provider
+
+      // If this model has an alias winner that is a DIFFERENT provider, skip here
+      // (the winner will emit it when we reach that provider's iteration)
+      const winner = aliasWinners.get(m.id);
+      if (winner && winner !== p.name) continue;
+
+      seen.add(m.id);
+      models.push({
+        type: "model",
+        id: m.id,
+        display_name: m.label ?? m.id,
+        created_at: now,
+      });
+    }
+  }
+
+  if (models.length === 0) {
+    // No external providers configured — fall back to Anthropic's native list
+    return handleOtherRequest(req, sessionId);
+  }
+
+  return new Response(
+    JSON.stringify({ data: models, has_more: false, first_id: models[0]?.id, last_id: models[models.length - 1]?.id }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
 }

@@ -41,6 +41,10 @@ export interface MemoryEntry {
   type: MemoryType;
   /** Tags for categorization and search */
   tags: string[];
+  /** Semantic concepts (e.g., ["authentication", "jwt"]) */
+  concepts?: string[];
+  /** Files read or modified in this memory's context */
+  files?: string[];
   /** Markdown body content */
   content: string;
   /** ISO 8601 creation timestamp */
@@ -56,6 +60,8 @@ export interface MemoryFrontmatter {
   title: string;
   type: MemoryType;
   tags: string[];
+  concepts?: string[];
+  files?: string[];
   created: string;
   updated: string;
 }
@@ -70,6 +76,8 @@ export interface MemorySearchOptions {
   type?: MemoryType;
   /** Filter by tags (any match) */
   tags?: string[];
+  /** Filter/boost by semantic concepts */
+  concepts?: string[];
   /** Maximum results to return */
   limit?: number;
   /** Sort order */
@@ -157,6 +165,10 @@ export interface CreateMemoryInput {
   type?: MemoryType;
   /** Tags for categorization */
   tags?: string[];
+  /** Semantic concepts (e.g., ["authentication", "jwt"]) */
+  concepts?: string[];
+  /** Files read or modified in this memory's context */
+  files?: string[];
   /** Storage scope (default: project if in git repo, otherwise global) */
   scope?: MemoryScope;
   /** Override creation date (used by compact to preserve original date context) */

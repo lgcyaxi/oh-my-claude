@@ -43,6 +43,46 @@ import {
   nowISO,
 } from "./parser";
 
+// ---- Input normalization helpers ----
+
+/**
+ * Normalize tags/concepts input to string[].
+ * AI models sometimes send a comma-separated string instead of an array,
+ * or a JSON-stringified array like '["a","b"]'. Both cause character-level
+ * splitting when later joined (e.g., "bridge" → "b, r, i, d, g, e").
+ */
+function normalizeTags(input: unknown): string[] {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    // Flatten: if any element is itself a comma-separated string, split it
+    return input
+      .flatMap((item) => typeof item === "string" ? item.split(",").map((s) => s.trim()) : [])
+      .filter((s) => s.length > 0);
+  }
+  if (typeof input === "string") {
+    let trimmed = input.trim();
+    // Strip surrounding quotes: '"bridge, bus"' → 'bridge, bus'
+    if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+      trimmed = trimmed.slice(1, -1).trim();
+    }
+    // Handle JSON array strings like '["agents", "reorganization"]'
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((s): s is string => typeof s === "string" && s.length > 0);
+        }
+      } catch {
+        // Not valid JSON, fall through to comma split
+      }
+    }
+    // Plain comma-separated string: "bridge, bus, sse"
+    return trimmed.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+  }
+  return [];
+}
+
 // ---- Project detection helpers ----
 
 /**
@@ -71,6 +111,45 @@ function findProjectRoot(fromDir?: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Resolve the canonical (non-worktree) repo root from any git directory.
+ *
+ * In a worktree, `.git` is a file containing `gitdir: /path/to/.git/worktrees/<name>`.
+ * We follow this pointer to find the main repo root.
+ * In a normal repo, `.git` is a directory — returns the same path.
+ * Returns null if not in a git repo.
+ *
+ * @param projectRoot - The git root (may be a worktree). If omitted, uses findProjectRoot().
+ */
+export function resolveCanonicalRoot(projectRoot?: string): string | null {
+  const root = projectRoot ?? findProjectRoot();
+  if (!root) return null;
+
+  const gitPath = join(root, ".git");
+  if (!existsSync(gitPath)) return null;
+
+  try {
+    const stat = statSync(gitPath);
+    if (stat.isDirectory()) return root; // Already canonical
+
+    // .git is a file → worktree pointer: "gitdir: /path/to/.git/worktrees/name"
+    const content = readFileSync(gitPath, "utf-8").trim();
+    const match = content.match(/^gitdir:\s*(.+)$/);
+    if (!match) return null;
+
+    const gitdir = match[1]!.trim();
+    // Walk up from gitdir to find the main .git dir
+    // Pattern: {repo}/.git/worktrees/{name} → extract {repo}
+    const normalized = gitdir.replace(/\\/g, "/");
+    const worktreesIdx = normalized.indexOf("/.git/worktrees/");
+    if (worktreesIdx === -1) return null;
+
+    return gitdir.slice(0, worktreesIdx);
+  } catch {
+    return null;
+  }
 }
 
 // ---- Directory helpers ----
@@ -128,14 +207,24 @@ export function getMemoryDirForScope(scope: MemoryScope, projectRoot?: string): 
 }
 
 /**
- * Determine default write scope based on environment
- * - If .claude/mem/ exists -> project
- * - If in git repo -> project (will create .claude/mem/)
- * - Otherwise -> global
+ * Determine default write scope.
+ *
+ * Priority:
+ * 1. configuredScope from oh-my-claude.json memory.defaultWriteScope
+ *    - "project" / "global" → use directly
+ *    - "auto" / undefined → fall through to auto-detect
+ * 2. Auto-detect: project if in git repo, otherwise global
  *
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
+ * @param configuredScope - Value from config memory.defaultWriteScope (passed by caller).
  */
-export function getDefaultWriteScope(projectRoot?: string): "project" | "global" {
+export function getDefaultWriteScope(projectRoot?: string, configuredScope?: string): "project" | "global" {
+  // Explicit config override (not "auto")
+  if (configuredScope === "project" || configuredScope === "global") {
+    return configuredScope;
+  }
+
+  // Auto-detect
   if (hasProjectMemory(projectRoot)) return "project";
   if (findProjectRoot(projectRoot) !== null) return "project";
   return "global";
@@ -216,7 +305,9 @@ export function createMemory(input: CreateMemoryInput, projectRoot?: string): Me
       id,
       title,
       type,
-      tags: input.tags ?? [],
+      tags: normalizeTags(input.tags),
+      ...(input.concepts && input.concepts.length > 0 && { concepts: normalizeTags(input.concepts) }),
+      ...(input.files && input.files.length > 0 && { files: input.files }),
       content: input.content,
       createdAt,
       updatedAt: now,

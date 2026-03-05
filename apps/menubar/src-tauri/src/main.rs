@@ -4,12 +4,18 @@
 mod commands;
 mod proxy_client;
 mod registry;
+mod shell_env;
 mod tray;
 mod types;
 
 use std::time::Duration;
 
 fn main() {
+    // Load shell environment variables before anything else.
+    // macOS GUI apps don't inherit shell profile env vars (e.g. from .zshrc),
+    // so we spawn a login shell to capture them.
+    shell_env::load_shell_env();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
@@ -17,6 +23,7 @@ fn main() {
             commands::switch_model,
             commands::revert_model,
             commands::get_providers,
+            commands::discover_ollama_models,
         ])
         .setup(|app| {
             // Hide from Dock on macOS — this is a menubar-only app

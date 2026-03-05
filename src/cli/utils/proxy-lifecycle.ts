@@ -1,21 +1,49 @@
 /**
  * Shared proxy lifecycle management
  *
- * Two modes:
- * - `ensureProxyRunning()` — shared daemon for `oh-my-claude proxy start`
- * - `spawnSessionProxy()` — per-session child process for `oh-my-claude cc`
+ * Provides per-session proxy spawning for `oh-my-claude cc`:
+ * - `spawnSessionProxy()` — per-session child process (dies with CC session)
+ * - `spawnDetachedProxy()` — per-session detached daemon (for terminal window mode)
+ * - `findFreePorts()` — allocate dynamic ports for a session
  */
 
-import { spawn, type ChildProcess, type StdioOptions } from "node:child_process";
-import { existsSync, writeFileSync, openSync } from "node:fs";
+import { spawn, execSync, type ChildProcess, type StdioOptions } from "node:child_process";
+import { existsSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { createServer } from "node:net";
-import { PROXY_SCRIPT, PID_FILE, INSTALL_DIR } from "./paths";
+import { PROXY_SCRIPT, INSTALL_DIR } from "./paths";
 import { checkHealth } from "./health";
 
-export interface StartProxyResult {
-  pid: number | undefined;
-  started: boolean;
+/**
+ * Resolve path to `bun` executable.
+ * The proxy server uses Bun.serve() and requires Bun runtime.
+ * Throws a user-friendly error if bun is not found (e.g., WSL2 without Bun installed).
+ */
+function resolveBunPath(): string {
+  const isWin = process.platform === "win32";
+  // On Windows, prefer `where` — it returns native paths (C:\...).
+  // `which` in Git Bash/MSYS returns MSYS paths (/c/...) that Node spawn() can't use.
+  if (isWin) {
+    try {
+      const bunPath = execSync("where bun", { encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/)[0]!.trim();
+      if (bunPath) return bunPath;
+    } catch {}
+  }
+  try {
+    let bunPath = execSync("which bun", { encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (bunPath) {
+      // Convert MSYS paths (/c/foo) to Windows paths (C:/foo) for Node spawn()
+      if (isWin && /^\/[a-zA-Z]\//.test(bunPath)) {
+        bunPath = bunPath[1]!.toUpperCase() + ":" + bunPath.slice(2);
+      }
+      return bunPath;
+    }
+  } catch {}
+  throw new Error(
+    "Bun runtime not found. The oh-my-claude proxy requires Bun.\n" +
+    "Install Bun: curl -fsSL https://bun.sh/install | bash\n" +
+    "Then restart your terminal and try again."
+  );
 }
 
 /**
@@ -72,7 +100,7 @@ export async function spawnSessionProxy(options: {
   }
 
   // Spawn as attached child process — dies with parent
-  const child = spawn("bun", ["run", PROXY_SCRIPT, "--port", String(port), "--control-port", String(controlPort)], {
+  const child = spawn(resolveBunPath(), ["run", PROXY_SCRIPT, "--port", String(port), "--control-port", String(controlPort)], {
     stdio,
     env: { ...process.env },
     windowsHide: true,
@@ -124,8 +152,12 @@ export async function spawnDetachedProxy(options: {
     stdio = ["ignore", fd, fd];
   }
 
-  const child = spawn("bun", ["run", PROXY_SCRIPT, "--port", String(port), "--control-port", String(controlPort)], {
-    detached: true,
+  // On Windows, detached: true creates a new process group which may flash
+  // a console window. Use windowsHide: true WITHOUT detached to keep it hidden.
+  // The proxy still outlives the parent because stdio is disconnected + unref'd.
+  const isWindows = process.platform === "win32";
+  const child = spawn(resolveBunPath(), ["run", PROXY_SCRIPT, "--port", String(port), "--control-port", String(controlPort)], {
+    detached: !isWindows,
     stdio,
     env: { ...process.env },
     windowsHide: true,
@@ -155,57 +187,3 @@ export async function spawnDetachedProxy(options: {
   return { pid, healthy, logFile };
 }
 
-/**
- * Ensure proxy is running as a shared daemon. Used by `oh-my-claude proxy start`.
- *
- * @returns Whether the proxy is running and the PID (if newly started)
- */
-export async function ensureProxyRunning(options: {
-  port: string;
-  controlPort: string;
-}): Promise<{ alreadyRunning: boolean; started: boolean; pid?: number }> {
-  const { port, controlPort } = options;
-
-  // Check if already running
-  try {
-    const parsed = await checkHealth(controlPort);
-    if (parsed.status === "ok") {
-      return { alreadyRunning: true, started: true };
-    }
-  } catch {
-    // Not running
-  }
-
-  // Check proxy script exists
-  if (!existsSync(PROXY_SCRIPT)) {
-    return { alreadyRunning: false, started: false };
-  }
-
-  // Spawn daemon
-  const child = spawn("bun", ["run", PROXY_SCRIPT, "--port", port, "--control-port", controlPort], {
-    detached: true,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: { ...process.env },
-    windowsHide: true,
-  });
-  child.unref();
-
-  if (child.pid) {
-    try { writeFileSync(PID_FILE, String(child.pid), "utf-8"); } catch {}
-  }
-
-  // Wait for health (up to 3s)
-  for (let i = 0; i < 6; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    try {
-      const parsed = await checkHealth(controlPort);
-      if (parsed.status === "ok") {
-        return { alreadyRunning: false, started: true, pid: child.pid };
-      }
-    } catch {
-      // Keep waiting
-    }
-  }
-
-  return { alreadyRunning: false, started: false, pid: child.pid };
-}

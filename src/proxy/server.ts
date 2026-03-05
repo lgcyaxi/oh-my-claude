@@ -18,11 +18,13 @@
  *   bun run src/proxy/server.ts --port 18910 --control-port 18911
  */
 
-import { handleMessages, handleOtherRequest } from "./handler";
+import { handleMessages, handleOtherRequest, handleModelsRequest } from "./handler";
 import { handleControl, registerShutdown } from "./control";
 import { readSwitchState, resetSwitchState } from "./state";
 import { parseSessionFromPath, cleanupStaleSessions, getCleanupIntervalMs } from "./session";
+import { initializeAuth } from "./auth";
 import { DEFAULT_PROXY_CONFIG } from "./types";
+import { UsagePoller } from "./usage-poller";
 
 // Parse CLI arguments
 function parseArgs(): { port: number; controlPort: number } {
@@ -50,8 +52,45 @@ function parseArgs(): { port: number; controlPort: number } {
 async function main() {
   const { port, controlPort } = parseArgs();
 
-  // Ensure clean global state on startup
-  resetSwitchState();
+  // Ensure auth config exists (auto-detects api-key vs oauth mode)
+  const authConfig = initializeAuth();
+  const authModeLabel = authConfig.authMode === "oauth" ? "oauth (subscription)" : "api-key";
+
+  // Check for pre-configured switch from env vars (used by bridge workers)
+  const switchProviderRaw = process.env.OMC_PROXY_SWITCH_PROVIDER;
+  const switchModel = process.env.OMC_PROXY_SWITCH_MODEL;
+
+  if (switchProviderRaw && switchModel) {
+    // Resolve CLI alias (e.g. "zp") to config provider name (e.g. "zhipu")
+    // The proxy handler uses config provider names, not CLI aliases.
+    const ALIAS_TO_PROVIDER: Record<string, string> = {
+      ds: "deepseek", deepseek: "deepseek",
+      "ds-r": "deepseek",
+      zp: "zhipu", zhipu: "zhipu",
+      zai: "zhipu-global", "zp-g": "zhipu-global", "zhipu-global": "zhipu-global",
+      mm: "minimax", minimax: "minimax",
+      "mm-cn": "minimax-cn", "minimax-cn": "minimax-cn",
+      km: "kimi", kimi: "kimi",
+      ay: "aliyun", aliyun: "aliyun", ali: "aliyun",
+    };
+    const switchProvider = ALIAS_TO_PROVIDER[switchProviderRaw] ?? switchProviderRaw;
+
+    // Apply pre-configured switch at startup.
+    // Write to in-memory default session state — this is per-process isolated.
+    // Also set the per-process default switch so ANY session on this proxy inherits it.
+    const { setDefaultSwitchState } = require("./session") as typeof import("./session");
+    const switchState = {
+      switched: true,
+      provider: switchProvider,
+      model: switchModel,
+      switchedAt: Date.now(),
+    };
+    // Set process-local default: any session without explicit switch state inherits this
+    setDefaultSwitchState(switchState);
+  } else {
+    // Ensure clean global state on startup
+    resetSwitchState();
+  }
 
   // Start proxy server
   const proxy = Bun.serve({
@@ -74,6 +113,11 @@ async function main() {
       // Route /v1/messages to the switching handler
       if (pathname === "/v1/messages") {
         return handleMessages(req, sessionId);
+      }
+
+      // Intercept GET /v1/models — return provider-specific model list when switched
+      if (pathname === "/v1/models" && req.method === "GET") {
+        return handleModelsRequest(req, sessionId);
       }
 
       // All other paths — passthrough to Anthropic
@@ -111,8 +155,10 @@ async function main() {
   console.error(`  export ANTHROPIC_BASE_URL=http://localhost:${proxy.port}`);
   console.error("");
 
-  // Log initial state
-  const state = readSwitchState();
+  // Log initial state (prefer process default over global file for bridge workers)
+  const { getDefaultSwitchState } = require("./session") as typeof import("./session");
+  const state = getDefaultSwitchState() ?? readSwitchState();
+  console.error(`  Auth:  ${authModeLabel}`);
   console.error(
     `  Mode: ${state.switched ? `switched → ${state.provider}/${state.model}` : "passthrough → Anthropic"}`
   );
@@ -124,9 +170,14 @@ async function main() {
   // Periodic cleanup of stale sessions
   const cleanupTimer = setInterval(cleanupStaleSessions, getCleanupIntervalMs());
 
+  // Background usage poller — keeps cache fresh for instant statusline renders
+  const usagePoller = new UsagePoller();
+  usagePoller.start();
+
   // Handle graceful shutdown
   const shutdown = () => {
     console.error("\n[proxy] Shutting down...");
+    usagePoller.stop();
     clearInterval(cleanupTimer);
     resetSwitchState();
     proxy.stop();

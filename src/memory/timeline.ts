@@ -288,12 +288,36 @@ function groupEntriesByPeriod(entries: MemoryEntry[], now: Date): TimeGroup[] {
 
 // ---- Entry formatting ----
 
+/** Tags that add no value in the timeline (noise from auto-capture) */
+const NOISE_TAGS = new Set(["auto-capture", "session-end", "context-threshold", "auto-extract", "completion"]);
+
 function formatEntryFull(entry: MemoryEntry, includeDate: boolean): string {
   const date = new Date(entry.createdAt);
   const timeStr = includeDate ? formatMonthDay(date) : formatTime(date);
   const typeTag = `[${entry.type}]`;
-  const tags = entry.tags.length > 0 ? ` \`${entry.tags.join(", ")}\`` : "";
-  return `- ${timeStr} ${typeTag} **${entry.title}**${tags}`;
+
+  // For session entries with concepts, show concepts as the distinguishing info
+  // instead of the generic "Session summary YYYY-MM-DD" title
+  let displayTitle = entry.title;
+  if (entry.type === "session" && entry.concepts && entry.concepts.length > 0) {
+    // Use first line of content (usually the first bullet) as a more descriptive title
+    const firstBullet = entry.content.split("\n").find(l => l.startsWith("- **"));
+    if (firstBullet) {
+      // Extract just the key part: "- **Decision**: ..." → "Decision: ..."
+      const cleaned = firstBullet.replace(/^- \*\*/, "").replace(/\*\*:?\s*/, ": ").slice(0, 80);
+      displayTitle = cleaned;
+    } else {
+      // Fallback: show concepts
+      displayTitle = entry.concepts.slice(0, 3).join(", ");
+    }
+  }
+
+  // Filter out noise tags (auto-capture, session-end, provider names)
+  const providerNames = new Set(["zhipu", "minimax", "deepseek"]);
+  const meaningfulTags = entry.tags.filter(t => !NOISE_TAGS.has(t) && !providerNames.has(t));
+  const tags = meaningfulTags.length > 0 ? ` \`${meaningfulTags.join(", ")}\`` : "";
+
+  return `- ${timeStr} ${typeTag} **${displayTitle}**${tags}`;
 }
 
 /**

@@ -64,7 +64,56 @@ export async function revertModel(
   return invoke("revert_model", { controlPort, sessionId });
 }
 
-/** Get available providers and models */
+/** Get available providers and models from static registry (fallback) */
 export async function getProviders(): Promise<ProviderInfo[]> {
   return invoke("get_providers");
+}
+
+/**
+ * Get configured (available) providers from the proxy control API.
+ * Only returns providers with valid API keys / credentials.
+ * Falls back to static registry if proxy is unreachable.
+ * Auto-discovers Ollama models for providers with empty model lists.
+ */
+export async function getAvailableProviders(controlPort: number): Promise<ProviderInfo[]> {
+  let providers: ProviderInfo[];
+  try {
+    const resp = await fetch(`http://localhost:${controlPort}/providers`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (resp.ok) {
+      const data = (await resp.json()) as { providers: ProviderInfo[] };
+      providers = data.providers;
+    } else {
+      providers = await getProviders();
+    }
+  } catch {
+    // Proxy unreachable — fall back to static registry
+    providers = await getProviders();
+  }
+
+  // Auto-discover Ollama models for providers with empty model lists
+  return enrichOllamaModels(providers);
+}
+
+/**
+ * If Ollama provider has empty models, auto-discover via Tauri command.
+ * Uses Rust-side reqwest (bypasses WebView fetch restrictions).
+ */
+async function enrichOllamaModels(providers: ProviderInfo[]): Promise<ProviderInfo[]> {
+  const ollamaIdx = providers.findIndex((p) => p.name === "ollama");
+  if (ollamaIdx === -1 || providers[ollamaIdx].models.length > 0) {
+    return providers;
+  }
+
+  try {
+    const models: ModelInfo[] = await invoke("discover_ollama_models");
+    if (models.length > 0) {
+      providers[ollamaIdx] = { ...providers[ollamaIdx], models };
+    }
+  } catch {
+    // Ollama unreachable — keep empty models
+  }
+
+  return providers;
 }

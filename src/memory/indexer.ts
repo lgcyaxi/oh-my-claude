@@ -31,7 +31,7 @@ import { join, dirname, basename } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import type { MemoryScope } from "./types";
-import { parseMemoryFile } from "./parser";
+import { parseMemoryFile, stripPrivateBlocks } from "./parser";
 
 // ---- Types ----
 
@@ -45,6 +45,8 @@ export interface IndexedFile {
   title: string | null;
   type: string | null;
   tags: string | null;
+  concepts: string | null;
+  filesTouched: string | null;
   createdAt: string | null;
   potentialDuplicateOf: string | null;
 }
@@ -174,12 +176,19 @@ const SCHEMA_STATEMENTS: string[] = [
 
 // ---- MemoryIndexer Class ----
 
+export interface TokenStats {
+  embeddingCalls: number;
+  searchQueries: number;
+  chunksEmbedded: number;
+}
+
 export class MemoryIndexer {
   private db: any = null;
   private initialized = false;
   private dirty = false;
   private options: MemoryIndexerOptions;
   private chunkingOptions: ChunkingOptions;
+  private tokenStats: TokenStats = { embeddingCalls: 0, searchQueries: 0, chunksEmbedded: 0 };
 
   constructor(options: MemoryIndexerOptions) {
     this.options = options;
@@ -300,6 +309,22 @@ export class MemoryIndexer {
         // Skip "already exists" errors (safe for idempotent schema)
         if (!e.message?.includes("already exists")) {
           console.error(`[indexer] Schema DDL error: ${e.message}`);
+        }
+      }
+    }
+
+    // Additive schema migrations for new columns
+    const migrations = [
+      "ALTER TABLE files ADD COLUMN concepts TEXT",
+      "ALTER TABLE files ADD COLUMN files_touched TEXT",
+    ];
+    for (const migration of migrations) {
+      try {
+        this.db.run(migration);
+      } catch (e: any) {
+        // "duplicate column" means already migrated — safe to ignore
+        if (!e.message?.includes("duplicate column")) {
+          console.error(`[indexer] Migration error: ${e.message}`);
         }
       }
     }
@@ -427,10 +452,16 @@ export class MemoryIndexer {
       }
     }
 
-    // Remove stale entries (files no longer on disk)
-    const allIndexed = this.queryAll("SELECT path, scope FROM files");
+    // Remove stale entries — only sweep entries whose (scope, project_root)
+    // matches a directory that was actively scanned. This prevents purging
+    // entries from dirs that were temporarily inaccessible or not included.
+    const syncedRoots = new Set(
+      memoryDirs.map((d) => `${d.scope === "all" ? "project" : d.scope}:${d.projectRoot ?? ""}`)
+    );
+    const allIndexed = this.queryAll("SELECT path, scope, project_root FROM files");
     for (const row of allIndexed) {
-      if (!seenPaths.has(row.path as string)) {
+      const key = `${row.scope}:${row.project_root ?? ""}`;
+      if (syncedRoots.has(key) && !seenPaths.has(row.path as string)) {
         this.removeFileInternal(row.path as string);
         removed++;
       }
@@ -464,8 +495,8 @@ export class MemoryIndexer {
 
     // Insert file record
     this.db.run(
-      `INSERT INTO files (path, scope, project_root, hash, mtime, size, title, type, tags, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO files (path, scope, project_root, hash, mtime, size, title, type, tags, concepts, files_touched, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         filePath,
         scope,
@@ -476,12 +507,15 @@ export class MemoryIndexer {
         parsed?.title ?? null,
         parsed?.type ?? null,
         parsed?.tags ? JSON.stringify(parsed.tags) : null,
+        parsed?.concepts ? JSON.stringify(parsed.concepts) : null,
+        parsed?.files ? JSON.stringify(parsed.files) : null,
         parsed?.createdAt ?? null,
       ]
     );
 
     // Chunk content and insert (triggers auto-sync to FTS5)
-    const bodyContent = parsed?.content ?? content;
+    // Strip private blocks before chunking — private content stays in file but is never indexed/searchable
+    const bodyContent = stripPrivateBlocks(parsed?.content ?? content);
     const chunks = chunkMarkdown(bodyContent, this.chunkingOptions);
     const now = Date.now();
 
@@ -564,6 +598,8 @@ export class MemoryIndexer {
     const sanitized = sanitizeFTSQuery(query);
     if (!sanitized) return [];
 
+    this.tokenStats.searchQueries++;
+
     try {
       // Get matching rowids with BM25 rank from FTS5
       const ftsRows = this.queryAll(
@@ -630,9 +666,53 @@ export class MemoryIndexer {
       title: row.title as string | null,
       type: row.type as string | null,
       tags: row.tags as string | null,
+      concepts: (row.concepts as string | null) ?? null,
+      filesTouched: (row.files_touched as string | null) ?? null,
       createdAt: row.created_at as string | null,
       potentialDuplicateOf: row.potential_duplicate_of as string | null,
     };
+  }
+
+  /**
+   * Batch lookup files by their paths.
+   * Returns a map of path → IndexedFile for efficient metadata retrieval
+   * without disk reads (data comes from SQLite index).
+   */
+  async getFilesByPaths(paths: string[]): Promise<Map<string, IndexedFile>> {
+    await this.init();
+    const result = new Map<string, IndexedFile>();
+    if (!this.db || paths.length === 0) return result;
+
+    // Batch query with IN clause (chunk into groups of 50 to avoid SQL limits)
+    const chunkSize = 50;
+    for (let i = 0; i < paths.length; i += chunkSize) {
+      const batch = paths.slice(i, i + chunkSize);
+      const placeholders = batch.map(() => "?").join(",");
+      const rows = this.queryAll(
+        `SELECT * FROM files WHERE path IN (${placeholders})`,
+        batch,
+      );
+
+      for (const row of rows) {
+        result.set(row.path as string, {
+          path: row.path as string,
+          scope: row.scope as MemoryScope,
+          projectRoot: row.project_root as string | null,
+          hash: row.hash as string,
+          mtime: row.mtime as number,
+          size: row.size as number,
+          title: row.title as string | null,
+          type: row.type as string | null,
+          tags: row.tags as string | null,
+          concepts: (row.concepts as string | null) ?? null,
+          filesTouched: (row.files_touched as string | null) ?? null,
+          createdAt: row.created_at as string | null,
+          potentialDuplicateOf: row.potential_duplicate_of as string | null,
+        });
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -691,6 +771,8 @@ export class MemoryIndexer {
         Date.now(),
       ]
     );
+    this.tokenStats.embeddingCalls++;
+    this.tokenStats.chunksEmbedded++;
     this.dirty = true;
   }
 
@@ -760,7 +842,15 @@ export class MemoryIndexer {
   }
 
   /**
-   * Persist the in-memory database to disk
+   * Get token usage statistics (operation counts for this session)
+   */
+  getTokenStats(): TokenStats {
+    return { ...this.tokenStats };
+  }
+
+  /**
+   * Persist the in-memory database to disk.
+   * Also writes token-stats.json for statusline consumption.
    */
   async flush(): Promise<void> {
     if (!this.db || !this.dirty) return;
@@ -772,6 +862,21 @@ export class MemoryIndexer {
       this.dirty = false;
     } catch (error) {
       console.error("[indexer] Failed to flush DB to disk:", error);
+    }
+
+    // Persist token stats for statusline to read
+    this.persistTokenStats();
+  }
+
+  /**
+   * Write token stats to a JSON file for cross-process consumption (statusline).
+   */
+  private persistTokenStats(): void {
+    try {
+      const statsPath = join(dirname(this.options.dbPath), "token-stats.json");
+      writeFileSync(statsPath, JSON.stringify(this.tokenStats), "utf-8");
+    } catch {
+      // Non-critical — statusline just won't show token stats
     }
   }
 

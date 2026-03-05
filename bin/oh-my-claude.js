@@ -11,8 +11,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const distCli = join(__dirname, "..", "dist", "cli.js");
-const srcCli = join(__dirname, "..", "src", "cli.ts");
+const distCli = join(__dirname, "..", "dist", "cli", "cli.js");
+const srcCli = join(__dirname, "..", "src", "cli", "cli.ts");
 
 async function main() {
   if (existsSync(distCli)) {
@@ -26,7 +26,7 @@ async function main() {
     const child = spawn("bun", ["run", srcCli, ...process.argv.slice(2)], {
       stdio: "inherit",
     });
-    child.on("exit", (code) => process.exit(code ?? 0));
+    child.on("exit", (code) => process.exit(code != null ? code : 0));
   } else {
     console.error("oh-my-claude not built. Run 'npm run build' first.");
     process.exit(1);
