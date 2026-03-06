@@ -16,15 +16,15 @@
  * - Stale sessions auto-cleaned after 2 hours
  */
 
-import type { ProxySwitchState } from "./types";
-import { DEFAULT_SWITCH_STATE } from "./types";
+import type { ProxySwitchState } from './types';
+import { DEFAULT_SWITCH_STATE } from './types';
 
 /** Session entry: switch state + last activity timestamp + provider usage */
 interface SessionEntry {
-  state: ProxySwitchState;
-  lastActivity: number;
-  /** Per-provider request counts for this session */
-  providerCounts: Map<string, number>;
+	state: ProxySwitchState;
+	lastActivity: number;
+	/** Per-provider request counts for this session */
+	providerCounts: Map<string, number>;
 }
 
 /** In-memory session state map: sessionId -> SessionEntry */
@@ -32,7 +32,7 @@ const sessions = new Map<string, SessionEntry>();
 
 /**
  * Process-local default switch state.
- * Set at proxy startup via OMC_PROXY_SWITCH_PROVIDER env var (bridge workers).
+ * Set at proxy startup via --provider/--model CLI args (or legacy env vars).
  * Any session that hasn't been explicitly switched inherits this default.
  * This avoids the session ID mismatch problem: the worker's cc generates a new
  * session ID at launch, but the pre-switch was written before that ID existed.
@@ -55,16 +55,16 @@ const CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
  * Returns null if no session prefix is found (backward compat path).
  */
 export function parseSessionFromPath(pathname: string): {
-  sessionId: string;
-  strippedPath: string;
+	sessionId: string;
+	strippedPath: string;
 } | null {
-  const match = pathname.match(/^\/s\/([a-zA-Z0-9_-]+)(\/.*)?$/);
-  if (!match) return null;
+	const match = pathname.match(/^\/s\/([a-zA-Z0-9_-]+)(\/.*)?$/);
+	if (!match) return null;
 
-  return {
-    sessionId: match[1]!,
-    strippedPath: match[2] || "/",
-  };
+	return {
+		sessionId: match[1]!,
+		strippedPath: match[2] || '/',
+	};
 }
 
 /**
@@ -73,44 +73,47 @@ export function parseSessionFromPath(pathname: string): {
  * doesn't exist. Returns passthrough state only if no default is set.
  */
 export function readSessionState(sessionId: string): ProxySwitchState {
-  const entry = sessions.get(sessionId);
-  if (!entry) {
-    // Fall back to process-local default (bridge worker pre-switch)
-    if (processDefaultSwitchState) {
-      return { ...processDefaultSwitchState };
-    }
-    return { ...DEFAULT_SWITCH_STATE };
-  }
+	const entry = sessions.get(sessionId);
+	if (!entry) {
+		// Fall back to process-local default (bridge worker pre-switch)
+		if (processDefaultSwitchState) {
+			return { ...processDefaultSwitchState };
+		}
+		return { ...DEFAULT_SWITCH_STATE };
+	}
 
-  // Update last activity timestamp
-  entry.lastActivity = Date.now();
+	// Update last activity timestamp
+	entry.lastActivity = Date.now();
 
-  return { ...entry.state };
+	return { ...entry.state };
 }
 
 /**
  * Write session switch state to in-memory store.
  * Creates the session entry if it doesn't exist.
  */
-export function writeSessionState(sessionId: string, state: ProxySwitchState): void {
-  const existing = sessions.get(sessionId);
-  sessions.set(sessionId, {
-    state: { ...state },
-    lastActivity: Date.now(),
-    providerCounts: existing?.providerCounts ?? new Map(),
-  });
+export function writeSessionState(
+	sessionId: string,
+	state: ProxySwitchState,
+): void {
+	const existing = sessions.get(sessionId);
+	sessions.set(sessionId, {
+		state: { ...state },
+		lastActivity: Date.now(),
+		providerCounts: existing?.providerCounts ?? new Map(),
+	});
 }
 
 /**
  * Reset session switch state to passthrough mode.
  */
 export function resetSessionState(sessionId: string): void {
-  const existing = sessions.get(sessionId);
-  sessions.set(sessionId, {
-    state: { ...DEFAULT_SWITCH_STATE },
-    lastActivity: Date.now(),
-    providerCounts: existing?.providerCounts ?? new Map(),
-  });
+	const existing = sessions.get(sessionId);
+	sessions.set(sessionId, {
+		state: { ...DEFAULT_SWITCH_STATE },
+		lastActivity: Date.now(),
+		providerCounts: existing?.providerCounts ?? new Map(),
+	});
 }
 
 /**
@@ -120,37 +123,39 @@ export function resetSessionState(sessionId: string): void {
  * @returns Number of sessions cleaned up
  */
 export function cleanupStaleSessions(): number {
-  const now = Date.now();
-  let cleaned = 0;
+	const now = Date.now();
+	let cleaned = 0;
 
-  for (const [sessionId, entry] of sessions) {
-    if (now - entry.lastActivity > SESSION_TTL_MS) {
-      sessions.delete(sessionId);
-      cleaned++;
-    }
-  }
+	for (const [sessionId, entry] of sessions) {
+		if (now - entry.lastActivity > SESSION_TTL_MS) {
+			sessions.delete(sessionId);
+			cleaned++;
+		}
+	}
 
-  if (cleaned > 0) {
-    console.error(`[session] Cleaned up ${cleaned} stale session(s), ${sessions.size} active`);
-  }
+	if (cleaned > 0) {
+		console.error(
+			`[session] Cleaned up ${cleaned} stale session(s), ${sessions.size} active`,
+		);
+	}
 
-  return cleaned;
+	return cleaned;
 }
 
 /**
  * Set the process-local default switch state.
- * Used by server.ts at startup for bridge workers with OMC_PROXY_SWITCH_PROVIDER.
+ * Used by server.ts at startup when --provider/--model args are passed.
  * Any session without explicit switch state inherits this default.
  */
 export function setDefaultSwitchState(state: ProxySwitchState): void {
-  processDefaultSwitchState = { ...state };
+	processDefaultSwitchState = { ...state };
 }
 
 /**
  * Get the process-local default switch state (for status reporting).
  */
 export function getDefaultSwitchState(): ProxySwitchState | null {
-  return processDefaultSwitchState ? { ...processDefaultSwitchState } : null;
+	return processDefaultSwitchState ? { ...processDefaultSwitchState } : null;
 }
 
 /**
@@ -158,39 +163,49 @@ export function getDefaultSwitchState(): ProxySwitchState | null {
  * Used by server.ts to set up the periodic cleanup timer.
  */
 export function getCleanupIntervalMs(): number {
-  return CLEANUP_INTERVAL_MS;
+	return CLEANUP_INTERVAL_MS;
 }
 
 /**
  * Get the number of active sessions (for status reporting).
  */
 export function getActiveSessionCount(): number {
-  return sessions.size;
+	return sessions.size;
 }
 
 /**
  * Check if a session exists in the store.
  */
 export function hasSession(sessionId: string): boolean {
-  return sessions.has(sessionId);
+	return sessions.has(sessionId);
 }
 
 /**
  * Record a provider request for a session (for usage tracking).
  * Creates the session entry if it doesn't exist yet.
+ * Inherits processDefaultSwitchState when creating new entries to preserve
+ * pre-switch state set at proxy startup (e.g. --provider/--model args).
  */
-export function recordSessionProviderRequest(sessionId: string, provider: string): void {
-  let entry = sessions.get(sessionId);
-  if (!entry) {
-    entry = {
-      state: { ...DEFAULT_SWITCH_STATE },
-      lastActivity: Date.now(),
-      providerCounts: new Map(),
-    };
-    sessions.set(sessionId, entry);
-  }
-  entry.lastActivity = Date.now();
-  entry.providerCounts.set(provider, (entry.providerCounts.get(provider) ?? 0) + 1);
+export function recordSessionProviderRequest(
+	sessionId: string,
+	provider: string,
+): void {
+	let entry = sessions.get(sessionId);
+	if (!entry) {
+		entry = {
+			state: processDefaultSwitchState
+				? { ...processDefaultSwitchState }
+				: { ...DEFAULT_SWITCH_STATE },
+			lastActivity: Date.now(),
+			providerCounts: new Map(),
+		};
+		sessions.set(sessionId, entry);
+	}
+	entry.lastActivity = Date.now();
+	entry.providerCounts.set(
+		provider,
+		(entry.providerCounts.get(provider) ?? 0) + 1,
+	);
 }
 
 /**
@@ -198,35 +213,35 @@ export function recordSessionProviderRequest(sessionId: string, provider: string
  * Used by the control API /sessions endpoint.
  */
 export function getActiveSessions(): Array<{
-  sessionId: string;
-  switched: boolean;
-  provider?: string;
-  model?: string;
-  lastActivity: number;
-  providerCounts: Record<string, number>;
+	sessionId: string;
+	switched: boolean;
+	provider?: string;
+	model?: string;
+	lastActivity: number;
+	providerCounts: Record<string, number>;
 }> {
-  const result: Array<{
-    sessionId: string;
-    switched: boolean;
-    provider?: string;
-    model?: string;
-    lastActivity: number;
-    providerCounts: Record<string, number>;
-  }> = [];
+	const result: Array<{
+		sessionId: string;
+		switched: boolean;
+		provider?: string;
+		model?: string;
+		lastActivity: number;
+		providerCounts: Record<string, number>;
+	}> = [];
 
-  for (const [sessionId, entry] of sessions) {
-    result.push({
-      sessionId,
-      switched: entry.state.switched,
-      provider: entry.state.provider,
-      model: entry.state.model,
-      lastActivity: entry.lastActivity,
-      providerCounts: Object.fromEntries(entry.providerCounts),
-    });
-  }
+	for (const [sessionId, entry] of sessions) {
+		result.push({
+			sessionId,
+			switched: entry.state.switched,
+			provider: entry.state.provider,
+			model: entry.state.model,
+			lastActivity: entry.lastActivity,
+			providerCounts: Object.fromEntries(entry.providerCounts),
+		});
+	}
 
-  // Sort by last activity (most recent first)
-  result.sort((a, b) => b.lastActivity - a.lastActivity);
+	// Sort by last activity (most recent first)
+	result.sort((a, b) => b.lastActivity - a.lastActivity);
 
-  return result;
+	return result;
 }

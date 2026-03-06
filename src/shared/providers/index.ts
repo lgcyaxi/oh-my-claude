@@ -12,12 +12,13 @@
  * - OpenAI/Codex: Codex OAuth
  */
 
-export * from "./types";
-export * from "./base-client";
-export * from "./anthropic-client";
-export * from "./deepseek";
-export * from "./zhipu";
-export * from "./minimax";
-export * from "./aliyun";
-export * from "./openai-native";
-export * from "./router";
+export * from './types';
+export * from './base-client';
+export * from './anthropic-client';
+export * from './deepseek';
+export * from './zhipu';
+export * from './minimax';
+export * from './aliyun';
+export * from './openai-native';
+export * from './router';
+export * from './aliases';

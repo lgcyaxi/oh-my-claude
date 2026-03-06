@@ -7,12 +7,17 @@
  * - `findFreePorts()` — allocate dynamic ports for a session
  */
 
-import { spawn, execSync, type ChildProcess, type StdioOptions } from "node:child_process";
-import { existsSync, openSync } from "node:fs";
-import { join } from "node:path";
-import { createServer } from "node:net";
-import { PROXY_SCRIPT, INSTALL_DIR } from "./paths";
-import { checkHealth } from "./health";
+import {
+	spawn,
+	execSync,
+	type ChildProcess,
+	type StdioOptions,
+} from 'node:child_process';
+import { existsSync, openSync } from 'node:fs';
+import { join } from 'node:path';
+import { createServer } from 'node:net';
+import { PROXY_SCRIPT, INSTALL_DIR } from './paths';
+import { checkHealth } from './health';
 
 /**
  * Resolve path to `bun` executable.
@@ -20,54 +25,117 @@ import { checkHealth } from "./health";
  * Throws a user-friendly error if bun is not found (e.g., WSL2 without Bun installed).
  */
 function resolveBunPath(): string {
-  const isWin = process.platform === "win32";
-  // On Windows, prefer `where` — it returns native paths (C:\...).
-  // `which` in Git Bash/MSYS returns MSYS paths (/c/...) that Node spawn() can't use.
-  if (isWin) {
-    try {
-      const bunPath = execSync("where bun", { encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/)[0]!.trim();
-      if (bunPath) return bunPath;
-    } catch {}
-  }
-  try {
-    let bunPath = execSync("which bun", { encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).trim();
-    if (bunPath) {
-      // Convert MSYS paths (/c/foo) to Windows paths (C:/foo) for Node spawn()
-      if (isWin && /^\/[a-zA-Z]\//.test(bunPath)) {
-        bunPath = bunPath[1]!.toUpperCase() + ":" + bunPath.slice(2);
-      }
-      return bunPath;
-    }
-  } catch {}
-  throw new Error(
-    "Bun runtime not found. The oh-my-claude proxy requires Bun.\n" +
-    "Install Bun: curl -fsSL https://bun.sh/install | bash\n" +
-    "Then restart your terminal and try again."
-  );
+	const isWin = process.platform === 'win32';
+	// On Windows, prefer `where` — it returns native paths (C:\...).
+	// `which` in Git Bash/MSYS returns MSYS paths (/c/...) that Node spawn() can't use.
+	if (isWin) {
+		try {
+			const bunPath = execSync('where bun', {
+				encoding: 'utf-8',
+				timeout: 3000,
+				stdio: ['ignore', 'pipe', 'ignore'],
+			})
+				.trim()
+				.split(/\r?\n/)[0]!
+				.trim();
+			if (bunPath) return bunPath;
+		} catch {}
+	}
+	try {
+		let bunPath = execSync('which bun', {
+			encoding: 'utf-8',
+			timeout: 3000,
+			stdio: ['ignore', 'pipe', 'ignore'],
+		}).trim();
+		if (bunPath) {
+			// Convert MSYS paths (/c/foo) to Windows paths (C:/foo) for Node spawn()
+			if (isWin && /^\/[a-zA-Z]\//.test(bunPath)) {
+				bunPath = bunPath[1]!.toUpperCase() + ':' + bunPath.slice(2);
+			}
+			return bunPath;
+		}
+	} catch {}
+	throw new Error(
+		'Bun runtime not found. The oh-my-claude proxy requires Bun.\n' +
+			'Install Bun: curl -fsSL https://bun.sh/install | bash\n' +
+			'Then restart your terminal and try again.',
+	);
 }
 
 /**
  * Find an available TCP port by binding to port 0.
  */
 function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = createServer();
-    srv.listen(0, () => {
-      const addr = srv.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
-      srv.close(() => resolve(port));
-    });
-    srv.on("error", reject);
-  });
+	return new Promise((resolve, reject) => {
+		const srv = createServer();
+		srv.listen(0, () => {
+			const addr = srv.address();
+			const port = typeof addr === 'object' && addr ? addr.port : 0;
+			srv.close(() => resolve(port));
+		});
+		srv.on('error', reject);
+	});
 }
 
 /**
  * Find two available TCP ports for proxy + control.
  */
-export async function findFreePorts(): Promise<{ port: number; controlPort: number }> {
-  const port = await findFreePort();
-  const controlPort = await findFreePort();
-  return { port, controlPort };
+export async function findFreePorts(): Promise<{
+	port: number;
+	controlPort: number;
+}> {
+	const port = await findFreePort();
+	const controlPort = await findFreePort();
+	return { port, controlPort };
+}
+
+/** Options shared by both spawn functions */
+interface ProxySpawnOptions {
+	port: number;
+	controlPort: number;
+	debug?: boolean;
+	sessionId?: string;
+	/** Pre-switch provider (config name or alias, resolved by proxy server) */
+	provider?: string;
+	/** Pre-switch model ID */
+	model?: string;
+}
+
+/** Build CLI args for the proxy server process */
+function buildProxyArgs(options: ProxySpawnOptions): string[] {
+	const args = [
+		'run',
+		PROXY_SCRIPT,
+		'--port',
+		String(options.port),
+		'--control-port',
+		String(options.controlPort),
+	];
+	if (options.provider && options.model) {
+		args.push('--provider', options.provider, '--model', options.model);
+	}
+	return args;
+}
+
+/** Health check: 200ms intervals, 15 attempts = 3s total */
+async function waitForHealth(
+	controlPort: number,
+): Promise<{ healthy: boolean; health?: Record<string, unknown> }> {
+	let healthy = false;
+	let health: Record<string, unknown> | undefined;
+	for (let i = 0; i < 15; i++) {
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		try {
+			health = await checkHealth(String(controlPort));
+			if (health?.status === 'ok') {
+				healthy = true;
+				break;
+			}
+		} catch {
+			// Keep waiting
+		}
+	}
+	return { healthy, health };
 }
 
 /**
@@ -76,53 +144,38 @@ export async function findFreePorts(): Promise<{ port: number; controlPort: numb
  *
  * @returns The child process and health info, or null if proxy script missing
  */
-export async function spawnSessionProxy(options: {
-  port: number;
-  controlPort: number;
-  debug?: boolean;
-  sessionId?: string;
-}): Promise<{ child: ChildProcess; healthy: boolean; health?: Record<string, unknown>; logFile?: string } | null> {
-  const { port, controlPort, debug, sessionId } = options;
+export async function spawnSessionProxy(options: ProxySpawnOptions): Promise<{
+	child: ChildProcess;
+	healthy: boolean;
+	health?: Record<string, unknown>;
+	logFile?: string;
+} | null> {
+	const { port, controlPort, debug, sessionId } = options;
 
-  if (!existsSync(PROXY_SCRIPT)) {
-    return null;
-  }
+	if (!existsSync(PROXY_SCRIPT)) {
+		return null;
+	}
 
-  // Debug mode: write proxy stderr to a log file
-  let stdio: StdioOptions = ["ignore", "ignore", "ignore"];
-  let logFile: string | undefined;
+	let stdio: StdioOptions = ['ignore', 'ignore', 'ignore'];
+	let logFile: string | undefined;
 
-  if (debug) {
-    const logName = sessionId ? `proxy-${sessionId}.log` : `proxy-${Date.now()}.log`;
-    logFile = join(INSTALL_DIR, logName);
-    const fd = openSync(logFile, "w");
-    stdio = ["ignore", fd, fd]; // stdout + stderr → log file
-  }
+	if (debug) {
+		const logName = sessionId
+			? `proxy-${sessionId}.log`
+			: `proxy-${Date.now()}.log`;
+		logFile = join(INSTALL_DIR, logName);
+		const fd = openSync(logFile, 'w');
+		stdio = ['ignore', fd, fd];
+	}
 
-  // Spawn as attached child process — dies with parent
-  const child = spawn(resolveBunPath(), ["run", PROXY_SCRIPT, "--port", String(port), "--control-port", String(controlPort)], {
-    stdio,
-    env: { ...process.env },
-    windowsHide: true,
-  });
+	const child = spawn(resolveBunPath(), buildProxyArgs(options), {
+		stdio,
+		env: { ...process.env },
+		windowsHide: true,
+	});
 
-  // Wait for proxy to become healthy (up to 3s)
-  let healthy = false;
-  let health: Record<string, unknown> | undefined;
-  for (let i = 0; i < 6; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    try {
-      health = await checkHealth(String(controlPort));
-      if (health?.status === "ok") {
-        healthy = true;
-        break;
-      }
-    } catch {
-      // Keep waiting
-    }
-  }
-
-  return { child, healthy, health, logFile };
+	const { healthy, health } = await waitForHealth(controlPort);
+	return { child, healthy, health, logFile };
 }
 
 /**
@@ -131,59 +184,41 @@ export async function spawnSessionProxy(options: {
  *
  * @returns PID, health status, and optional log file path, or null if proxy script missing
  */
-export async function spawnDetachedProxy(options: {
-  port: number;
-  controlPort: number;
-  debug?: boolean;
-  sessionId: string;
-}): Promise<{ pid: number; healthy: boolean; logFile?: string } | null> {
-  const { port, controlPort, debug, sessionId } = options;
+export async function spawnDetachedProxy(
+	options: ProxySpawnOptions & { sessionId: string },
+): Promise<{ pid: number; healthy: boolean; logFile?: string } | null> {
+	const { controlPort, debug, sessionId } = options;
 
-  if (!existsSync(PROXY_SCRIPT)) {
-    return null;
-  }
+	if (!existsSync(PROXY_SCRIPT)) {
+		return null;
+	}
 
-  let stdio: StdioOptions = ["ignore", "ignore", "ignore"];
-  let logFile: string | undefined;
+	let stdio: StdioOptions = ['ignore', 'ignore', 'ignore'];
+	let logFile: string | undefined;
 
-  if (debug) {
-    logFile = join(INSTALL_DIR, `proxy-${sessionId}.log`);
-    const fd = openSync(logFile, "w");
-    stdio = ["ignore", fd, fd];
-  }
+	if (debug) {
+		logFile = join(INSTALL_DIR, `proxy-${sessionId}.log`);
+		const fd = openSync(logFile, 'w');
+		stdio = ['ignore', fd, fd];
+	}
 
-  // On Windows, detached: true creates a new process group which may flash
-  // a console window. Use windowsHide: true WITHOUT detached to keep it hidden.
-  // The proxy still outlives the parent because stdio is disconnected + unref'd.
-  const isWindows = process.platform === "win32";
-  const child = spawn(resolveBunPath(), ["run", PROXY_SCRIPT, "--port", String(port), "--control-port", String(controlPort)], {
-    detached: !isWindows,
-    stdio,
-    env: { ...process.env },
-    windowsHide: true,
-  });
-  child.unref();
+	// On Windows, detached: true creates a new process group which may flash
+	// a console window. Use windowsHide: true WITHOUT detached to keep it hidden.
+	// The proxy still outlives the parent because stdio is disconnected + unref'd.
+	const isWindows = process.platform === 'win32';
+	const child = spawn(resolveBunPath(), buildProxyArgs(options), {
+		detached: !isWindows,
+		stdio,
+		env: { ...process.env },
+		windowsHide: true,
+	});
+	child.unref();
 
-  const pid = child.pid;
-  if (!pid) {
-    return null;
-  }
+	const pid = child.pid;
+	if (!pid) {
+		return null;
+	}
 
-  // Wait for proxy to become healthy (up to 3s)
-  let healthy = false;
-  for (let i = 0; i < 6; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    try {
-      const health = await checkHealth(String(controlPort));
-      if (health?.status === "ok") {
-        healthy = true;
-        break;
-      }
-    } catch {
-      // Keep waiting
-    }
-  }
-
-  return { pid, healthy, logFile };
+	const { healthy } = await waitForHealth(controlPort);
+	return { pid, healthy, logFile };
 }
-
