@@ -18,12 +18,13 @@ bun test             # Run tests
 ## Project Structure
 
 - `src/assets/` - Static definitions: agents (prompts, types, category), commands (slash command .md files), styles
-- `src/cli/` - CLI entry point and command modules (install, doctor, update, cc, proxy, bridge, etc.)
-- `src/integration/` - Claude Code integration layer: hooks, generators, installer, statusline segments
+- `src/cli/` - CLI entry point, command modules, installer, and agent generators
+- `src/hooks/` - Claude Code hook scripts categorized by type (pre-tool-use, post-tool-use, stop, user-prompt-submit)
 - `src/mcp/` - Background Agent MCP server (launch_background_task, poll_task, execute_agent, memory tools)
 - `src/memory/` - Markdown-first memory system: SQLite/FTS5 indexer, embeddings, dedup, timeline, search
 - `src/proxy/` - Live model switching HTTP proxy: server, handler, control API, state IPC, auth, stream
 - `src/shared/` - Cross-domain shared modules: config (Zod), providers (API clients), context, auth, preferences
+- `src/statusline/` - Statusline engine, session utils, and segment plugins
 - `src/workers/` - Long-running worker processes: bridge orchestrator, terminal daemons (codex/opencode/cc/codex-app-server), IPC, generated codex app-server TS types
 
 ## Architecture
@@ -147,12 +148,12 @@ npm publish --access public
 - `src/memory/dedup.ts` - Deduplication (exact hash skip + semantic near-dupe detection)
 - `src/memory/hybrid-search.ts` - Hybrid BM25 + vector result merging
 - `src/memory/timeline.ts` - Timeline generator (auto-maintained TIMELINE.md for cross-session awareness)
-- `src/integration/statusline/config.ts` - StatusLine config and segment management
-- `src/integration/statusline/segments/memory.ts` - Memory statusline segment
-- `src/integration/statusline/segments/proxy.ts` - Proxy statusline segment
-- `src/integration/generators/agent-generator.ts` - Generates agent .md files for ~/.claude/agents/
-- `src/integration/hooks/context-memory.ts` - Unified session writer (PostToolUse checkpoint + Stop session-end)
-- `src/integration/hooks/memory-awareness.ts` - UserPromptSubmit hook for proactive memory usage
+- `src/statusline/config.ts` - StatusLine config and segment management
+- `src/statusline/segments/memory.ts` - Memory statusline segment
+- `src/statusline/segments/proxy.ts` - Proxy statusline segment
+- `src/cli/generators/agent-generator.ts` - Generates agent .md files for ~/.claude/agents/
+- `src/hooks/stop/context-memory.ts` - Unified session writer (PostToolUse checkpoint + Stop session-end)
+- `src/hooks/user-prompt-submit/memory-awareness.ts` - UserPromptSubmit hook for proactive memory usage
 - `src/proxy/server.ts` - Proxy server entry point (Bun.serve dual server)
 - `src/proxy/handler.ts` - Proxy request handler (passthrough vs switched routing orchestrator)
 - `src/proxy/model-resolver.ts` - Model resolution for switched provider requests (`resolveEffectiveModel`)
@@ -164,6 +165,9 @@ npm publish --access public
 - `src/assets/commands/memory/omc-mem-compact.md` - Slash command for AI-assisted memory compaction
 - `src/assets/commands/memory/omc-mem-clear.md` - Slash command for AI-powered selective memory cleanup
 - `src/assets/commands/memory/omc-mem-summary.md` - Slash command for date-range memory timeline consolidation
+- `src/hooks/index.ts` - Hook registry (HOOKS definitions, HookName type)
+- `src/cli/installer/index.ts` - CLI installer (install, uninstall, checkInstallation)
+- `src/cli/installer/settings-merger.ts` - Settings.json hook/MCP/statusline merging
 - `src/cli/cli.ts` - CLI entry point (orchestrator importing 12 command modules)
 - `src/cli/commands/core/` - Core lifecycle commands: install, doctor, update
 - `src/cli/commands/session/` - Session commands: cc (with `--provider`/proxy mode), proxy, auth, bridge

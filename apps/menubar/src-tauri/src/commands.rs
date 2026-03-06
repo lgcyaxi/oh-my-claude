@@ -220,9 +220,9 @@ fn load_available_providers() -> Option<Vec<ProviderInfo>> {
     }
 
     // Provider family de-duplication: hide sibling when primary is configured
-    // (e.g., hide zhipu-global when zhipu is configured — same models)
+    // (e.g., hide zai when zhipu is configured — same models)
     let sibling_to_primary: std::collections::HashMap<&str, &str> = [
-        ("zhipu-global", "zhipu"),
+        ("zai", "zhipu"),
         ("minimax-cn", "minimax"),
     ].into_iter().collect();
 
@@ -300,7 +300,7 @@ fn is_provider_configured(
 
         // Provider family cross-check: CN/Global variants share API keys
         let sibling_key = match name {
-            "zhipu-global" => Some("ZHIPU_API_KEY"),
+            "zai" => Some("ZHIPU_API_KEY"),
             "zhipu" => Some("ZAI_API_KEY"),
             "minimax" => Some("MINIMAX_CN_API_KEY"),
             "minimax-cn" => Some("MINIMAX_API_KEY"),

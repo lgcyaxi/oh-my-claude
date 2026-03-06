@@ -11,7 +11,7 @@
 
 import type { ChatMessage, ChatCompletionResponse } from "../../shared/providers/types";
 import { writeFileSync } from "node:fs";
-import { getSessionStatusPath, ensureSessionDir, cleanupStaleSessions } from "../../integration/statusline/session";
+import { getSessionStatusPath, ensureSessionDir, cleanupStaleSessions } from "../../statusline/session";
 
 // Cleanup stale sessions on server startup
 cleanupStaleSessions(60 * 60 * 1000); // 1 hour

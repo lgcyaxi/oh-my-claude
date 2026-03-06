@@ -12,39 +12,44 @@
  */
 
 // Configuration
-export * from "./shared/config";
+export * from './shared/config';
 
 // Agents
-export * from "./assets/agents";
+export * from './assets/agents';
 
 // Providers
-export * from "./shared/providers";
+export * from './shared/providers';
 
 // Generators (excluding generateAgentMarkdown which is already exported from agents)
 export {
-  generateAllAgentFiles,
-  generateAgentFile,
-  getAgentsDirectory,
-  getInstalledAgents,
-  removeAgentFiles,
-} from "./integration/generators";
+	generateAllAgentFiles,
+	generateAgentFile,
+	getAgentsDirectory,
+	getInstalledAgents,
+	removeAgentFiles,
+} from './cli/generators';
 
 // Installer
-export * from "./integration/installer";
+export * from './cli/installer';
 
 // Daemon layer
-export * from "./workers/daemon";
+export * from './workers/daemon';
 
 // Bridge orchestrator (explicit re-export to avoid BridgeConfig conflict with config module)
 export type {
-  RequestStatus,
-  BridgeResponse,
-  AIStatus,
-  RequestInfo,
-  HealthState,
-  HealthStatus,
-  SystemStatus,
-  DaemonFactory,
-  BridgeOrchestrator,
-} from "./workers/bridge/types";
-export { DaemonRegistry, BridgeOrchestratorImpl, getBridgeOrchestrator, resetBridgeOrchestrator } from "./workers/bridge";
+	RequestStatus,
+	BridgeResponse,
+	AIStatus,
+	RequestInfo,
+	HealthState,
+	HealthStatus,
+	SystemStatus,
+	DaemonFactory,
+	BridgeOrchestrator,
+} from './workers/bridge/types';
+export {
+	DaemonRegistry,
+	BridgeOrchestratorImpl,
+	getBridgeOrchestrator,
+	resetBridgeOrchestrator,
+} from './workers/bridge';

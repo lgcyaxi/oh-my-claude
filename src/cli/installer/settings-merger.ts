@@ -1,0 +1,576 @@
+/**
+ * Settings merger for Claude Code settings.json
+ *
+ * Safely merges oh-my-claude configuration into existing settings
+ * without overwriting user customizations.
+ */
+
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { homedir } from 'node:os';
+
+interface ClaudeSettings {
+	hooks?: {
+		PreToolUse?: Array<{
+			matcher: string;
+			hooks: Array<{ type: string; command: string }>;
+		}>;
+		PostToolUse?: Array<{
+			matcher: string;
+			hooks: Array<{ type: string; command: string }>;
+		}>;
+		Stop?: Array<{
+			matcher: string;
+			hooks: Array<{ type: string; command: string }>;
+		}>;
+		UserPromptSubmit?: Array<{
+			matcher: string;
+			hooks: Array<{ type: string; command: string }>;
+		}>;
+	};
+	mcpServers?: Record<
+		string,
+		{
+			command: string;
+			args?: string[];
+			env?: Record<string, string>;
+		}
+	>;
+	statusLine?: {
+		type: 'command';
+		command: string;
+		padding?: number;
+	};
+	[key: string]: unknown;
+}
+
+/**
+ * Get path to Claude Code settings.json
+ */
+export function getSettingsPath(): string {
+	return join(homedir(), '.claude', 'settings.json');
+}
+
+/**
+ * Clean up legacy MCP server name in ~/.claude.json (user-level config).
+ * Claude Code reads both ~/.claude/settings.json and ~/.claude.json for MCP servers.
+ * The old name "oh-my-claude-background" was renamed to "oh-my-claude".
+ */
+function cleanupLegacyMcpName(): void {
+	const legacyName = 'oh-my-claude-background';
+	const newName = 'oh-my-claude';
+	const claudeJsonPath = join(homedir(), '.claude.json');
+
+	try {
+		if (!existsSync(claudeJsonPath)) return;
+		const raw = readFileSync(claudeJsonPath, 'utf-8');
+		const data = JSON.parse(raw);
+		const servers = data?.mcpServers;
+		if (!servers || !servers[legacyName]) return;
+
+		// Migrate config to new name if it doesn't already exist
+		if (!servers[newName]) {
+			servers[newName] = servers[legacyName];
+		}
+		delete servers[legacyName];
+		writeFileSync(claudeJsonPath, JSON.stringify(data, null, 2) + '\n');
+	} catch {
+		// Non-critical — user can fix manually
+	}
+}
+
+/**
+ * Load existing Claude Code settings
+ */
+export function loadSettings(): ClaudeSettings {
+	const settingsPath = getSettingsPath();
+
+	if (!existsSync(settingsPath)) {
+		return {};
+	}
+
+	try {
+		const content = readFileSync(settingsPath, 'utf-8');
+		return JSON.parse(content);
+	} catch (error) {
+		console.error('Failed to parse settings.json:', error);
+		return {};
+	}
+}
+
+/**
+ * Save Claude Code settings
+ */
+export function saveSettings(settings: ClaudeSettings): void {
+	const settingsPath = getSettingsPath();
+	const dir = dirname(settingsPath);
+
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
+	}
+
+	writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+/**
+ * Add hook to settings (if not already present)
+ * When force is true, replaces existing hook with new command
+ */
+function addHook(
+	settings: ClaudeSettings,
+	hookType: 'PreToolUse' | 'PostToolUse' | 'Stop' | 'UserPromptSubmit',
+	matcher: string,
+	command: string,
+	force = false,
+): boolean {
+	if (!settings.hooks) {
+		settings.hooks = {};
+	}
+
+	if (!settings.hooks[hookType]) {
+		settings.hooks[hookType] = [];
+	}
+
+	// Extract the hook script filename for precise matching
+	// e.g., "node /path/to/oh-my-claude/hooks/auto-memory.js" → "auto-memory.js"
+	// Split on both / and \ to support Windows and Unix paths, strip quotes
+	const scriptFile = (command.split(/[/\\]/).pop() ?? command).replace(
+		/"/g,
+		'',
+	);
+
+	// Check if this SPECIFIC hook already exists (match by script filename, not generic path)
+	// Strip quotes from existing commands too for reliable comparison across path formats
+	const existingIndex = settings.hooks[hookType]!.findIndex((h) =>
+		h.hooks.some((hook) =>
+			hook.command.replace(/"/g, '').endsWith(scriptFile),
+		),
+	);
+
+	if (existingIndex !== -1) {
+		if (force) {
+			// Remove existing hook so we can replace it with updated command
+			settings.hooks[hookType]!.splice(existingIndex, 1);
+		} else {
+			return false; // Already installed
+		}
+	}
+
+	settings.hooks[hookType]!.push({
+		matcher,
+		hooks: [{ type: 'command', command }],
+	});
+
+	return true;
+}
+
+/**
+ * Remove hook from settings
+ */
+function removeHook(
+	settings: ClaudeSettings,
+	hookType: 'PreToolUse' | 'PostToolUse' | 'Stop' | 'UserPromptSubmit',
+	identifier: string,
+): boolean {
+	if (!settings.hooks?.[hookType]) {
+		return false;
+	}
+
+	const original = settings.hooks[hookType]!.length;
+	settings.hooks[hookType] = settings.hooks[hookType]!.filter(
+		(h) => !h.hooks.some((hook) => hook.command.includes(identifier)),
+	);
+
+	return settings.hooks[hookType]!.length < original;
+}
+
+/**
+ * Add MCP server to settings
+ */
+function addMcpServer(
+	settings: ClaudeSettings,
+	name: string,
+	config: { command: string; args?: string[]; env?: Record<string, string> },
+): boolean {
+	if (!settings.mcpServers) {
+		settings.mcpServers = {};
+	}
+
+	if (settings.mcpServers[name]) {
+		return false; // Already exists
+	}
+
+	settings.mcpServers[name] = config;
+	return true;
+}
+
+/**
+ * Remove MCP server from settings
+ */
+function removeMcpServer(settings: ClaudeSettings, name: string): boolean {
+	if (!settings.mcpServers?.[name]) {
+		return false;
+	}
+
+	delete settings.mcpServers[name];
+	return true;
+}
+
+/**
+ * Get the node executable path for hook commands
+ * On Windows, this helps avoid file association issues
+ */
+function getNodeCommand(): string {
+	const { platform } = require('node:os');
+	if (platform() === 'win32') {
+		try {
+			const { execSync } = require('node:child_process');
+			// Get the full path to node executable and quote it
+			const nodePath = execSync(
+				'node -e "console.log(process.execPath)"',
+				{ encoding: 'utf-8' },
+			).trim();
+			return `"${nodePath}"`;
+		} catch {
+			// Fallback to 'node' if we can't get the path
+			return 'node';
+		}
+	}
+	return 'node';
+}
+
+/**
+ * Install oh-my-claude hooks into settings
+ */
+export function installHooks(
+	hooksDir: string,
+	force = false,
+): {
+	installed: string[];
+	updated: string[];
+	skipped: string[];
+} {
+	const settings = loadSettings();
+	const installed: string[] = [];
+	const updated: string[] = [];
+	const skipped: string[] = [];
+
+	const nodeCmd = getNodeCommand();
+
+	// Comment checker hook
+	const commentCheckerResult = addHook(
+		settings,
+		'PreToolUse',
+		'Edit|Write',
+		`${nodeCmd} "${join(hooksDir, 'comment-checker.js')}"`,
+		force,
+	);
+	if (commentCheckerResult) {
+		if (force) {
+			// Check if this was an update or fresh install
+			const wasExisting = settings.hooks?.PreToolUse?.some(
+				(h) =>
+					h.matcher === 'Edit|Write' &&
+					h.hooks.some((hook) =>
+						hook.command.includes('comment-checker'),
+					),
+			);
+			if (wasExisting && settings.hooks?.PreToolUse) {
+				// After addHook with force, there's now a new entry plus the old one was removed
+				// So we count this as an update
+				updated.push('comment-checker (PreToolUse)');
+			} else {
+				installed.push('comment-checker (PreToolUse)');
+			}
+		} else {
+			installed.push('comment-checker (PreToolUse)');
+		}
+	} else {
+		skipped.push('comment-checker (already installed)');
+	}
+
+	// Todo continuation hook
+	const todoResult = addHook(
+		settings,
+		'Stop',
+		'.*',
+		`${nodeCmd} "${join(hooksDir, 'todo-continuation.js')}"`,
+		force,
+	);
+	if (todoResult) {
+		if (force) {
+			updated.push('todo-continuation (Stop)');
+		} else {
+			installed.push('todo-continuation (Stop)');
+		}
+	} else {
+		skipped.push('todo-continuation (already installed)');
+	}
+
+	// Task tracker hook (PreToolUse for Task tool)
+	const taskPreResult = addHook(
+		settings,
+		'PreToolUse',
+		'Task',
+		`${nodeCmd} "${join(hooksDir, 'task-tracker.js')}"`,
+		force,
+	);
+	if (taskPreResult) {
+		if (force) {
+			updated.push('task-tracker (PreToolUse:Task)');
+		} else {
+			installed.push('task-tracker (PreToolUse:Task)');
+		}
+	} else {
+		skipped.push('task-tracker (already installed)');
+	}
+
+	// Consolidated PostToolUse hook (replaces: task-tracker PostToolUse, task-notification,
+	// session-logger, context-memory PostToolUse — all in one process spawn)
+	const postToolResult = addHook(
+		settings,
+		'PostToolUse',
+		'.*',
+		`${nodeCmd} "${join(hooksDir, 'post-tool.js')}"`,
+		force,
+	);
+	if (postToolResult) {
+		if (force) {
+			updated.push('post-tool (PostToolUse:*)');
+		} else {
+			installed.push('post-tool (PostToolUse:*)');
+		}
+	} else {
+		skipped.push('post-tool (already installed)');
+	}
+
+	// Remove legacy PostToolUse hooks (replaced by consolidated post-tool)
+	removeHook(settings, 'PostToolUse', 'task-tracker');
+	removeHook(settings, 'PostToolUse', 'task-notification');
+	removeHook(settings, 'PostToolUse', 'session-logger');
+	removeHook(settings, 'PostToolUse', 'context-memory');
+
+	// Context-memory hook (Stop — session-end capture, replaces auto-memory)
+	const contextMemoryStopResult = addHook(
+		settings,
+		'Stop',
+		'.*',
+		`${nodeCmd} "${join(hooksDir, 'context-memory.js')}"`,
+		force,
+	);
+	if (contextMemoryStopResult) {
+		if (force) {
+			updated.push('context-memory (Stop)');
+		} else {
+			installed.push('context-memory (Stop)');
+		}
+	} else {
+		skipped.push('context-memory (Stop already installed)');
+	}
+
+	// Remove legacy auto-memory hook if present (replaced by context-memory Stop)
+	removeHook(settings, 'Stop', 'auto-memory');
+
+	// Memory awareness hook (UserPromptSubmit — nudges memory recall/remember)
+	const memoryResult = addHook(
+		settings,
+		'UserPromptSubmit',
+		'',
+		`${nodeCmd} "${join(hooksDir, 'memory-awareness.js')}"`,
+		force,
+	);
+	if (memoryResult) {
+		if (force) {
+			updated.push('memory-awareness (UserPromptSubmit)');
+		} else {
+			installed.push('memory-awareness (UserPromptSubmit)');
+		}
+	} else {
+		skipped.push('memory-awareness (already installed)');
+	}
+
+	// Preference awareness hook (UserPromptSubmit — auto-inject matching preferences)
+	const prefResult = addHook(
+		settings,
+		'UserPromptSubmit',
+		'',
+		`${nodeCmd} "${join(hooksDir, 'preference-awareness.js')}"`,
+		force,
+	);
+	if (prefResult) {
+		if (force) {
+			updated.push('preference-awareness (UserPromptSubmit)');
+		} else {
+			installed.push('preference-awareness (UserPromptSubmit)');
+		}
+	} else {
+		skipped.push('preference-awareness (already installed)');
+	}
+
+	saveSettings(settings);
+	return { installed, updated, skipped };
+}
+
+/**
+ * Get the node executable path
+ * On Windows, this helps avoid file association issues
+ */
+function getNodeExecutable(): string {
+	const { execSync } = require('node:child_process');
+	try {
+		// Get the path to node executable
+		return execSync('node -e "console.log(process.execPath)"', {
+			encoding: 'utf-8',
+		}).trim();
+	} catch {
+		// Fallback to 'node' if we can't get the path
+		return 'node';
+	}
+}
+
+/**
+ * Install oh-my-claude MCP server using claude mcp add CLI
+ */
+export function installMcpServer(serverPath: string, force = false): boolean {
+	const { platform } = require('node:os');
+
+	// Use settings.json directly — `claude mcp` CLI commands hang when run inside
+	// a Claude Code session (even after clearing CLAUDECODE env), making them unreliable.
+	const settings = loadSettings();
+	const nodePath = platform() === 'win32' ? getNodeExecutable() : 'node';
+
+	// Clean up legacy name (renamed from oh-my-claude-background → oh-my-claude)
+	// Check both ~/.claude/settings.json and ~/.claude.json (Claude reads both)
+	if (settings?.mcpServers?.['oh-my-claude-background']) {
+		removeMcpServer(settings, 'oh-my-claude-background');
+	}
+	cleanupLegacyMcpName();
+
+	// Check if already installed
+	const existing = settings?.mcpServers?.['oh-my-claude'];
+	if (existing && !force) {
+		return true;
+	}
+
+	// Remove stale entry before re-adding (addMcpServer won't overwrite existing)
+	if (existing && force) {
+		removeMcpServer(settings, 'oh-my-claude');
+	}
+
+	const result = addMcpServer(settings, 'oh-my-claude', {
+		command: nodePath,
+		args: [serverPath],
+	});
+	// Save even if addMcpServer returned false (we may have removed a stale entry)
+	saveSettings(settings);
+	return result;
+}
+
+/**
+ * Uninstall oh-my-claude from settings
+ */
+export function uninstallFromSettings(): {
+	removedHooks: string[];
+	removedMcp: boolean;
+} {
+	const { execSync } = require('node:child_process');
+	const settings = loadSettings();
+	const removedHooks: string[] = [];
+
+	// Remove hooks
+	if (removeHook(settings, 'PreToolUse', 'oh-my-claude')) {
+		removedHooks.push('PreToolUse');
+	}
+	if (removeHook(settings, 'PostToolUse', 'oh-my-claude')) {
+		removedHooks.push('PostToolUse');
+	}
+	if (removeHook(settings, 'Stop', 'oh-my-claude')) {
+		removedHooks.push('Stop');
+	}
+	if (removeHook(settings, 'UserPromptSubmit', 'oh-my-claude')) {
+		removedHooks.push('UserPromptSubmit');
+	}
+
+	saveSettings(settings);
+
+	// Remove MCP server via CLI (both current and legacy names)
+	let removedMcp = false;
+	try {
+		execSync('claude mcp remove --scope user oh-my-claude', {
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		removedMcp = true;
+	} catch {
+		// Try removing from settings.json as fallback
+		const settingsAgain = loadSettings();
+		removedMcp = removeMcpServer(settingsAgain, 'oh-my-claude');
+		removeMcpServer(settingsAgain, 'oh-my-claude-background'); // legacy name
+		if (removedMcp) {
+			saveSettings(settingsAgain);
+		}
+	}
+
+	return { removedHooks, removedMcp };
+}
+
+/**
+ * Install oh-my-claude statusLine
+ * If user has existing statusLine, creates a wrapper that calls both
+ */
+export function installStatusLine(
+	statusLineScriptPath: string,
+	force = false,
+): {
+	installed: boolean;
+	wrapperCreated: boolean;
+	existingBackedUp: boolean;
+	updated: boolean;
+} {
+	const { mergeStatusLine } = require('./statusline-merger');
+
+	const settings = loadSettings();
+	const existing = settings.statusLine;
+
+	const result = mergeStatusLine(existing, force);
+
+	// Update settings if config changed or force mode triggered an update
+	if (result.config.command !== existing?.command || result.updated) {
+		settings.statusLine = result.config;
+		saveSettings(settings);
+	}
+
+	return {
+		installed: true,
+		wrapperCreated: result.wrapperCreated,
+		existingBackedUp: result.backupCreated,
+		updated: result.updated || false,
+	};
+}
+
+/**
+ * Remove oh-my-claude statusLine and restore original if backed up
+ */
+export function uninstallStatusLine(): boolean {
+	const {
+		restoreStatusLine,
+		isStatusLineConfigured,
+	} = require('./statusline-merger');
+
+	if (!isStatusLineConfigured()) {
+		return false;
+	}
+
+	const settings = loadSettings();
+
+	// Try to restore original statusLine
+	const backup = restoreStatusLine();
+	if (backup) {
+		settings.statusLine = backup;
+	} else {
+		// No backup - just remove our statusLine
+		delete settings.statusLine;
+	}
+
+	saveSettings(settings);
+	return true;
+}

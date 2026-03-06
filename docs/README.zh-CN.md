@@ -556,7 +556,7 @@ omc m codex log --print                 # 查看会话活动日志
 |--------|--------|------|
 | `ds` / `deepseek` | DeepSeek | api.deepseek.com/anthropic |
 | `zp` / `zhipu` | 智谱 (国内) | open.bigmodel.cn/api/anthropic |
-| `zai` / `zp-g` | 智谱 (海外) | api.z.ai/api/anthropic |
+| `zai` / `zp-g` | Z.AI (海外) | api.z.ai/api/anthropic |
 | `mm` / `minimax` | MiniMax (海外) | api.minimax.io/anthropic |
 | `mm-cn` / `minimax-cn` | MiniMax (国内) | api.minimaxi.com/anthropic |
 | `km` / `kimi` | Kimi | api.kimi.com/coding |
@@ -851,7 +851,7 @@ npx @lgcyaxi/oh-my-claude menubar --build          # 构建发布版应用
       "base_url": "https://open.bigmodel.cn/api/anthropic",
       "api_key_env": "ZHIPU_API_KEY"
     },
-    "zhipu-global": {
+    "zai": {
       "type": "anthropic-compatible",
       "base_url": "https://api.z.ai/api/anthropic",
       "api_key_env": "ZAI_API_KEY"

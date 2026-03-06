@@ -162,7 +162,7 @@ export const OhMyClaudeConfigSchema = z.object({
       base_url: "https://open.bigmodel.cn/api/anthropic",
       api_key_env: "ZHIPU_API_KEY",
     },
-    "zhipu-global": {
+    zai: {
       type: "anthropic-compatible",
       base_url: "https://api.z.ai/api/anthropic",
       api_key_env: "ZAI_API_KEY",

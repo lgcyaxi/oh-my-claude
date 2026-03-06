@@ -35,8 +35,8 @@ const PROVIDER_INFO_ENTRIES: Record<string, ProviderInfo> = {
 		baseUrl: 'https://open.bigmodel.cn/api/anthropic',
 		apiKeyEnv: 'ZHIPU_API_KEY',
 	},
-	'zhipu-global': {
-		provider: 'zhipu-global',
+	zai: {
+		provider: 'zai',
 		defaultModel: 'glm-5',
 		name: 'Z.AI',
 		baseUrl: 'https://api.z.ai/api/anthropic',
@@ -90,9 +90,9 @@ const ALIAS_MAP: Record<string, AliasTarget> = {
 	zp: { provider: 'zhipu', model: 'glm-5' },
 	zhipu: { provider: 'zhipu', model: 'glm-5' },
 	// Z.AI (ZhiPu global)
-	zai: { provider: 'zhipu-global', model: 'glm-5' },
-	'zp-g': { provider: 'zhipu-global', model: 'glm-5' },
-	'zhipu-global': { provider: 'zhipu-global', model: 'glm-5' },
+	zai: { provider: 'zai', model: 'glm-5' },
+	'zp-g': { provider: 'zai', model: 'glm-5' },
+	'zhipu-global': { provider: 'zai', model: 'glm-5' },
 	// MiniMax
 	mm: { provider: 'minimax', model: 'MiniMax-M2.5' },
 	minimax: { provider: 'minimax', model: 'MiniMax-M2.5' },

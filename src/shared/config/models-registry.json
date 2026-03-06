@@ -18,7 +18,7 @@
       ]
     },
     {
-      "name": "zhipu-global",
+      "name": "zai",
       "label": "Z.AI",
       "models": [
         { "id": "glm-5", "label": "GLM-5 (Z.AI)" }

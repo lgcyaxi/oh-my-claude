@@ -6,7 +6,7 @@
  * - glm-4.7: Cost-efficient model
  *
  * CN Endpoint: https://open.bigmodel.cn/api/anthropic (ZHIPU_API_KEY)
- * Global Endpoint: https://api.z.ai/api/anthropic (ZAI_API_KEY) — via zhipu-global provider
+ * Global Endpoint: https://api.z.ai/api/anthropic (ZAI_API_KEY) — via zai provider
  * Docs: https://docs.bigmodel.cn/cn/guide/develop/claude
  */
 

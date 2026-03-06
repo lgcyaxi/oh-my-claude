@@ -600,7 +600,7 @@ See [docs/guides/codex-app-server.md](docs/guides/codex-app-server.md) for wire 
 |----------|----------|----------|
 | `ds` / `deepseek` | DeepSeek | api.deepseek.com/anthropic |
 | `zp` / `zhipu` | ZhiPu (CN) | open.bigmodel.cn/api/anthropic |
-| `zai` / `zp-g` | ZhiPu (Global) | api.z.ai/api/anthropic |
+| `zai` / `zp-g` | Z.AI (Global) | api.z.ai/api/anthropic |
 | `mm` / `minimax` | MiniMax (Global) | api.minimax.io/anthropic |
 | `mm-cn` / `minimax-cn` | MiniMax (CN) | api.minimaxi.com/anthropic |
 | `km` / `kimi` | Kimi | api.kimi.com/coding |
@@ -892,7 +892,7 @@ Configuration file: `~/.claude/oh-my-claude.json`
       "base_url": "https://open.bigmodel.cn/api/anthropic",
       "api_key_env": "ZHIPU_API_KEY"
     },
-    "zhipu-global": {
+    "zai": {
       "type": "anthropic-compatible",
       "base_url": "https://api.z.ai/api/anthropic",
       "api_key_env": "ZAI_API_KEY"
