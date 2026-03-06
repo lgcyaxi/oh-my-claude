@@ -192,21 +192,24 @@ fn compute_fingerprint(sessions: &[crate::types::SessionInfo]) -> String {
 pub async fn refresh_tray(app: &tauri::AppHandle) -> Result<(), String> {
     let sessions = crate::commands::list_sessions_inner().await;
 
-    // Fetch memory config from first session's proxy (for fingerprint + menu)
-    let mem_fingerprint = if let Some(first) = sessions.first() {
+    // Fetch memory config from all sessions' proxies for fingerprint
+    let mut mem_fingerprint = String::new();
+    {
         let client = ProxyClient::new();
-        match client.get_memory_config(first.control_port).await {
-            Ok(cfg) => format!(
-                "mem:{}:{}:{}",
-                cfg.source,
-                cfg.resolved_provider.as_deref().unwrap_or(""),
-                cfg.resolved_model.as_deref().unwrap_or(""),
-            ),
-            Err(_) => String::new(),
+        for s in &sessions {
+            if let Ok(cfg) = client.get_memory_config(s.control_port).await {
+                use std::fmt::Write;
+                let _ = write!(
+                    mem_fingerprint,
+                    "mem:{}:{}:{}:{}|",
+                    s.session_id,
+                    cfg.source,
+                    cfg.resolved_provider.as_deref().unwrap_or(""),
+                    cfg.resolved_model.as_deref().unwrap_or(""),
+                );
+            }
         }
-    } else {
-        String::new()
-    };
+    }
 
     // Skip rebuild if nothing changed
     let fingerprint = format!("{}|{}", compute_fingerprint(&sessions), mem_fingerprint);
@@ -260,12 +263,26 @@ pub async fn refresh_tray(app: &tauri::AppHandle) -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
 
-            // Fetch providers from *this session's* proxy control API.
-            // Each proxy knows its own configured providers (API keys, OAuth, localhost).
-            // This is essential for WSL2 sessions whose env differs from the menubar's.
             let client = ProxyClient::new();
             let providers = client.get_providers(session.control_port).await
                 .unwrap_or_else(|_| crate::commands::get_providers_inner());
+
+            // "Code" nested submenu for main model switching
+            let code_label = if session.switched {
+                format!(
+                    "Code → {}",
+                    session.model.as_deref().unwrap_or("?"),
+                )
+            } else {
+                "Code → Claude (native)".to_string()
+            };
+            let code_sub = Submenu::with_id(
+                app,
+                &uid(&format!("code_{}", session.session_id)),
+                &code_label,
+                true,
+            ).map_err(|e| e.to_string())?;
+
             for provider in &providers {
                 for model in &provider.models {
                     let action = format!(
@@ -275,67 +292,67 @@ pub async fn refresh_tray(app: &tauri::AppHandle) -> Result<(), String> {
                     let label = format!("{} / {}", provider.name, model.label);
                     let item = MenuItem::with_id(app, &uid(&action), &label, true, None::<&str>)
                         .map_err(|e| e.to_string())?;
-                    submenu.append(&item).map_err(|e| e.to_string())?;
+                    code_sub.append(&item).map_err(|e| e.to_string())?;
                 }
             }
-
-            // Add revert option if switched
             if session.switched {
                 let action = format!("revert:{}:{}", session.control_port, session.session_id);
                 let revert = MenuItem::with_id(app, &uid(&action), "Revert to Claude", true, None::<&str>)
                     .map_err(|e| e.to_string())?;
-                submenu.append(&revert).map_err(|e| e.to_string())?;
+                code_sub.append(&revert).map_err(|e| e.to_string())?;
             }
+            submenu.append(&code_sub).map_err(|e| e.to_string())?;
 
-            menu.append(&submenu).map_err(|e| e.to_string())?;
-        }
-    }
-
-    // Memory AI Model submenu — uses first session's proxy for config + providers
-    if let Some(first_session) = sessions.first() {
-        let client = ProxyClient::new();
-        let control_port = first_session.control_port;
-
-        if let Ok(mem_cfg) = client.get_memory_config(control_port).await {
-            let mem_submenu = Submenu::with_id(
-                app, &uid("memory_model"), "Memory AI Model", true,
+            // "Mem" nested submenu for per-session memory model (single fetch)
+            let mem_cfg_result = client.get_memory_config(session.control_port).await;
+            let mem_label = match &mem_cfg_result {
+                Ok(cfg) => format!(
+                    "Mem → {} / {}",
+                    cfg.resolved_provider.as_deref().unwrap_or("auto"),
+                    cfg.resolved_model.as_deref().unwrap_or("passthrough"),
+                ),
+                Err(_) => "Mem → unavailable".to_string(),
+            };
+            let mem_sub = Submenu::with_id(
+                app,
+                &uid(&format!("mem_{}", session.session_id)),
+                &mem_label,
+                true,
             ).map_err(|e| e.to_string())?;
 
-            // Show current resolved model as disabled info item
-            let resolved_label = format!(
-                "Current: {} / {}",
-                mem_cfg.resolved_provider.as_deref().unwrap_or("auto"),
-                mem_cfg.resolved_model.as_deref().unwrap_or("passthrough"),
-            );
-            let current_item = MenuItem::with_id(
-                app, &uid("mem_current"), &resolved_label, false, None::<&str>,
-            ).map_err(|e| e.to_string())?;
-            mem_submenu.append(&current_item).map_err(|e| e.to_string())?;
+            if let Ok(mem_cfg) = mem_cfg_result {
+                let resolved_label = format!(
+                    "Current: {} / {}",
+                    mem_cfg.resolved_provider.as_deref().unwrap_or("auto"),
+                    mem_cfg.resolved_model.as_deref().unwrap_or("passthrough"),
+                );
+                let current_item = MenuItem::with_id(
+                    app, &uid("mem_current"), &resolved_label, false, None::<&str>,
+                ).map_err(|e| e.to_string())?;
+                mem_sub.append(&current_item).map_err(|e| e.to_string())?;
 
-            // Auto (reset) option
-            let auto_action = format!("mem_reset:{}", control_port);
-            let auto_item = MenuItem::with_id(
-                app, &uid(&auto_action), "Auto (passthrough)", true, None::<&str>,
-            ).map_err(|e| e.to_string())?;
-            mem_submenu.append(&auto_item).map_err(|e| e.to_string())?;
+                let auto_action = format!("mem_reset:{}", session.control_port);
+                let auto_item = MenuItem::with_id(
+                    app, &uid(&auto_action), "Auto (passthrough)", true, None::<&str>,
+                ).map_err(|e| e.to_string())?;
+                mem_sub.append(&auto_item).map_err(|e| e.to_string())?;
 
-            // Provider/model options — reuse providers already fetched or fetch fresh
-            let mem_providers = client.get_providers(control_port).await
-                .unwrap_or_else(|_| crate::commands::get_providers_inner());
-            for provider in &mem_providers {
-                for model in &provider.models {
-                    let action = format!(
-                        "mem_set:{}:{}:{}", control_port, provider.name, model.id
-                    );
-                    let label = format!("{} / {}", provider.name, model.label);
-                    let item = MenuItem::with_id(
-                        app, &uid(&action), &label, true, None::<&str>,
-                    ).map_err(|e| e.to_string())?;
-                    mem_submenu.append(&item).map_err(|e| e.to_string())?;
+                for provider in &providers {
+                    for model in &provider.models {
+                        let action = format!(
+                            "mem_set:{}:{}:{}", session.control_port, provider.name, model.id
+                        );
+                        let label = format!("{} / {}", provider.name, model.label);
+                        let item = MenuItem::with_id(
+                            app, &uid(&action), &label, true, None::<&str>,
+                        ).map_err(|e| e.to_string())?;
+                        mem_sub.append(&item).map_err(|e| e.to_string())?;
+                    }
                 }
             }
+            submenu.append(&mem_sub).map_err(|e| e.to_string())?;
 
-            menu.append(&mem_submenu).map_err(|e| e.to_string())?;
+            menu.append(&submenu).map_err(|e| e.to_string())?;
         }
     }
 
