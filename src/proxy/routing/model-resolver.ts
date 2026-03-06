@@ -10,12 +10,33 @@ import modelsRegistry from '../../shared/config/models-registry.json';
 
 /** Build a set of valid model IDs per provider from the registry (cached) */
 export const providerModelSets = new Map<string, Set<string>>();
+
+/**
+ * Reverse map: model ID → provider name(s) that serve it.
+ * Built from registry at startup. Used for model-driven auto-routing.
+ *
+ * When a model appears in multiple providers (e.g. glm-5 in zhipu, zai, aliyun),
+ * all providers are listed — the caller picks the first configured one.
+ */
+export const modelToProviders = new Map<string, string[]>();
+
 for (const p of modelsRegistry.providers) {
 	// Use realId (upstream model ID) when present, else id
 	const models = new Set(
 		p.models.map((m: { id: string; realId?: string }) => m.realId ?? m.id),
 	);
 	providerModelSets.set(p.name, models);
+
+	// Build reverse map: each model ID → list of providers
+	for (const m of p.models) {
+		const modelId = m.id; // Use display ID (not realId) for lookup
+		const existing = modelToProviders.get(modelId);
+		if (existing) {
+			existing.push(p.name);
+		} else {
+			modelToProviders.set(modelId, [p.name]);
+		}
+	}
 }
 
 /**
@@ -51,4 +72,39 @@ export function resolveEffectiveModel(
 	}
 
 	return switchModel;
+}
+
+/**
+ * Resolve a model name to a provider by checking if it's registered in the models registry.
+ *
+ * This enables model-driven auto-routing: when Claude Code sends a request with
+ * a non-Anthropic model (e.g., "qwen3.5-plus"), this function finds which provider
+ * serves that model and returns its name.
+ *
+ * @param model - The model ID from the request (e.g., "qwen3.5-plus")
+ * @param isConfigured - Function to check if a provider is configured
+ * @returns The provider name if found and configured, null otherwise
+ */
+export function resolveModelToProvider(
+	model: string | undefined,
+	isConfigured: (provider: string) => boolean,
+): string | null {
+	if (!model) return null;
+
+	// Skip Claude models — they're not in the external provider registry
+	if (model.startsWith('claude-')) return null;
+
+	// Check if the model exists in our registry
+	const providers = modelToProviders.get(model);
+	if (!providers || providers.length === 0) return null;
+
+	// Return the first configured provider
+	for (const provider of providers) {
+		if (isConfigured(provider)) {
+			return provider;
+		}
+	}
+
+	// Model exists in registry but none of its providers are configured
+	return null;
 }

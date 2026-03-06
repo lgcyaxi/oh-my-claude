@@ -1,9 +1,9 @@
 /**
  * Document Writer - Technical documentation specialist
- * Uses MiniMax-M2.5 via MCP (async)
+ * Uses MiniMax-M2.5 via proxy auto-routing (model: MiniMax-M2.5)
  */
 
-import type { AgentDefinition } from "./types";
+import type { AgentDefinition } from './types';
 
 const DOCUMENT_WRITER_PROMPT = `<role>
 You are a TECHNICAL WRITER with deep engineering background who transforms complex codebases into crystal-clear documentation. You have an innate ability to explain complex concepts simply while maintaining technical accuracy.
@@ -145,16 +145,15 @@ You have access to the oh-my-claude memory system:
 </capabilities>`;
 
 export const documentWriterAgent: AgentDefinition = {
-  name: "document-writer",
-  description:
-    "Technical documentation bridge agent. Delegates to the docs bridge worker for README, API docs, architecture docs, and user-guide writing tasks.",
-  prompt: DOCUMENT_WRITER_PROMPT,
-  defaultProvider: "minimax",
-  defaultModel: "MiniMax-M2.5",
-  defaultTemperature: 0.5,
-  executionMode: "task",
-  category: ["bridge"],
-  bridgeRole: "docs",
+	name: 'document-writer',
+	description:
+		'Technical documentation agent. README, API docs, architecture docs, and user-guide writing.',
+	prompt: DOCUMENT_WRITER_PROMPT,
+	defaultProvider: 'minimax',
+	defaultModel: 'MiniMax-M2.5',
+	defaultTemperature: 0.5,
+	executionMode: 'task',
+	category: ['native'],
 };
 
 export default documentWriterAgent;

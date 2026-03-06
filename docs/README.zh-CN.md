@@ -615,23 +615,23 @@ switch_model(provider="deepseek", model="deepseek-chat")
 
 ### 智能体委派模式
 
-当代理运行时，Sisyphus（`/omc-sisyphus`）可以使用 **switch+Task** 委派外部模型智能体，获取完整工具访问：
+当代理运行时，YAML 定义中包含 `model` 字段的智能体会触发**模型驱动自动路由**。代理检测非 Claude 模型 ID，自动路由到正确的供应商 — 无需显式调用 `switch_model`。
 
-1. `switch_model(provider, model)` — 静默切换
-2. 使用匹配的 `subagent_type` 调用 Task 工具 — 完整的 Claude Code 工具访问（Edit、Write、Bash、Glob、Grep）
-3. `switch_revert` — 自动清理
+1. 智能体 YAML 指定 `model: "qwen3.5-plus"`（非 Claude 模型）
+2. 代理自动将请求路由到提供该模型的供应商
+3. Task 工具以完整的 Claude Code 工具访问权限运行（Edit、Write、Bash、Glob、Grep）
 
-这使外部模型拥有完整的工具访问权限 — 不同于只能返回文本的 MCP 后台任务。代理不可用时，委派自动回退到 MCP `launch_background_task`。
+Claude 原生智能体（无 `model` 字段）照常直通到 Anthropic。
 
-| 智能体 | 供应商/模型 |
-|--------|-----------|
-| Hephaestus | openai/gpt-5.3-codex |
-| Oracle | openai/gpt-5.3-codex |
-| Librarian | zhipu/GLM-5 |
-| Navigator | kimi/K2.5 |
-| Analyst | deepseek/deepseek-chat |
-| Document-Writer | minimax/MiniMax-M2.5 |
-| Frontend-UI-UX | google/gemini-3-pro |
+| 智能体 | 模型 | 路由方式 |
+|--------|------|----------|
+| Oracle | claude-sonnet-4-6 | 直通（Claude 原生） |
+| Analyst | qwen3.5-plus | 自动路由 → Aliyun |
+| Librarian | glm-5 | 自动路由 → 智谱 |
+| Navigator | kimi-for-coding | 自动路由 → Kimi |
+| Hephaestus | kimi-for-coding | 自动路由 → Kimi |
+| Document-Writer | MiniMax-M2.5 | 自动路由 → MiniMax |
+| Frontend-UI-UX | gemini-3-pro | 自动路由 → Google |
 
 ### 安全特性
 
@@ -709,25 +709,23 @@ oh-my-claude 提供两种类型的智能体：
 | **Prometheus** | 战略规划 | `/omc-plan` |
 | **Explore** | 代码库搜索 | `Task(subagent_type="Explore")` |
 
-### MCP 后台智能体（外部 API）
+### 任务智能体（自动路由）
 
-这些智能体通过 oh-my-claude 的 MCP 服务器运行，使用外部 API 供应商。**我们可以通过配置控制模型选择**。
+这些智能体通过 Claude Code 的 Task 工具运行，代理自动路由至正确的供应商。在 YAML frontmatter 中设置 `model` 字段即可触发自动路由 — 无需手动切换或桥接。
 
 | 智能体 | 供应商 | 模型 | 角色 |
 |--------|--------|------|------|
-| **Oracle** | Aliyun | qwen3.5-plus | 深度推理 |
-| **Analyst** | DeepSeek | deepseek-chat | 快速代码分析 |
-| **Librarian** | 智谱 | GLM-5 | 外部研究 |
-| **Frontend-UI-UX** | Google | gemini-3-pro | 视觉/UI 设计 |
-| **Document-Writer** | MiniMax | MiniMax-M2.5 | 文档编写 |
-| **Navigator** | Kimi | K2.5 | 视觉转代码 & 多步骤任务 |
-| **Hephaestus** | Kimi | K2.5 | 代码锻造专家 |
+| **Oracle** | Anthropic | claude-sonnet-4-6 | 深度推理、架构设计、调试 |
+| **Analyst** | Aliyun | qwen3.5-plus | 快速代码分析 |
+| **Librarian** | 智谱 | glm-5 | 外部文档研究 |
+| **Document-Writer** | MiniMax | MiniMax-M2.5 | 技术文档编写 |
+| **Navigator** | Kimi | kimi-for-coding | 视觉转代码、多模态 |
+| **Hephaestus** | Kimi | kimi-for-coding | 深度实现、代码锻造 |
+| **UI-Designer** | Anthropic | claude-opus-4-6 | UI/UX 设计（OpenCode 不可用时的备选） |
 
-**调用方式：** `launch_background_task(agent="oracle", prompt="...")` 或 `execute_agent(agent="oracle", prompt="...")`
+**调用方式：** `Task(subagent_type="analyst")` 或在提示中使用 `@analyst`
 
-**直接模型访问：** `execute_with_model(provider="deepseek", model="deepseek-reasoner", prompt="...")` — 绕过智能体路由，直接调用模型，节省 Token 开销。
-
-> **代理路由：** 当代理运行时，MCP 智能体会自动通过代理路由 — 支持 OAuth 供应商（OpenAI、Google、Copilot）无需 API 密钥。回退链：代理 → 直接 API → Claude 直通 → Claude Code Task 工具。无代理时，仅 API 密钥供应商（DeepSeek、ZhiPu、MiniMax、Kimi、Aliyun）可直接使用。
+> **自动路由原理：** 代理运行时，YAML 中的 `model` 字段触发代理 Priority 2 自动路由。代理查找 `models-registry.json` 找到对应供应商，自动转发请求。Claude 模型无需 `model` 字段 — 直接透传。
 
 ## 官方 MCP 服务
 

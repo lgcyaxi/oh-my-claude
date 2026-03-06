@@ -659,23 +659,23 @@ switch_model(provider="deepseek", model="deepseek-chat")
 
 ### Agent Delegation Mode
 
-When the proxy is running, Sisyphus (`/omc-sisyphus`) can delegate to external model agents using **switch+Task** for full tool access:
+When the proxy is running, agents with a `model` field in their YAML definition trigger **model-driven auto-routing**. The proxy detects non-Claude model IDs and automatically routes to the correct provider — no explicit `switch_model` needed.
 
-1. `switch_model(provider, model)` — silent switch
-2. Task tool with matching `subagent_type` — full Claude Code tool access (Edit, Write, Bash, Glob, Grep)
-3. `switch_revert` — automatic cleanup
+1. Agent YAML specifies `model: "qwen3.5-plus"` (non-Claude model)
+2. Proxy auto-routes request to the provider serving that model
+3. Task tool runs with full Claude Code tool access (Edit, Write, Bash, Glob, Grep)
 
-This gives external models full tool access — unlike MCP background tasks which only return text. When proxy is unavailable, delegation falls back to MCP `launch_background_task` automatically.
+Claude-native agents (no `model` field) pass through to Anthropic as usual.
 
-| Agent | Provider/Model |
-|-------|---------------|
-| Hephaestus | openai/gpt-5.3-codex |
-| Oracle | openai/gpt-5.3-codex |
-| Librarian | zhipu/GLM-5 |
-| Navigator | kimi/K2.5 |
-| Analyst | deepseek/deepseek-chat |
-| Document-Writer | minimax/MiniMax-M2.5 |
-| Frontend-UI-UX | google/gemini-3-pro |
+| Agent | Model | Routing |
+|-------|-------|---------|
+| Oracle | claude-sonnet-4-6 | Passthrough (Claude native) |
+| Analyst | qwen3.5-plus | Auto-route → Aliyun |
+| Librarian | glm-5 | Auto-route → ZhiPu |
+| Navigator | kimi-for-coding | Auto-route → Kimi |
+| Hephaestus | kimi-for-coding | Auto-route → Kimi |
+| Document-Writer | MiniMax-M2.5 | Auto-route → MiniMax |
+| Frontend-UI-UX | gemini-3-pro | Auto-route → Google |
 
 ### Safety Features
 
@@ -753,25 +753,25 @@ These agents run via Claude Code's native Task tool. **Model selection is contro
 | **Prometheus** | Strategic planning | `/omc-plan` |
 | **Explore** | Codebase search | `Task(subagent_type="Explore")` |
 
-### MCP Background Agents (External APIs)
+### Task Agents (Auto-Routed)
 
-These agents run via oh-my-claude's MCP server using external API providers. **We control model selection** via configuration.
+All agents run via Claude Code's Task tool with model-driven auto-routing. Agent YAML includes a `model` field that triggers automatic provider routing through the proxy.
 
-| Agent | Provider | Model | Role |
-|-------|----------|-------|------|
-| **Oracle** | Aliyun | qwen3.5-plus | Deep reasoning |
-| **Analyst** | DeepSeek | deepseek-chat | Quick code analysis |
-| **Librarian** | ZhiPu | GLM-5 | External research |
-| **Frontend-UI-UX** | Google | gemini-3-pro | Visual/UI design |
-| **Document-Writer** | MiniMax | MiniMax-M2.5 | Documentation |
-| **Navigator** | Kimi | K2.5 | Visual-to-code & multi-step tasks |
-| **Hephaestus** | Kimi | K2.5 | Code forge specialist |
+| Agent | Model | Provider (auto-routed) | Role |
+|-------|-------|----------------------|------|
+| **Oracle** | claude-sonnet-4-6 | Anthropic (passthrough) | Deep reasoning |
+| **Analyst** | qwen3.5-plus | Aliyun | Quick code analysis |
+| **Librarian** | glm-5 | ZhiPu | External research |
+| **Frontend-UI-UX** | gemini-3-pro | Google | Visual/UI design |
+| **Document-Writer** | MiniMax-M2.5 | MiniMax | Documentation |
+| **Navigator** | kimi-for-coding | Kimi | Visual-to-code & multi-step tasks |
+| **Hephaestus** | kimi-for-coding | Kimi | Code forge specialist |
 
-**Invocation:** `launch_background_task(agent="oracle", prompt="...")` or `execute_agent(agent="oracle", prompt="...")`
+**Invocation:** Agents are invoked via Task tool subagents. The proxy auto-routes based on the model ID in the request.
 
 **Direct Model Access:** `execute_with_model(provider="deepseek", model="deepseek-reasoner", prompt="...")` — bypasses agent routing for token-efficient direct model calls.
 
-> **Proxy routing:** When the proxy is running, MCP agents route through it automatically — enabling OAuth providers (OpenAI, Google, Copilot) without API keys. Fallback chain: proxy → direct API → Claude passthrough → Claude Code Task tool. Without proxy, only API-key providers (DeepSeek, ZhiPu, MiniMax, Kimi, Aliyun) work directly.
+> **Auto-routing:** When a request contains a non-Claude model ID (e.g. `qwen3.5-plus`), the proxy automatically routes to the first configured provider serving that model. Routing priority: directive(1) → auto-route(2) → session(3) → global(4) → passthrough(5).
 
 ## Official MCP Servers
 

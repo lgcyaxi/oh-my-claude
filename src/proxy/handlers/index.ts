@@ -3,9 +3,10 @@
  *
  * Routing priority (highest first):
  * 1.  Route directive in system prompt [omc-route:provider/model]
- * 2.  Session-scoped state (if session ID present in URL path)
- * 3.  Global state (file-based, backward compatible)
- * 4.  Passthrough to Anthropic (default)
+ * 2.  Model-driven auto-routing (if model is in registry and provider configured)
+ * 3.  Session-scoped state (if session ID present in URL path)
+ * 4.  Global state (file-based, backward compatible)
+ * 5.  Passthrough to Anthropic (default)
  */
 
 import { readSwitchState, resetSwitchState } from '../state/switch';
@@ -17,10 +18,15 @@ import {
 	recordSessionProviderRequest,
 } from '../state/session';
 import { extractRouteDirective } from '../routing/route-directive';
+import {
+	resolveModelToProvider,
+	providerModelSets,
+} from '../routing/model-resolver';
 import { nextRequestId } from './stats';
 import { handlePassthrough } from './passthrough';
 import { handleSwitched } from './switched';
 import { handleDirectiveRoute } from './directive';
+import { loadConfig, isProviderConfigured } from '../../shared/config';
 import type { ProxySwitchState } from '../state/types';
 
 // Re-export all handler functions for consumers
@@ -69,7 +75,40 @@ export async function handleMessages(
 			}
 		}
 
-		// --- Priority 2 & 3: Session state → global state → passthrough ---
+		// --- Priority 2: Model-driven auto-routing ---
+		if (parsedBody) {
+			const requestModel = parsedBody.model as string | undefined;
+			const config = loadConfig();
+
+			const provider = resolveModelToProvider(requestModel, (p) =>
+				isProviderConfigured(config, p),
+			);
+
+			if (provider) {
+				// Use request model if specified, otherwise get first model from provider
+				const model =
+					requestModel ||
+					providerModelSets.get(provider)?.values().next().value ||
+					requestModel;
+
+				console.error(
+					`[proxy #${reqId}]${sessionTag} Auto-routing: ${requestModel} → ${provider}/${model}`,
+				);
+
+				return await handleDirectiveRoute(
+					req,
+					reqId,
+					bodyText,
+					parsedBody,
+					provider,
+					model,
+					sessionTag,
+					sessionId,
+				);
+			}
+		}
+
+		// --- Priority 3 & 4: Session state → global state → passthrough ---
 		let state: ProxySwitchState;
 
 		if (sessionId) {

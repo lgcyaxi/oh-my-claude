@@ -2,14 +2,15 @@
 
 All notable changes to oh-my-claude are documented here.
 
-## [2.1.3-beta.42](changelog/v2.1.3-beta.md) - 2026-03-05
+## [2.1.3-beta.43](changelog/v2.1.3-beta.md) - 2026-03-05
 
 ### Highlights
 
-- **Memory System Fixes** — Timeline flood cleanup (bridge workers skip auto-capture), improved format (concepts shown), noise tag filtering, tag corruption fix
-- **Proxy Session Isolation** — Per-process default switch state eliminates session ID mismatch; CLI aliases (`zp`) resolve to config provider names (`zhipu`)
-- **Bridge Delivery Fix** — Bus path disabled; all workers use legacy path for reliable auto-spawn + text injection
-- **Worker Statusline** — Model/proxy segments now correctly show switched provider via process-local default state
+- **Model-Driven Auto-Routing** — Non-Claude model IDs (e.g. `qwen3.5-plus`) in requests auto-route to correct provider. New Priority 2 routing via `resolveModelToProvider()` with reverse model→provider registry
+- **Agent Architecture Overhaul** — Bridge agents converted to native with auto-routing via `model` field in agent YAML. All 11 agents now unified in `taskAgents`/`nativeAgents`; `bridgeAgents` deprecated
+- **Proxy Domain Restructure** — `src/proxy/` reorganized into `handlers/`, `routing/`, `state/`, `streaming/` subdirectories
+- **MCP Register Pattern** — Tool definitions use inline `register()` calls instead of centralized schemas
+- **Memory Categories** — Structured category system with menubar picker
 
 ## [2.1.3-beta.39](changelog/v2.1.3-beta.md) - 2026-03-04
 

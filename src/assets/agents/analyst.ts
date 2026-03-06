@@ -1,12 +1,12 @@
 /**
  * Analyst - Quick code analysis specialist
- * Uses DeepSeek Chat via MCP (async)
+ * Uses Qwen 3.5+ via proxy auto-routing (model: qwen3.5-plus)
  *
  * Faster alternative to Oracle for simpler reasoning tasks.
  * Use Oracle for deep architectural decisions, Analyst for quick analysis.
  */
 
-import type { AgentDefinition } from "./types";
+import type { AgentDefinition } from './types';
 
 const ANALYST_PROMPT = `You are a quick code analysis specialist. Your job: analyze code patterns, review implementations, and provide fast insights.
 
@@ -94,17 +94,16 @@ You have access to the oh-my-claude memory system:
 - **remember(content, tags)**: Store important code patterns, recurring issues, and analysis findings for future sessions`;
 
 export const analystAgent: AgentDefinition = {
-  name: "analyst",
-  description:
-    "Quick code analysis bridge agent. Delegates to the audit bridge worker for fast code review, pattern analysis, and simple improvement guidance.",
-  prompt: ANALYST_PROMPT,
-  defaultProvider: "deepseek",
-  defaultModel: "deepseek-chat",
-  defaultTemperature: 0.1,
-  executionMode: "task",
-  category: ["bridge"],
-  bridgeRole: "audit",
-  restrictedTools: ["Edit", "Write", "Task"],
+	name: 'analyst',
+	description:
+		'Quick code analysis agent. Fast code review, pattern analysis, and simple improvement guidance.',
+	prompt: ANALYST_PROMPT,
+	defaultProvider: 'aliyun',
+	defaultModel: 'qwen3.5-plus',
+	defaultTemperature: 0.1,
+	executionMode: 'task',
+	category: ['native'],
+	restrictedTools: ['Edit', 'Write', 'Task'],
 };
 
 export default analystAgent;

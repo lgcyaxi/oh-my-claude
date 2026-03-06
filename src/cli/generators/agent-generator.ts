@@ -56,6 +56,12 @@ export function generateAgentMarkdown(agent: AgentDefinition): string {
 	// YAML frontmatter (required by Claude Code)
 	lines.push('---');
 	lines.push(`name: ${agent.name.toLowerCase()}`);
+
+	// Emit model field for non-Claude agents to trigger proxy auto-routing
+	if (agent.defaultModel && !agent.defaultModel.startsWith('claude-')) {
+		lines.push(`model: ${agent.defaultModel}`);
+	}
+
 	lines.push(`description: ${escapeYamlString(agent.description)}`);
 
 	if (isBridgeAgent) {

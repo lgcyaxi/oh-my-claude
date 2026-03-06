@@ -1,9 +1,9 @@
 /**
  * Librarian - External documentation and library research agent
- * Uses ZhiPu GLM-4.7 via MCP (async)
+ * Uses ZhiPu GLM-5 via proxy auto-routing (model: glm-5)
  */
 
-import type { AgentDefinition } from "./types";
+import type { AgentDefinition } from './types';
 
 const LIBRARIAN_PROMPT = `# THE LIBRARIAN
 
@@ -207,17 +207,16 @@ You have access to the oh-my-claude memory system:
 - **remember(content, tags)**: Store important library discoveries, API patterns, and documentation links for future sessions`;
 
 export const librarianAgent: AgentDefinition = {
-  name: "librarian",
-  description:
-    "Bridge research agent for external docs and library analysis. Delegates to the code bridge worker for evidence-backed documentation and implementation lookup tasks.",
-  prompt: LIBRARIAN_PROMPT,
-  defaultProvider: "zhipu",
-  defaultModel: "glm-5",
-  defaultTemperature: 0.3,
-  executionMode: "task",
-  category: ["bridge"],
-  bridgeRole: "code",
-  restrictedTools: ["Edit", "Write"],
+	name: 'librarian',
+	description:
+		'Research agent for external docs and library analysis. Evidence-backed documentation and implementation lookup.',
+	prompt: LIBRARIAN_PROMPT,
+	defaultProvider: 'zhipu',
+	defaultModel: 'glm-5',
+	defaultTemperature: 0.3,
+	executionMode: 'task',
+	category: ['native'],
+	restrictedTools: ['Edit', 'Write'],
 };
 
 export default librarianAgent;

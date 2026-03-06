@@ -3,7 +3,7 @@
  * Uses DeepSeek Reasoner via MCP (async)
  */
 
-import type { AgentDefinition } from "./types";
+import type { AgentDefinition } from './types';
 
 const ORACLE_PROMPT = `You are a strategic technical advisor with deep reasoning capabilities, operating as a specialized consultant within an AI-assisted development environment.
 
@@ -96,16 +96,16 @@ You have access to the oh-my-claude memory system. Use it to maintain cross-sess
 - Things you can infer from existing code patterns`;
 
 export const oracleAgent: AgentDefinition = {
-  name: "oracle",
-  description:
-    "Read-only consultation agent. High-IQ reasoning specialist for debugging hard problems and high-difficulty architecture design.",
-  prompt: ORACLE_PROMPT,
-  defaultProvider: "claude",
-  defaultModel: "claude-sonnet-4.5",
-  defaultTemperature: 0.1,
-  executionMode: "task",
-  category: ["native", "proxy"],
-  restrictedTools: ["Edit", "Write", "Task"],
+	name: 'oracle',
+	description:
+		'Read-only consultation agent. High-IQ reasoning specialist for debugging hard problems and high-difficulty architecture design.',
+	prompt: ORACLE_PROMPT,
+	defaultProvider: 'anthropic',
+	defaultModel: 'claude-sonnet-4-6',
+	defaultTemperature: 0.1,
+	executionMode: 'task',
+	category: ['native', 'proxy'],
+	restrictedTools: ['Edit', 'Write', 'Task'],
 };
 
 export default oracleAgent;

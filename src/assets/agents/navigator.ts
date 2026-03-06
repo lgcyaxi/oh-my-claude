@@ -9,7 +9,7 @@
  * - Visual programming (code from screenshots)
  */
 
-import type { AgentDefinition } from "./types";
+import type { AgentDefinition } from './types';
 
 const NAVIGATOR_PROMPT = `# Role: Navigator - Complex Task Execution Specialist
 
@@ -118,15 +118,15 @@ You have access to the oh-my-claude memory system:
 - **remember(content, tags)**: Store successful patterns, visual-to-code mappings, and workflow optimizations`;
 
 export const navigatorAgent: AgentDefinition = {
-  name: "navigator",
-  description:
-    "Complex task execution specialist with visual understanding. Excels at visual-to-code conversion, document processing, and multi-step workflow orchestration. Uses Kimi K2.5's native multimodal and Agent Swarm capabilities.",
-  prompt: NAVIGATOR_PROMPT,
-  defaultProvider: "kimi",
-  defaultModel: "k2p5",
-  defaultTemperature: 0.3,
-  executionMode: "task",
-  category: ["native", "proxy"],
+	name: 'navigator',
+	description:
+		"Complex task execution specialist with visual understanding. Excels at visual-to-code conversion, document processing, and multi-step workflow orchestration. Uses Kimi K2.5's native multimodal and Agent Swarm capabilities.",
+	prompt: NAVIGATOR_PROMPT,
+	defaultProvider: 'kimi',
+	defaultModel: 'kimi-for-coding',
+	defaultTemperature: 0.3,
+	executionMode: 'task',
+	category: ['native', 'proxy'],
 };
 
 export default navigatorAgent;
