@@ -23,12 +23,18 @@ import {
 	readFileSync,
 	existsSync,
 	readdirSync,
-	appendFileSync,
 	mkdirSync,
 	writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+
+import {
+	shortHash,
+	resolveCanonicalRoot,
+	logUserPrompt,
+	getTimelineContent,
+} from '../../memory/hooks';
 
 /** Read bridge state inline (no import cycle — state.ts is also a hook dependency) */
 function readBridgeWorkers(): string[] {
@@ -102,72 +108,7 @@ interface HookResponse {
 	};
 }
 
-/**
- * Log user prompt to session log for richer auto-memory context.
- * Appends a JSONL observation to the project-scoped session log.
- */
-function logUserPrompt(prompt: string, projectCwd?: string): void {
-	if (!prompt || prompt.length < 5) return;
-	try {
-		const logDir = join(
-			homedir(),
-			'.claude',
-			'oh-my-claude',
-			'memory',
-			'sessions',
-		);
-		if (!existsSync(logDir)) {
-			mkdirSync(logDir, { recursive: true });
-		}
-		// Scope session log by project hash to avoid multi-instance contamination
-		const suffix = projectCwd ? `-${shortHash(projectCwd)}` : '';
-		const logPath = join(logDir, `active-session${suffix}.jsonl`);
-		const truncated =
-			prompt.length > 200 ? prompt.slice(0, 200) + '...' : prompt;
-		const observation = {
-			ts: new Date().toISOString(),
-			tool: 'UserPrompt',
-			summary: `user: ${truncated}`,
-		};
-		appendFileSync(logPath, JSON.stringify(observation) + '\n', 'utf-8');
-	} catch {
-		// Silently fail — never block
-	}
-}
-
-/** Compute a short hash of a string for project-scoped filenames */
-function shortHash(str: string): string {
-	const { createHash } = require('node:crypto');
-	return createHash('sha256').update(str).digest('hex').slice(0, 8);
-}
-
-/**
- * Resolve the canonical (non-worktree) repo root.
- * In a worktree, .git is a file with "gitdir: ..." pointing to the main repo.
- */
-function resolveCanonicalRoot(projectCwd: string): string | null {
-	const gitPath = join(projectCwd, '.git');
-	if (!existsSync(gitPath)) return null;
-
-	try {
-		const { statSync } = require('node:fs');
-		const stat = statSync(gitPath);
-		if (stat.isDirectory()) return projectCwd; // Already canonical
-
-		const content = readFileSync(gitPath, 'utf-8').trim();
-		const match = content.match(/^gitdir:\s*(.+)$/);
-		if (!match) return null;
-
-		const gitdir = match[1]!.trim();
-		const normalized = gitdir.replace(/\\/g, '/');
-		const worktreesIdx = normalized.indexOf('/.git/worktrees/');
-		if (worktreesIdx === -1) return null;
-
-		return gitdir.slice(0, worktreesIdx);
-	} catch {
-		return null;
-	}
-}
+// logUserPrompt, shortHash, resolveCanonicalRoot are imported from ../../memory/hooks
 
 /**
  * Count .md files in notes/ and sessions/ subdirectories
@@ -221,81 +162,7 @@ function getMemoryCount(projectCwd?: string): number {
 	return count;
 }
 
-/**
- * Read and combine TIMELINE.md files from project and global scopes.
- * Returns combined timeline content truncated to maxLines, or null if no timeline exists.
- */
-function getTimelineContent(
-	projectCwd?: string,
-	maxLines: number = 80,
-): string | null {
-	const lines: string[] = [];
-
-	// Read project timeline first (higher priority)
-	if (projectCwd) {
-		const projectTimeline = join(
-			projectCwd,
-			'.claude',
-			'mem',
-			'TIMELINE.md',
-		);
-		if (existsSync(projectTimeline)) {
-			try {
-				const content = readFileSync(projectTimeline, 'utf-8').trim();
-				if (content) lines.push(content);
-			} catch {
-				// ignore
-			}
-		}
-	}
-
-	// Read global timeline
-	const globalTimeline = join(
-		homedir(),
-		'.claude',
-		'oh-my-claude',
-		'memory',
-		'TIMELINE.md',
-	);
-	if (existsSync(globalTimeline)) {
-		try {
-			const content = readFileSync(globalTimeline, 'utf-8').trim();
-			if (content) {
-				if (lines.length > 0) {
-					// Separate project and global timelines
-					lines.push('');
-					lines.push('---');
-					lines.push('# Global Memory Timeline');
-					// Strip the header from global content to avoid duplicate "# Memory Timeline"
-					const globalLines = content.split('\n');
-					const startIdx = globalLines.findIndex((l) =>
-						l.startsWith('> '),
-					);
-					if (startIdx >= 0) {
-						lines.push(...globalLines.slice(startIdx));
-					} else {
-						lines.push(content);
-					}
-				} else {
-					lines.push(content);
-				}
-			}
-		} catch {
-			// ignore
-		}
-	}
-
-	if (lines.length === 0) return null;
-
-	const combined = lines.join('\n');
-	const allLines = combined.split('\n');
-
-	if (allLines.length > maxLines) {
-		return allLines.slice(0, maxLines).join('\n') + '\n> ... truncated';
-	}
-
-	return combined;
-}
+// getTimelineContent is imported from ../../memory/hooks
 
 /**
  * Read Claude's native MEMORY.md from ~/.claude/projects/<project-key>/MEMORY.md

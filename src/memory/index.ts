@@ -107,3 +107,9 @@ export {
 	regenerateTimelines,
 } from './timeline';
 export type { TimelineOptions } from './timeline';
+
+// Hook utilities (lightweight, Node.js built-ins only — no SQLite/WASM)
+// Hooks import directly from './hooks' to avoid pulling heavy deps.
+// Re-export select utilities that are useful outside hooks.
+export { getTimelineContent, logUserPrompt, getControlPort } from './hooks';
+export type { HookConfig, ContextMemoryState } from './hooks';

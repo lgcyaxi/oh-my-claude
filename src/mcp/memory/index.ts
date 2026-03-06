@@ -15,15 +15,10 @@ import {
 } from '../../memory';
 import type { MemoryScope } from '../../memory';
 import { getConfiguredWriteScope } from '../shared/utils';
-import {
-	indexNewMemory,
-	afterMemoryMutation,
-} from './helpers';
+import { indexNewMemory, afterMemoryMutation } from './helpers';
 import { handleMemoryAiOp } from './ai-ops';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-
-export { memoryToolSchemas } from './schemas';
 
 /**
  * Normalize tags/concepts from MCP tool input.

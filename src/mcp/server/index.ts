@@ -9,17 +9,13 @@
  *   bridge/      — bridge_up, bridge_down, bridge_status, bridge_send
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-	CallToolRequestSchema,
-	ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
 
-import { memoryToolSchemas, handleMemoryTool } from '../memory';
-import { preferenceToolSchemas, handlePreferenceTool } from '../preference';
-import { proxyToolSchemas, handleProxyTool } from '../proxy';
-import { bridgeToolSchemas, handleBridgeTool } from '../bridge';
+import { registerMemoryTools } from '../memory/register';
+import { registerPreferenceTools } from '../preference/register';
+import { registerProxyTools } from '../proxy/register';
+import { registerBridgeTools } from '../bridge/register';
 import { extractSessionIdFromEnv, resolveProjectRoot } from '../shared/utils';
 import type { ToolContext } from '../shared/types';
 
@@ -223,66 +219,20 @@ async function main() {
 		ensureIndexer,
 	};
 
-	// ─── Tool registry ────────────────────────────────────────────────────────
-
-	// Bridge workers (OMC_BRIDGE_PANE=1) get only bridge_event (to post results back).
-	// They cannot spawn nested workers or manage bridge state.
-	const isBridgeWorker = process.env.OMC_BRIDGE_PANE === '1';
-	const workerBridgeTools = bridgeToolSchemas.filter(
-		(t) => t.name === 'bridge_event',
-	);
-
-	const tools = [
-		...memoryToolSchemas,
-		...preferenceToolSchemas,
-		...proxyToolSchemas,
-		...(isBridgeWorker ? workerBridgeTools : bridgeToolSchemas),
-	];
-
 	// ─── MCP server ───────────────────────────────────────────────────────────
 
-	const server = new Server(
+	const server = new McpServer(
 		{ name: 'oh-my-claude', version: '1.0.0' },
 		{ capabilities: { tools: {} } },
 	);
 
-	server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+	// Bridge workers (OMC_BRIDGE_PANE=1) get only bridge_event.
+	const isBridgeWorker = process.env.OMC_BRIDGE_PANE === '1';
 
-	server.setRequestHandler(CallToolRequestSchema, async (request) => {
-		const { name, arguments: args = {} } = request.params;
-
-		try {
-			const handlers = [
-				handleMemoryTool,
-				handlePreferenceTool,
-				handleProxyTool,
-				handleBridgeTool,
-			];
-
-			for (const handler of handlers) {
-				const result = await handler(
-					name,
-					args as Record<string, unknown>,
-					ctx,
-				);
-				if (result !== undefined) return result;
-			}
-
-			return {
-				content: [
-					{ type: 'text' as const, text: `Unknown tool: ${name}` },
-				],
-				isError: true,
-			};
-		} catch (error) {
-			const message =
-				error instanceof Error ? error.message : String(error);
-			return {
-				content: [{ type: 'text' as const, text: `Error: ${message}` }],
-				isError: true,
-			};
-		}
-	});
+	registerMemoryTools(server, ctx);
+	registerPreferenceTools(server, ctx);
+	registerProxyTools(server, ctx);
+	registerBridgeTools(server, ctx, { workerOnly: isBridgeWorker });
 
 	// ─── Startup ──────────────────────────────────────────────────────────────
 

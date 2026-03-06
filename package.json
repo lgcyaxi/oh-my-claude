@@ -44,7 +44,7 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^7.2.0",
-    "@modelcontextprotocol/sdk": "^1.25.1",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "commander": "^14.0.2",
     "sql.js-fts5": "^1.4.0",
     "zod": "^3.24.0"

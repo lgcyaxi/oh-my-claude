@@ -18,16 +18,26 @@
  * to avoid multi-instance contamination.
  */
 
-import {
-	readFileSync,
-	existsSync,
-	writeFileSync,
-	mkdirSync,
-	statSync,
-} from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { createHash } from 'node:crypto';
+
+import {
+	shortHash,
+	findGitRoot,
+	resolveCanonicalRoot as resolveCanonicalRootBase,
+	getControlPort,
+	isProxyHealthy,
+	ensureProxy,
+	cleanupAutoProxy,
+	loadHookConfig,
+	loadState,
+	saveState,
+	getSessionLogSizeKB,
+	readSessionLog,
+	clearSessionLog,
+} from '../../memory/hooks';
+import type { ContextMemoryState } from '../../memory/hooks';
 
 // ---- Input types for different hook events ----
 
@@ -67,179 +77,7 @@ interface HookResponse {
 }
 
 // ---- Proxy-based AI client ----
-
-const DEFAULT_CONTROL_PORT = 18911;
-
-function getControlPort(): number {
-	const env =
-		process.env.OMC_CONTROL_PORT || process.env.OMC_PROXY_CONTROL_PORT;
-	if (env) {
-		const parsed = parseInt(env, 10);
-		if (!isNaN(parsed)) return parsed;
-	}
-	return DEFAULT_CONTROL_PORT;
-}
-
-async function isProxyHealthy(controlPort: number): Promise<boolean> {
-	try {
-		const resp = await fetch(`http://localhost:${controlPort}/health`, {
-			signal: AbortSignal.timeout(500),
-		});
-		if (!resp.ok) return false;
-		const data = (await resp.json()) as { status?: string };
-		return data.status === 'ok';
-	} catch {
-		return false;
-	}
-}
-
-/**
- * Auto-spawn the proxy if not running. Session-scoped: tracked PID is killed on Stop.
- * Returns the control port to use, or null if proxy couldn't start.
- */
-async function ensureProxy(projectCwd?: string): Promise<number | null> {
-	const controlPort = getControlPort();
-
-	if (await isProxyHealthy(controlPort)) {
-		return controlPort;
-	}
-
-	// Proxy not running — try to auto-spawn
-	try {
-		const proxyScript = join(
-			homedir(),
-			'.claude',
-			'oh-my-claude',
-			'dist',
-			'proxy',
-			'server.js',
-		);
-		if (!existsSync(proxyScript)) {
-			console.error(
-				'[context-memory] Proxy script not found, cannot auto-spawn',
-			);
-			return null;
-		}
-
-		// Resolve bun path
-		let bunPath = 'bun';
-		try {
-			const { execSync } = await import('node:child_process');
-			bunPath = execSync('which bun', {
-				encoding: 'utf-8',
-				timeout: 3000,
-				stdio: ['ignore', 'pipe', 'ignore'],
-			}).trim();
-		} catch {
-			/* use default */
-		}
-
-		const { spawn: spawnProcess } = await import('node:child_process');
-		const child = spawnProcess(
-			bunPath,
-			[
-				'run',
-				proxyScript,
-				'--port',
-				'18910',
-				'--control-port',
-				String(controlPort),
-			],
-			{
-				detached: process.platform !== 'win32',
-				stdio: ['ignore', 'ignore', 'ignore'],
-				env: { ...process.env },
-				windowsHide: true,
-			},
-		);
-		child.unref();
-
-		const pid = child.pid;
-		if (!pid) {
-			console.error('[context-memory] Failed to spawn proxy (no PID)');
-			return null;
-		}
-
-		// Track PID for cleanup on Stop
-		const sessionHash = projectCwd ? shortHash(projectCwd) : 'global';
-		const sessionsDir = join(
-			homedir(),
-			'.claude',
-			'oh-my-claude',
-			'sessions',
-			sessionHash,
-		);
-		mkdirSync(sessionsDir, { recursive: true });
-		writeFileSync(
-			join(sessionsDir, 'auto-proxy.json'),
-			JSON.stringify({
-				pid,
-				autoSpawned: true,
-				startedAt: new Date().toISOString(),
-			}),
-			'utf-8',
-		);
-
-		// Wait for proxy to become healthy (up to 3s)
-		for (let i = 0; i < 15; i++) {
-			await new Promise((resolve) => setTimeout(resolve, 200));
-			if (await isProxyHealthy(controlPort)) {
-				console.error(
-					`[context-memory] Auto-spawned proxy (PID ${pid}) on port ${controlPort}`,
-				);
-				return controlPort;
-			}
-		}
-
-		console.error(
-			'[context-memory] Auto-spawned proxy but health check timed out',
-		);
-		return null;
-	} catch (error) {
-		console.error('[context-memory] Failed to auto-spawn proxy:', error);
-		return null;
-	}
-}
-
-/**
- * Kill the auto-spawned proxy on session end.
- */
-function cleanupAutoProxy(projectCwd?: string): void {
-	try {
-		const sessionHash = projectCwd ? shortHash(projectCwd) : 'global';
-		const autoProxyFile = join(
-			homedir(),
-			'.claude',
-			'oh-my-claude',
-			'sessions',
-			sessionHash,
-			'auto-proxy.json',
-		);
-		if (!existsSync(autoProxyFile)) return;
-
-		const data = JSON.parse(readFileSync(autoProxyFile, 'utf-8')) as {
-			pid?: number;
-			autoSpawned?: boolean;
-		};
-
-		if (data.autoSpawned && data.pid) {
-			try {
-				process.kill(data.pid, 'SIGTERM');
-				console.error(
-					`[context-memory] Killed auto-spawned proxy (PID ${data.pid})`,
-				);
-			} catch {
-				// Already dead
-			}
-		}
-
-		// Clean up the tracking file
-		const { unlinkSync } = require('node:fs') as typeof import('node:fs');
-		unlinkSync(autoProxyFile);
-	} catch {
-		// Best-effort
-	}
-}
+// getControlPort, isProxyHealthy, ensureProxy, cleanupAutoProxy are imported from ../../memory/hooks
 
 /**
  * Call the proxy's /internal/complete endpoint for memory AI operations.
@@ -292,9 +130,6 @@ async function callMemoryAI(
 }
 
 // ---- Constants ----
-
-const DEFAULT_SESSION_LOG_THRESHOLD_KB = 40;
-const STATE_DIR = join(homedir(), '.claude', 'oh-my-claude', 'state');
 
 const CHECKPOINT_PROMPT = `You are a session summarizer. Extract KEY LEARNINGS from this coding session.
 
@@ -392,189 +227,16 @@ function parseStructuredResponse(text: string): StructuredResponse {
 	return result;
 }
 
-// ---- Helpers: project-scoped paths ----
-
-function shortHash(str: string): string {
-	return createHash('sha256').update(str).digest('hex').slice(0, 8);
-}
-
-function getStateFile(projectCwd?: string): string {
-	const suffix = projectCwd ? `-${shortHash(projectCwd)}` : '';
-	return join(STATE_DIR, `context-memory-state${suffix}.json`);
-}
-
-function getSessionLogPath(projectCwd?: string): string {
-	const suffix = projectCwd ? `-${shortHash(projectCwd)}` : '';
-	return join(
-		homedir(),
-		'.claude',
-		'oh-my-claude',
-		'memory',
-		'sessions',
-		`active-session${suffix}.jsonl`,
-	);
-}
-
-// ---- State management ----
-
-interface ContextMemoryState {
-	lastSaveTimestamp: string | null;
-	lastSaveLogSizeKB: number | null;
-	saveCount: number;
-}
-
-function loadState(projectCwd?: string): ContextMemoryState {
-	try {
-		const stateFile = getStateFile(projectCwd);
-		if (existsSync(stateFile)) {
-			const raw = readFileSync(stateFile, 'utf-8');
-			return JSON.parse(raw);
-		}
-	} catch {
-		// Ignore
-	}
-	return { lastSaveTimestamp: null, lastSaveLogSizeKB: null, saveCount: 0 };
-}
-
-function saveState(state: ContextMemoryState, projectCwd?: string): void {
-	try {
-		mkdirSync(STATE_DIR, { recursive: true });
-		writeFileSync(
-			getStateFile(projectCwd),
-			JSON.stringify(state, null, 2),
-			'utf-8',
-		);
-	} catch {
-		// Ignore
-	}
-}
-
-// ---- Config ----
-
-function loadHookConfig(): { threshold: number } {
-	const configPath = join(homedir(), '.claude', 'oh-my-claude.json');
-	try {
-		if (existsSync(configPath)) {
-			const raw = readFileSync(configPath, 'utf-8');
-			const config = JSON.parse(raw);
-			return {
-				threshold:
-					config.memory?.autoSaveThreshold === 0
-						? 0
-						: Math.round(
-								(config.memory?.autoSaveThreshold ?? 75) * 1.33,
-							),
-			};
-		}
-	} catch {
-		// Ignore config errors
-	}
-	return {
-		threshold: DEFAULT_SESSION_LOG_THRESHOLD_KB,
-	};
-}
-
-// ---- Session log operations ----
-
-function getSessionLogSizeKB(projectCwd?: string): number {
-	try {
-		const logPath = getSessionLogPath(projectCwd);
-		if (!existsSync(logPath)) return 0;
-		const stats = statSync(logPath);
-		return Math.round(stats.size / 1024);
-	} catch {
-		return 0;
-	}
-}
-
-function readSessionLog(projectCwd?: string): string {
-	try {
-		const logPath = getSessionLogPath(projectCwd);
-		if (!existsSync(logPath)) return '';
-		const raw = readFileSync(logPath, 'utf-8').trim();
-		if (!raw) return '';
-
-		const lines = raw.split('\n').filter(Boolean);
-		const observations: string[] = [];
-
-		for (const line of lines) {
-			try {
-				const obs = JSON.parse(line) as {
-					ts: string;
-					tool: string;
-					summary: string;
-				};
-				const time = obs.ts.slice(11, 19);
-				observations.push(`  [${time}] ${obs.tool}: ${obs.summary}`);
-			} catch {
-				// Skip
-			}
-		}
-
-		const joined = observations.join('\n');
-		return joined.length > 8000 ? '...\n' + joined.slice(-8000) : joined;
-	} catch {
-		return '';
-	}
-}
-
-/** Clear session log after session end (project-scoped) */
-function clearSessionLog(projectCwd?: string): void {
-	try {
-		const logPath = getSessionLogPath(projectCwd);
-		if (existsSync(logPath)) {
-			writeFileSync(logPath, '', 'utf-8');
-		}
-	} catch {
-		// Ignore
-	}
-}
-
-// ---- Provider operations (now routed through proxy) ----
-// All AI calls go through the proxy's /internal/complete endpoint.
-// See callMemoryAI() above and ensureProxy() for auto-spawn logic.
+// ---- Helpers, state, config, session log ops ----
+// Imported from ../../memory/hooks: shortHash, loadState, saveState,
+// loadHookConfig, getSessionLogSizeKB, readSessionLog, clearSessionLog
 
 // ---- Memory save ----
 
-/**
- * Find git root from a directory (walks up looking for .git).
- */
-function findGitRoot(fromDir: string): string | null {
-	let dir = fromDir;
-	while (true) {
-		if (existsSync(join(dir, '.git'))) {
-			return dir;
-		}
-		const parent = join(dir, '..');
-		if (parent === dir) break;
-		dir = parent;
-	}
-	return null;
-}
-
-/**
- * Resolve canonical (non-worktree) repo root.
- * In a worktree, .git is a file with "gitdir: ..." pointing to the main repo.
- */
+// findGitRoot and resolveCanonicalRoot are imported from ../../memory/hooks
+// context-memory variant never returns null — use resolveCanonicalRootBase with fallback
 function resolveCanonicalRoot(projectRoot: string): string {
-	const gitPath = join(projectRoot, '.git');
-	try {
-		const stat = statSync(gitPath);
-		if (stat.isDirectory()) return projectRoot; // Already canonical
-
-		const content = readFileSync(gitPath, 'utf-8').trim();
-		const match = content.match(/^gitdir:\s*(.+)$/);
-		if (!match) return projectRoot;
-
-		const gitdir = match[1]!.trim();
-		const normalized = gitdir.replace(/\\/g, '/');
-		const worktreesIdx = normalized.indexOf('/.git/worktrees/');
-		if (worktreesIdx === -1) return projectRoot;
-
-		return gitdir.slice(0, worktreesIdx);
-	} catch {
-		return projectRoot;
-	}
+	return resolveCanonicalRootBase(projectRoot) ?? projectRoot;
 }
 
 function saveSessionMemory(

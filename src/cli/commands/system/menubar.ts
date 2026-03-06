@@ -83,6 +83,7 @@ export function registerMenubarCommand(program: Command) {
           execSync("bun run tauri build", {
             cwd: menubarDir,
             stdio: "inherit",
+            env: { ...process.env, CI: "" },
           });
 
           // Copy built binary to builds/ so the installer picks it up

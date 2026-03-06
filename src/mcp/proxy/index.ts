@@ -3,8 +3,6 @@ import { controlUrl } from './utils';
 import { loadConfig, isProviderConfigured } from '../../shared/config';
 import type { ProxySwitchState } from '../../proxy/state/types';
 
-export { proxyToolSchemas } from './schemas';
-
 export async function handleProxyTool(
 	name: string,
 	args: Record<string, unknown>,
