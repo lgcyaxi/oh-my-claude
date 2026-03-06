@@ -86,10 +86,10 @@ export async function handleMessages(
 
 			if (provider) {
 				// Use request model if specified, otherwise get first model from provider
-				const model =
+				const model: string =
 					requestModel ||
 					providerModelSets.get(provider)?.values().next().value ||
-					requestModel;
+					'unknown';
 
 				console.error(
 					`[proxy #${reqId}]${sessionTag} Auto-routing: ${requestModel} → ${provider}/${model}`,

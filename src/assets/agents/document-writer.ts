@@ -149,7 +149,7 @@ export const documentWriterAgent: AgentDefinition = {
 	description:
 		'Technical documentation agent. README, API docs, architecture docs, and user-guide writing.',
 	prompt: DOCUMENT_WRITER_PROMPT,
-	defaultProvider: 'minimax',
+	defaultProvider: 'minimax-cn',
 	defaultModel: 'MiniMax-M2.5',
 	defaultTemperature: 0.5,
 	executionMode: 'task',

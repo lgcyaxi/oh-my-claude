@@ -106,7 +106,7 @@ export function MemoryModelPicker({ controlPort }: MemoryModelPickerProps) {
 				{currentDisplay}
 			</div>
 
-			<div className='space-y-1 max-h-40 overflow-y-auto'>
+			<div className='space-y-0.5 max-h-60 overflow-y-auto'>
 				{/* Auto option */}
 				<button
 					onClick={handleReset}
@@ -119,30 +119,32 @@ export function MemoryModelPicker({ controlPort }: MemoryModelPickerProps) {
 					Auto (passthrough)
 				</button>
 
-				{/* Provider/model options */}
-				{providers.map((p) =>
-					p.models.slice(0, 3).map((m) => {
-						const isActive =
-							config?.provider === p.name &&
-							config?.model === m.id;
-						return (
-							<button
-								key={`${p.name}/${m.id}`}
-								onClick={() => handleSelect(p.name, m.id)}
-								disabled={updating || isActive}
-								className={`w-full text-left text-[11px] px-2 py-1 rounded transition-colors ${
-									isActive
-										? 'bg-blue-500/20 text-blue-300'
-										: 'text-gray-400 hover:bg-white/5 hover:text-gray-300'
-								} disabled:opacity-50`}>
-								{m.label || m.id}
-								<span className='text-gray-600 ml-1'>
-									({p.name})
-								</span>
-							</button>
-						);
-					}),
-				)}
+				{/* Provider groups with headers */}
+				{providers.map((p) => (
+					<div key={p.name}>
+						<div className='text-[9px] uppercase tracking-wider text-gray-600 mt-1.5 mb-0.5 px-2'>
+							{p.name}
+						</div>
+						{p.models.map((m) => {
+							const isActive =
+								config?.provider === p.name &&
+								config?.model === m.id;
+							return (
+								<button
+									key={`${p.name}/${m.id}`}
+									onClick={() => handleSelect(p.name, m.id)}
+									disabled={updating || isActive}
+									className={`w-full text-left text-[11px] px-2 py-1 rounded transition-colors ${
+										isActive
+											? 'bg-blue-500/20 text-blue-300'
+											: 'text-gray-400 hover:bg-white/5 hover:text-gray-300'
+									} disabled:opacity-50`}>
+									{m.label || m.id}
+								</button>
+							);
+						})}
+					</div>
+				))}
 			</div>
 		</div>
 	);

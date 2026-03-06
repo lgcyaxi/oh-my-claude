@@ -311,7 +311,7 @@ export async function launchInlineSession(options: {
 		const bridgeDown = bridgeMode
 			? '; oh-my-claude bridge down all 2>/dev/null'
 			: '';
-		const shellCmd = `${envPrefix} ${claudeCmd}${bridgeDown}`;
+		const shellCmd = `unset CLAUDECODE; ${envPrefix} ${claudeCmd}${bridgeDown}`;
 
 		const result = spawnSync(
 			'tmux',
@@ -352,16 +352,18 @@ export async function launchInlineSession(options: {
 		console.log(dim(`  Shell: ${shell}, isBridgeWorker=${isBridgeWorker}`));
 	}
 
+	const env = {
+		...process.env,
+		ANTHROPIC_BASE_URL: baseUrl,
+		OMC_PROXY_CONTROL_PORT: String(ports.controlPort),
+		...(debug ? { OMC_DEBUG: '1' } : {}),
+		...(bridgeMode ? { OMC_BRIDGE_MODE: '1' } : {}),
+	};
+	delete env.CLAUDECODE;
+
 	const result = spawnSync('claude', claudeArgs, {
 		stdio: 'inherit',
-		env: {
-			...process.env,
-			ANTHROPIC_BASE_URL: baseUrl,
-			OMC_PROXY_CONTROL_PORT: String(ports.controlPort),
-			...(debug ? { OMC_DEBUG: '1' } : {}),
-			...(bridgeMode ? { OMC_BRIDGE_MODE: '1' } : {}),
-			...(isBridgeWorker ? { CLAUDECODE: undefined } : {}),
-		},
+		env,
 		shell,
 	});
 

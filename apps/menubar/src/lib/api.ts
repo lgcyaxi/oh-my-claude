@@ -106,56 +106,27 @@ export interface MemoryModelConfig {
 	source: 'runtime' | 'config' | 'auto';
 }
 
-/** Get current memory model configuration from proxy */
+/** Get current memory model configuration from proxy (via Tauri IPC) */
 export async function getMemoryModelConfig(
 	controlPort: number,
 ): Promise<MemoryModelConfig> {
-	const resp = await fetch(
-		`http://localhost:${controlPort}/internal/memory-config`,
-		{
-			signal: AbortSignal.timeout(3000),
-		},
-	);
-	if (!resp.ok)
-		throw new Error(`Failed to get memory config: ${resp.status}`);
-	return resp.json();
+	return invoke('get_memory_config', { controlPort });
 }
 
-/** Set memory model override at runtime */
+/** Set memory model override at runtime (via Tauri IPC) */
 export async function setMemoryModel(
 	controlPort: number,
 	provider: string,
 	model: string,
 ): Promise<MemoryModelConfig> {
-	const resp = await fetch(
-		`http://localhost:${controlPort}/internal/memory-config`,
-		{
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ provider, model }),
-			signal: AbortSignal.timeout(3000),
-		},
-	);
-	if (!resp.ok) throw new Error(`Failed to set memory model: ${resp.status}`);
-	return resp.json();
+	return invoke('set_memory_config', { controlPort, provider, model });
 }
 
-/** Reset memory model to auto (use config file default or passthrough) */
+/** Reset memory model to auto (use config file default or passthrough, via Tauri IPC) */
 export async function resetMemoryModel(
 	controlPort: number,
 ): Promise<MemoryModelConfig> {
-	const resp = await fetch(
-		`http://localhost:${controlPort}/internal/memory-config`,
-		{
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({}),
-			signal: AbortSignal.timeout(3000),
-		},
-	);
-	if (!resp.ok)
-		throw new Error(`Failed to reset memory model: ${resp.status}`);
-	return resp.json();
+	return invoke('reset_memory_config', { controlPort });
 }
 
 /**

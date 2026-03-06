@@ -1,7 +1,7 @@
 use std::fs;
 use crate::proxy_client::ProxyClient;
 use crate::registry::read_registry;
-use crate::types::{ModelInfo, ProviderInfo, SessionInfo, SwitchResponse};
+use crate::types::{MemoryModelConfig, ModelInfo, ProviderInfo, SessionInfo, SwitchResponse};
 
 /// List all active sessions with live status from their control APIs
 #[tauri::command]
@@ -78,6 +78,31 @@ pub async fn revert_model(
 ) -> Result<SwitchResponse, String> {
     let client = ProxyClient::new();
     client.revert_model(control_port, &session_id).await
+}
+
+/// Get memory model configuration from proxy
+#[tauri::command]
+pub async fn get_memory_config(control_port: u16) -> Result<MemoryModelConfig, String> {
+    let client = ProxyClient::new();
+    client.get_memory_config(control_port).await
+}
+
+/// Set memory model to a specific provider/model
+#[tauri::command]
+pub async fn set_memory_config(
+    control_port: u16,
+    provider: String,
+    model: String,
+) -> Result<MemoryModelConfig, String> {
+    let client = ProxyClient::new();
+    client.set_memory_config(control_port, Some(&provider), Some(&model)).await
+}
+
+/// Reset memory model to auto (passthrough)
+#[tauri::command]
+pub async fn reset_memory_config(control_port: u16) -> Result<MemoryModelConfig, String> {
+    let client = ProxyClient::new();
+    client.set_memory_config(control_port, None, None).await
 }
 
 /// Get available providers and their models

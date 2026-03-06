@@ -6,8 +6,9 @@ All notable changes to oh-my-claude are documented here.
 
 ### Highlights
 
-- **Model-Driven Auto-Routing** — Non-Claude model IDs (e.g. `qwen3.5-plus`) in requests auto-route to correct provider. New Priority 2 routing via `resolveModelToProvider()` with reverse model→provider registry
-- **Agent Architecture Overhaul** — Bridge agents converted to native with auto-routing via `model` field in agent YAML. All 11 agents now unified in `taskAgents`/`nativeAgents`; `bridgeAgents` deprecated
+- **Route Directive Auto-Routing** — Agent generator embeds `[omc-route:provider/model]` in agent prompt text. Proxy Priority 1 extracts directive from system prompt and routes to correct provider. Solves the problem of Claude Code not passing YAML `model` field to API body
+- **Agent Architecture Overhaul** — All bridge agents converted to native with route directives: analyst→aliyun/qwen3.5-plus, librarian→zhipu/glm-5, document-writer→minimax/MiniMax-M2.5, navigator/hephaestus→kimi/kimi-for-coding, oracle→anthropic passthrough. `bridgeAgents` deprecated; all 11 agents unified in `taskAgents`/`nativeAgents`
+- **5-Priority Proxy Routing** — directive(1) → model-driven(2) → session(3) → global(4) → passthrough(5)
 - **Proxy Domain Restructure** — `src/proxy/` reorganized into `handlers/`, `routing/`, `state/`, `streaming/` subdirectories
 - **MCP Register Pattern** — Tool definitions use inline `register()` calls instead of centralized schemas
 - **Memory Categories** — Structured category system with menubar picker
@@ -271,6 +272,7 @@ All notable changes to oh-my-claude are documented here.
 
 | Version | Date | Type | Summary |
 |---------|------|------|---------|
+| v2.1.3-beta.43 | 2026-03-05 | Beta | Route directive auto-routing, agent architecture overhaul (bridge→native), 5-priority proxy routing, proxy domain restructure |
 | v2.1.3-beta.41 | 2026-03-05 | Beta | Bridge bus server, worker auto-switching, pane liveness, statusline fixes, TS fixes |
 | v2.1.3-beta.39 | 2026-03-04 | Beta | Bridge stability, installer cleanup, build fixes, proxy pre-switch, config corrections |
 | v2.1.0-beta.1 | 2026-02-18 | Beta | Kimi proxy fix - strip unsupported tool_reference content blocks from full-compat providers |

@@ -140,7 +140,7 @@ export function launchInTmux(
   ];
   const bridgeDown = bridgeMode ? "; oh-my-claude bridge down all 2>/dev/null" : "";
   const killProxy = proxyPid ? `; kill ${proxyPid} 2>/dev/null${bridgeDown}` : bridgeDown;
-  const shellCmd = `cd '${escapedCwd}' && ${envParts.join(" ")} claude${claudeArgsStr}${killProxy}`;
+  const shellCmd = `cd '${escapedCwd}' && unset CLAUDECODE && ${envParts.join(" ")} claude${claudeArgsStr}${killProxy}`;
   const escapedShellCmd = shellCmd.replace(/'/g, "'\\''");
 
   try {

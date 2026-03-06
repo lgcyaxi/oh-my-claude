@@ -56,12 +56,6 @@ export function generateAgentMarkdown(agent: AgentDefinition): string {
 	// YAML frontmatter (required by Claude Code)
 	lines.push('---');
 	lines.push(`name: ${agent.name.toLowerCase()}`);
-
-	// Emit model field for non-Claude agents to trigger proxy auto-routing
-	if (agent.defaultModel && !agent.defaultModel.startsWith('claude-')) {
-		lines.push(`model: ${agent.defaultModel}`);
-	}
-
 	lines.push(`description: ${escapeYamlString(agent.description)}`);
 
 	if (isBridgeAgent) {
@@ -105,6 +99,20 @@ Delegate to the \`${workerName}\` bridge worker using \`mcp__oh-my-claude__bridg
 `;
 		lines.push(bridgePrefix + agent.prompt);
 	} else {
+		// Embed route directive for non-Claude agents — the proxy extracts
+		// [omc-route:provider/model] from the system prompt to auto-route
+		// requests to the correct external provider.
+		if (
+			agent.defaultProvider &&
+			agent.defaultModel &&
+			!agent.defaultModel.startsWith('claude-')
+		) {
+			lines.push(
+				`[omc-route:${agent.defaultProvider}/${agent.defaultModel}]`,
+			);
+			lines.push('');
+		}
+
 		// The actual prompt content
 		lines.push(agent.prompt);
 	}

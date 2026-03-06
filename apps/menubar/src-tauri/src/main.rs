@@ -24,6 +24,9 @@ fn main() {
             commands::revert_model,
             commands::get_providers,
             commands::discover_ollama_models,
+            commands::get_memory_config,
+            commands::set_memory_config,
+            commands::reset_memory_config,
         ])
         .setup(|app| {
             // Hide from Dock on macOS — this is a menubar-only app

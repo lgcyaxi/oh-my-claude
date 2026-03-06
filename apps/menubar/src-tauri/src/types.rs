@@ -87,3 +87,20 @@ pub struct ModelInfo {
     pub id: String,
     pub label: String,
 }
+
+/// Memory model configuration from /internal/memory-config
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryModelConfig {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub source: String,
+}
+
+/// Body for POST /internal/memory-config
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetMemoryModelRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
