@@ -1,5 +1,15 @@
 /**
  * Proxy module barrel export
+ *
+ * Subdirectory structure:
+ *   state/      — session + switch state management
+ *   auth/       — authentication + usage tracking
+ *   routing/    — model resolution, route directives, provider forwarding
+ *   response/   — response builders, cache, streaming
+ *   converters/ — Anthropic ↔ OpenAI/Responses format conversion
+ *   handlers/   — request handlers (passthrough, switched, directive, etc.)
+ *   control/    — control API endpoints (health, switch, providers, etc.)
+ *   sanitizers/ — request body sanitization
  */
 
 export type {
@@ -7,19 +17,19 @@ export type {
   ProxyConfig,
   ProxyAuthConfig,
   ForwardOptions,
-} from "./types";
+} from "./state/types";
 
 export {
   DEFAULT_PROXY_CONFIG,
   DEFAULT_SWITCH_STATE,
-} from "./types";
+} from "./state/types";
 
 export {
   readSwitchState,
   writeSwitchState,
   resetSwitchState,
   getSwitchStatePath,
-} from "./state";
+} from "./state/switch";
 
 export {
   readAuthConfig,
@@ -30,7 +40,7 @@ export {
   getAuthConfigPath,
   generateProxyToken,
   validateProxyToken,
-} from "./auth";
+} from "./auth/auth";
 
 export {
   startDaemon,

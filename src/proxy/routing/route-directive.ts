@@ -17,15 +17,16 @@
 
 /** Result of extracting a route directive */
 export interface RouteDirective {
-  provider: string;
-  model: string;
+	provider: string;
+	model: string;
 }
 
 /**
  * Pattern matching `[omc-route:provider/model]` in text.
  * Provider and model can contain alphanumeric chars, dots, hyphens, and underscores.
  */
-const ROUTE_DIRECTIVE_PATTERN = /\[omc-route:([a-zA-Z0-9_-]+)\/([a-zA-Z0-9._-]+)\]/;
+const ROUTE_DIRECTIVE_PATTERN =
+	/\[omc-route:([a-zA-Z0-9_-]+)\/([a-zA-Z0-9._-]+)\]/;
 
 /**
  * Extract a route directive from a request body.
@@ -37,36 +38,42 @@ const ROUTE_DIRECTIVE_PATTERN = /\[omc-route:([a-zA-Z0-9_-]+)\/([a-zA-Z0-9._-]+)
  * @param body - Parsed JSON request body
  * @returns The extracted directive, or null if none found
  */
-export function extractRouteDirective(body: Record<string, unknown>): RouteDirective | null {
-  const system = body.system;
-  if (!system) return null;
+export function extractRouteDirective(
+	body: Record<string, unknown>,
+): RouteDirective | null {
+	const system = body.system;
+	if (!system) return null;
 
-  // System field can be a string or array of content blocks
-  let systemText: string;
+	// System field can be a string or array of content blocks
+	let systemText: string;
 
-  if (typeof system === "string") {
-    systemText = system;
-  } else if (Array.isArray(system)) {
-    // Extract text from content blocks: [{ type: "text", text: "..." }, ...]
-    const parts: string[] = [];
-    for (const block of system) {
-      if (block && typeof block === "object" && (block as Record<string, unknown>).type === "text") {
-        const text = (block as Record<string, unknown>).text;
-        if (typeof text === "string") {
-          parts.push(text);
-        }
-      }
-    }
-    systemText = parts.join("\n");
-  } else {
-    return null;
-  }
+	if (typeof system === 'string') {
+		systemText = system;
+	} else if (Array.isArray(system)) {
+		// Extract text from content blocks: [{ type: "text", text: "..." }, ...]
+		const parts: string[] = [];
+		for (const block of system) {
+			if (
+				block &&
+				typeof block === 'object' &&
+				(block as Record<string, unknown>).type === 'text'
+			) {
+				const text = (block as Record<string, unknown>).text;
+				if (typeof text === 'string') {
+					parts.push(text);
+				}
+			}
+		}
+		systemText = parts.join('\n');
+	} else {
+		return null;
+	}
 
-  const match = systemText.match(ROUTE_DIRECTIVE_PATTERN);
-  if (!match) return null;
+	const match = systemText.match(ROUTE_DIRECTIVE_PATTERN);
+	if (!match) return null;
 
-  return {
-    provider: match[1]!,
-    model: match[2]!,
-  };
+	return {
+		provider: match[1]!,
+		model: match[2]!,
+	};
 }

@@ -23,18 +23,19 @@ import {
 	handleMessages,
 	handleOtherRequest,
 	handleModelsRequest,
-} from './handler';
-import { handleControl, registerShutdown } from './control';
-import { readSwitchState, resetSwitchState, writeSwitchState } from './state';
+} from './handlers';
+import { handleControl } from './control';
+import { registerShutdown } from './control/switch';
+import { readSwitchState, resetSwitchState, writeSwitchState } from './state/switch';
 import {
 	parseSessionFromPath,
 	cleanupStaleSessions,
 	getCleanupIntervalMs,
 	setDefaultSwitchState,
 	getDefaultSwitchState,
-} from './session';
-import { initializeAuth } from './auth';
-import { DEFAULT_PROXY_CONFIG } from './types';
+} from './state/session';
+import { initializeAuth } from './auth/auth';
+import { DEFAULT_PROXY_CONFIG } from './state/types';
 import { resolveProviderName } from '../shared/providers/aliases';
 
 interface ParsedArgs {

@@ -12,9 +12,9 @@ import type {
 	StyleConfig,
 } from './types';
 import { wrapBrackets, applyColor } from './index';
-import { readSwitchState } from '../../proxy/state';
-import type { ProxySwitchState } from '../../proxy/types';
-import { DEFAULT_PROXY_CONFIG } from '../../proxy/types';
+import { readSwitchState } from '../../proxy/state/switch';
+import type { ProxySwitchState } from '../../proxy/state/types';
+import { DEFAULT_PROXY_CONFIG } from '../../proxy/state/types';
 
 /**
  * Get the control port from environment variable OMC_PROXY_CONTROL_PORT,

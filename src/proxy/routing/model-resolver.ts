@@ -6,14 +6,16 @@
  * (e.g., `/model qwen3-coder-next` when switched to Aliyun).
  */
 
-import modelsRegistry from "../shared/config/models-registry.json";
+import modelsRegistry from '../../shared/config/models-registry.json';
 
 /** Build a set of valid model IDs per provider from the registry (cached) */
 export const providerModelSets = new Map<string, Set<string>>();
 for (const p of modelsRegistry.providers) {
-  // Use realId (upstream model ID) when present, else id
-  const models = new Set(p.models.map((m: { id: string; realId?: string }) => m.realId ?? m.id));
-  providerModelSets.set(p.name, models);
+	// Use realId (upstream model ID) when present, else id
+	const models = new Set(
+		p.models.map((m: { id: string; realId?: string }) => m.realId ?? m.id),
+	);
+	providerModelSets.set(p.name, models);
 }
 
 /**
@@ -27,27 +29,26 @@ for (const p of modelsRegistry.providers) {
  * Otherwise, fall back to the switch state's default model.
  */
 export function resolveEffectiveModel(
-  requestModel: string | undefined,
-  switchModel: string,
-  provider: string,
+	requestModel: string | undefined,
+	switchModel: string,
+	provider: string,
 ): string {
-  if (!requestModel || requestModel === switchModel) return switchModel;
+	if (!requestModel || requestModel === switchModel) return switchModel;
 
-  // Claude Code sends Anthropic model IDs (e.g. "claude-sonnet-4-5-20241022")
-  // when no /model override is active. These are never valid for external providers.
-  if (requestModel.startsWith("claude-")) return switchModel;
+	// Claude Code sends Anthropic model IDs (e.g. "claude-sonnet-4-5-20241022")
+	// when no /model override is active. These are never valid for external providers.
+	if (requestModel.startsWith('claude-')) return switchModel;
 
-  const validModels = providerModelSets.get(provider);
+	const validModels = providerModelSets.get(provider);
 
-  // Empty model set (e.g. Ollama) — allow any non-Claude model via /model switching
-  if (validModels && validModels.size === 0) {
-    return requestModel;
-  }
+	// Empty model set (e.g. Ollama) — allow any non-Claude model via /model switching
+	if (validModels && validModels.size === 0) {
+		return requestModel;
+	}
 
-  if (validModels?.has(requestModel)) {
-    return requestModel;
-  }
+	if (validModels?.has(requestModel)) {
+		return requestModel;
+	}
 
-  return switchModel;
+	return switchModel;
 }
-
