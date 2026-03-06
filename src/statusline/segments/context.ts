@@ -17,21 +17,40 @@ import type {
 } from './types';
 import { wrapBrackets, applyColor } from './index';
 
-// Context window sizes for different models (in tokens)
+// Context window sizes for different models (in tokens).
+// Matching is substring-based (modelId.toLowerCase().includes(pattern)),
+// so more specific patterns must come before broader ones.
 const CONTEXT_WINDOWS: Record<string, number> = {
-	// Claude 4.5 models
-	'claude-opus-4-5': 200000,
-	'claude-sonnet-4-5': 200000,
-	'claude-haiku-4-5': 200000,
-	// Claude 3.x models
-	'claude-3-opus': 200000,
-	'claude-3-sonnet': 200000,
-	'claude-3-haiku': 200000,
-	// Other providers
-	'glm-4': 128000,
-	qwen: 256000,
-	// Default
-	default: 200000,
+	// Claude 4.6
+	'claude-opus-4-6': 200_000,
+	'claude-sonnet-4-6': 200_000,
+	// Claude 4.5
+	'claude-opus-4-5': 200_000,
+	'claude-sonnet-4-5': 200_000,
+	'claude-haiku-4-5': 200_000,
+	// Claude 3.x
+	'claude-3-opus': 200_000,
+	'claude-3-sonnet': 200_000,
+	'claude-3-haiku': 200_000,
+	// DeepSeek (deepseek-chat V3, deepseek-reasoner)
+	deepseek: 128_000,
+	// ZhiPu GLM (glm-5 before glm-4 — specificity)
+	'glm-5': 200_000,
+	'glm-4': 128_000,
+	// MiniMax
+	minimax: 204_800,
+	// Kimi (kimi-for-coding, kimi-k2.5)
+	kimi: 256_000,
+	// Qwen (specific before broad)
+	'qwen3.5': 1_000_000,
+	'qwen3-coder': 128_000,
+	'qwen3-max': 128_000,
+	// OpenAI (specific before broad)
+	'gpt-5.3-codex': 200_000,
+	'gpt-5': 128_000,
+	'o3-mini': 200_000,
+	// Default fallback
+	default: 200_000,
 };
 
 /**
