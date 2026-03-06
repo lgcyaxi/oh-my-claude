@@ -86,6 +86,7 @@ const MEMORY_PROVIDER_SHORT: Record<string, string> = {
 
 /**
  * Fetch current memory model config from proxy (cached, best-effort).
+ * Uses resolvedProvider which is always populated (even in auto mode).
  */
 async function fetchMemoryModelLabel(): Promise<string | null> {
 	try {
@@ -100,10 +101,12 @@ async function fetchMemoryModelLabel(): Promise<string | null> {
 		if (!resp.ok) return null;
 		const data = (await resp.json()) as {
 			provider: string | null;
+			resolvedProvider?: string;
 			source: string;
 		};
-		if (!data.provider || data.source === 'auto') return null;
-		return MEMORY_PROVIDER_SHORT[data.provider] ?? data.provider;
+		const provider = data.resolvedProvider ?? data.provider;
+		if (!provider) return null;
+		return MEMORY_PROVIDER_SHORT[provider] ?? provider;
 	} catch {
 		return null;
 	}

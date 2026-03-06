@@ -54,6 +54,7 @@ export async function handleMemoryConfig(
 function handleMemoryConfigGet(corsHeaders: Record<string, string>): Response {
 	const config = loadConfig();
 	const memCfg = config.memory;
+	const resolved = resolveMemoryProvider();
 
 	if (runtimeMemoryModel.provider) {
 		return jsonResponse(
@@ -61,6 +62,8 @@ function handleMemoryConfigGet(corsHeaders: Record<string, string>): Response {
 				provider: runtimeMemoryModel.provider,
 				model: runtimeMemoryModel.model,
 				source: 'runtime' as const,
+				resolvedProvider: resolved.provider,
+				resolvedModel: resolved.model,
 			},
 			200,
 			corsHeaders,
@@ -73,6 +76,8 @@ function handleMemoryConfigGet(corsHeaders: Record<string, string>): Response {
 				provider: memCfg.aiProvider,
 				model: memCfg.aiModel ?? null,
 				source: 'config' as const,
+				resolvedProvider: resolved.provider,
+				resolvedModel: resolved.model,
 			},
 			200,
 			corsHeaders,
@@ -84,6 +89,8 @@ function handleMemoryConfigGet(corsHeaders: Record<string, string>): Response {
 			provider: null,
 			model: null,
 			source: 'auto' as const,
+			resolvedProvider: resolved.provider,
+			resolvedModel: resolved.model,
 		},
 		200,
 		corsHeaders,
@@ -107,8 +114,9 @@ async function handleMemoryConfigPost(
 	runtimeMemoryModel = { provider, model };
 
 	const source = provider ? 'runtime' : 'auto';
+	const resolved = resolveMemoryProvider();
 	console.log(
-		`[control] Memory model ${provider ? `set to ${provider}/${model}` : 'reset to auto'}`,
+		`[control] Memory model ${provider ? `set to ${provider}/${model}` : 'reset to auto'} (resolved: ${resolved.provider}/${resolved.model})`,
 	);
 
 	return jsonResponse(
@@ -116,6 +124,8 @@ async function handleMemoryConfigPost(
 			provider,
 			model,
 			source,
+			resolvedProvider: resolved.provider,
+			resolvedModel: resolved.model,
 			message: provider
 				? `Memory model set to ${provider}/${model}`
 				: 'Memory model reset to auto',

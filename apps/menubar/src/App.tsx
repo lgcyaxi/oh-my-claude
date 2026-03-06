@@ -1,11 +1,20 @@
+import { useState, useEffect } from 'react';
 import { useSessions } from './hooks/useSessions';
 import { useSwitch } from './hooks/useSwitch';
 import { SessionList } from './components/SessionList';
 import { MemoryModelPicker } from './components/MemoryModelPicker';
+import { getVersion } from './lib/api';
 
 function App() {
 	const { sessions, loading, refresh } = useSessions(2000);
 	const { doSwitch, doRevert, switching } = useSwitch(refresh);
+	const [version, setVersion] = useState<string>('');
+
+	useEffect(() => {
+		getVersion()
+			.then(setVersion)
+			.catch(() => {});
+	}, []);
 
 	return (
 		<div className='h-screen flex flex-col'>
@@ -14,6 +23,11 @@ function App() {
 				<div>
 					<h1 className='text-sm font-semibold text-gray-100'>
 						oh-my-claude
+						{version && (
+							<span className='ml-1.5 text-[10px] font-normal text-gray-500'>
+								{version}
+							</span>
+						)}
 					</h1>
 					<p className='text-[10px] text-gray-500 mt-0.5'>
 						{sessions.length} session

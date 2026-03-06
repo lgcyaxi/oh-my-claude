@@ -90,10 +90,13 @@ pub struct ModelInfo {
 
 /// Memory model configuration from /internal/memory-config
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MemoryModelConfig {
     pub provider: Option<String>,
     pub model: Option<String>,
     pub source: String,
+    pub resolved_provider: Option<String>,
+    pub resolved_model: Option<String>,
 }
 
 /// Body for POST /internal/memory-config

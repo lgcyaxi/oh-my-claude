@@ -36,6 +36,11 @@ export interface SwitchResponse {
 	warning: string | null;
 }
 
+/** Get the installed oh-my-claude version */
+export async function getVersion(): Promise<string> {
+	return invoke('get_version');
+}
+
 /** List all active proxy sessions */
 export async function listSessions(): Promise<SessionInfo[]> {
 	return invoke('list_sessions');
@@ -104,6 +109,8 @@ export interface MemoryModelConfig {
 	provider: string | null;
 	model: string | null;
 	source: 'runtime' | 'config' | 'auto';
+	resolvedProvider: string | null;
+	resolvedModel: string | null;
 }
 
 /** Get current memory model configuration from proxy (via Tauri IPC) */

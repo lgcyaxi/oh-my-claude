@@ -27,6 +27,7 @@ fn main() {
             commands::get_memory_config,
             commands::set_memory_config,
             commands::reset_memory_config,
+            commands::get_version,
         ])
         .setup(|app| {
             // Hide from Dock on macOS — this is a menubar-only app

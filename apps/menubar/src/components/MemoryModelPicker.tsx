@@ -86,11 +86,14 @@ export function MemoryModelPicker({ controlPort }: MemoryModelPickerProps) {
 			? 'runtime override'
 			: config?.source === 'config'
 				? 'config file'
-				: 'auto (passthrough)';
+				: 'auto';
 
 	const isAuto = !config?.provider;
+	const resolvedDisplay = config?.resolvedProvider
+		? `${config.resolvedProvider} / ${config.resolvedModel}`
+		: 'Anthropic passthrough';
 	const currentDisplay = isAuto
-		? 'Auto (Anthropic passthrough)'
+		? `Auto → ${resolvedDisplay}`
 		: `${config?.provider} / ${config?.model}`;
 
 	return (
@@ -129,6 +132,10 @@ export function MemoryModelPicker({ controlPort }: MemoryModelPickerProps) {
 							const isActive =
 								config?.provider === p.name &&
 								config?.model === m.id;
+							const isResolved =
+								isAuto &&
+								config?.resolvedProvider === p.name &&
+								config?.resolvedModel === m.id;
 							return (
 								<button
 									key={`${p.name}/${m.id}`}
@@ -137,9 +144,16 @@ export function MemoryModelPicker({ controlPort }: MemoryModelPickerProps) {
 									className={`w-full text-left text-[11px] px-2 py-1 rounded transition-colors ${
 										isActive
 											? 'bg-blue-500/20 text-blue-300'
-											: 'text-gray-400 hover:bg-white/5 hover:text-gray-300'
+											: isResolved
+												? 'bg-emerald-500/10 text-emerald-400'
+												: 'text-gray-400 hover:bg-white/5 hover:text-gray-300'
 									} disabled:opacity-50`}>
 									{m.label || m.id}
+									{isResolved && (
+										<span className='ml-1 text-[9px] text-emerald-600'>
+											(auto)
+										</span>
+									)}
 								</button>
 							);
 						})}

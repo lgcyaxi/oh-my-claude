@@ -105,6 +105,22 @@ pub async fn reset_memory_config(control_port: u16) -> Result<MemoryModelConfig,
     client.set_memory_config(control_port, None, None).await
 }
 
+/// Get the installed oh-my-claude version from package.json
+#[tauri::command]
+pub fn get_version() -> String {
+    if let Some(home) = dirs::home_dir() {
+        let pkg_path = home.join(".claude").join("oh-my-claude").join("package.json");
+        if let Ok(contents) = fs::read_to_string(&pkg_path) {
+            if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&contents) {
+                if let Some(ver) = pkg.get("version").and_then(|v| v.as_str()) {
+                    return format!("v{}", ver);
+                }
+            }
+        }
+    }
+    "unknown".to_string()
+}
+
 /// Get available providers and their models
 #[tauri::command]
 pub fn get_providers() -> Vec<ProviderInfo> {
