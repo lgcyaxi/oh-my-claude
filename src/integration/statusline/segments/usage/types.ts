@@ -9,9 +9,7 @@ export const FETCH_TIMEOUT_MS = 2000;
 export const PROVIDER_ABBREV: Record<string, string> = {
   deepseek: "DS",
   zhipu: "ZP",
-  "zhipu-global": "ZA",
   minimax: "MM",
-  "minimax-cn": "MM",
   kimi: "KM",
   openai: "Codex",
   aliyun: "AY",

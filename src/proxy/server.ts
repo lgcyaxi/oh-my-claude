@@ -35,7 +35,6 @@ import {
 } from './session';
 import { initializeAuth } from './auth';
 import { DEFAULT_PROXY_CONFIG } from './types';
-import { UsagePoller } from './usage-poller';
 import { resolveProviderName } from '../shared/providers/aliases';
 
 interface ParsedArgs {
@@ -184,14 +183,9 @@ async function main() {
 		getCleanupIntervalMs(),
 	);
 
-	// Background usage poller — keeps cache fresh for instant statusline renders
-	const usagePoller = new UsagePoller();
-	usagePoller.start();
-
 	// Handle graceful shutdown
 	const shutdown = () => {
 		console.error('\n[proxy] Shutting down...');
-		usagePoller.stop();
 		clearInterval(cleanupTimer);
 		resetSwitchState();
 		proxy.stop();

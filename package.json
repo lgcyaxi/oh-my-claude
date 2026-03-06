@@ -28,7 +28,7 @@
     "build": "bun build src/index.ts src/cli/cli.ts --outdir dist --target node",
     "build:mcp": "bun build src/mcp/server/index.ts --outdir dist/mcp --target node && mv dist/mcp/index.js dist/mcp/server.js && bun run scripts/copy-wasm.ts",
     "build:hooks": "bun build src/integration/hooks/comment-checker.ts src/integration/hooks/todo-continuation.ts src/integration/hooks/task-notification.ts src/integration/hooks/task-tracker.ts src/integration/hooks/memory-awareness.ts src/integration/hooks/session-logger.ts src/integration/hooks/context-memory.ts src/integration/hooks/preference-awareness.ts src/integration/hooks/post-tool.ts --outdir dist/hooks --entry-naming [name].js --target node",
-    "build:statusline": "bun build src/integration/statusline/statusline.ts --outdir dist/statusline --target node",
+    "build:statusline": "TS=$(date +%s) && bun build src/integration/statusline/statusline.ts --outdir dist/statusline --target node --define \"__OMC_BUILD_HASH__='$TS'\"",
     "build:proxy": "bun build src/proxy/server.ts --outdir dist/proxy --target bun",
     "build:bus": "bun build src/workers/bridge/bus/server.ts --outdir dist/bridge-bus --target bun",
     "build:all": "bun run build && bun run build:mcp && bun run build:hooks && bun run build:statusline && bun run build:proxy && bun run build:bus",

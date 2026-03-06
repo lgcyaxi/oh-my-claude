@@ -1,9 +1,9 @@
 /**
  * Usage history — records snapshots and computes trend indicators.
  *
- * The proxy daemon calls recordSnapshots() after each poll cycle,
- * appending one snapshot per provider. The statusline calls
- * getTrendIndicator() to show ↑↓→ arrows next to values.
+ * The statusline calls recordSnapshots() after each collect cycle,
+ * appending one snapshot per provider, and getTrendIndicator()
+ * to show ↑↓→ arrows next to values.
  *
  * History file: ~/.config/oh-my-claude/usage-history.json
  * Retention: 48 hours, pruned every 6 hours.
@@ -62,8 +62,8 @@ export function extractNumericValue(display: string): number | null {
 }
 
 /**
- * Record snapshots from a poll cycle.
- * Called by the proxy usage-poller after each successful fetch.
+ * Record snapshots from a collect cycle.
+ * Called by the statusline after each successful fetch.
  */
 export function recordSnapshots(parts: PartResult[]): void {
   try {
