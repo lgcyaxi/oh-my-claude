@@ -19,80 +19,80 @@
  */
 
 import {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-  statSync,
-  mkdirSync,
-  type Stats,
-} from "node:fs";
-import { join, dirname, basename } from "node:path";
-import { homedir } from "node:os";
-import { createHash } from "node:crypto";
-import type { MemoryScope } from "./types";
-import { parseMemoryFile, stripPrivateBlocks } from "./parser";
+	existsSync,
+	readFileSync,
+	writeFileSync,
+	readdirSync,
+	statSync,
+	mkdirSync,
+	type Stats,
+} from 'node:fs';
+import { join, dirname, basename } from 'node:path';
+import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
+import type { MemoryScope } from './types';
+import { parseMemoryFile, stripPrivateBlocks } from './parser';
 
 // ---- Types ----
 
 export interface IndexedFile {
-  path: string;
-  scope: MemoryScope;
-  projectRoot: string | null;
-  hash: string;
-  mtime: number;
-  size: number;
-  title: string | null;
-  type: string | null;
-  tags: string | null;
-  concepts: string | null;
-  filesTouched: string | null;
-  createdAt: string | null;
-  potentialDuplicateOf: string | null;
+	path: string;
+	scope: MemoryScope;
+	projectRoot: string | null;
+	hash: string;
+	mtime: number;
+	size: number;
+	title: string | null;
+	type: string | null;
+	tags: string | null;
+	concepts: string | null;
+	filesTouched: string | null;
+	createdAt: string | null;
+	potentialDuplicateOf: string | null;
 }
 
 export interface IndexedChunk {
-  id: string;
-  path: string;
-  scope: MemoryScope;
-  projectRoot: string | null;
-  startLine: number;
-  endLine: number;
-  hash: string;
-  text: string;
-  updatedAt: number;
+	id: string;
+	path: string;
+	scope: MemoryScope;
+	projectRoot: string | null;
+	startLine: number;
+	endLine: number;
+	hash: string;
+	text: string;
+	updatedAt: number;
 }
 
 export interface FTSSearchResult {
-  chunkId: string;
-  path: string;
-  scope: string;
-  startLine: number;
-  endLine: number;
-  text: string;
-  rank: number;
+	chunkId: string;
+	path: string;
+	scope: string;
+	startLine: number;
+	endLine: number;
+	text: string;
+	rank: number;
 }
 
 export interface ChunkingOptions {
-  /** Target tokens per chunk (default: 400) */
-  tokens: number;
-  /** Overlap tokens between chunks (default: 80) */
-  overlap: number;
+	/** Target tokens per chunk (default: 400) */
+	tokens: number;
+	/** Overlap tokens between chunks (default: 80) */
+	overlap: number;
 }
 
 export interface MemoryIndexerOptions {
-  dbPath: string;
-  chunking?: Partial<ChunkingOptions>;
+	dbPath: string;
+	chunking?: Partial<ChunkingOptions>;
 }
 
 // ---- Constants ----
 
 const DEFAULT_CHUNKING: ChunkingOptions = {
-  tokens: 400,
-  overlap: 80,
+	tokens: 400,
+	overlap: 80,
 };
 
-const SCHEMA_VERSION = "1";
+const SCHEMA_VERSION = '1';
 
 /** Approximate characters per token for estimation */
 const CHARS_PER_TOKEN = 4;
@@ -103,14 +103,14 @@ const CHARS_PER_TOKEN = 4;
  * triggers keep FTS5 index in sync automatically.
  */
 const SCHEMA_STATEMENTS: string[] = [
-  // Metadata
-  `CREATE TABLE IF NOT EXISTS meta (
+	// Metadata
+	`CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   )`,
 
-  // File tracking (hash-based change detection)
-  `CREATE TABLE IF NOT EXISTS files (
+	// File tracking (hash-based change detection)
+	`CREATE TABLE IF NOT EXISTS files (
     path TEXT NOT NULL,
     scope TEXT NOT NULL,
     project_root TEXT,
@@ -125,8 +125,8 @@ const SCHEMA_STATEMENTS: string[] = [
     PRIMARY KEY (path, scope)
   )`,
 
-  // Chunks (text segments for search; has hidden rowid for FTS5 content table)
-  `CREATE TABLE IF NOT EXISTS chunks (
+	// Chunks (text segments for search; has hidden rowid for FTS5 content table)
+	`CREATE TABLE IF NOT EXISTS chunks (
     id TEXT PRIMARY KEY,
     path TEXT NOT NULL,
     scope TEXT NOT NULL,
@@ -137,32 +137,32 @@ const SCHEMA_STATEMENTS: string[] = [
     text TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path)`,
-  `CREATE INDEX IF NOT EXISTS idx_chunks_scope ON chunks(scope)`,
+	`CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path)`,
+	`CREATE INDEX IF NOT EXISTS idx_chunks_scope ON chunks(scope)`,
 
-  // FTS5 full-text index (content table pattern — reads text from chunks)
-  `CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+	// FTS5 full-text index (content table pattern — reads text from chunks)
+	`CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     text,
     content=chunks,
     content_rowid=rowid
   )`,
 
-  // Triggers to keep FTS5 in sync with chunks table
-  `CREATE TRIGGER IF NOT EXISTS chunks_fts_ins AFTER INSERT ON chunks BEGIN
+	// Triggers to keep FTS5 in sync with chunks table
+	`CREATE TRIGGER IF NOT EXISTS chunks_fts_ins AFTER INSERT ON chunks BEGIN
     INSERT INTO chunks_fts(rowid, text) VALUES(new.rowid, new.text);
   END`,
 
-  `CREATE TRIGGER IF NOT EXISTS chunks_fts_del AFTER DELETE ON chunks BEGIN
+	`CREATE TRIGGER IF NOT EXISTS chunks_fts_del AFTER DELETE ON chunks BEGIN
     INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.rowid, old.text);
   END`,
 
-  `CREATE TRIGGER IF NOT EXISTS chunks_fts_upd AFTER UPDATE ON chunks BEGIN
+	`CREATE TRIGGER IF NOT EXISTS chunks_fts_upd AFTER UPDATE ON chunks BEGIN
     INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.rowid, old.text);
     INSERT INTO chunks_fts(rowid, text) VALUES(new.rowid, new.text);
   END`,
 
-  // Embedding cache (avoid re-embedding unchanged chunks)
-  `CREATE TABLE IF NOT EXISTS embedding_cache (
+	// Embedding cache (avoid re-embedding unchanged chunks)
+	`CREATE TABLE IF NOT EXISTS embedding_cache (
     provider TEXT NOT NULL,
     model TEXT NOT NULL,
     hash TEXT NOT NULL,
@@ -171,727 +171,753 @@ const SCHEMA_STATEMENTS: string[] = [
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (provider, model, hash)
   )`,
-  `CREATE INDEX IF NOT EXISTS idx_embedding_cache_updated ON embedding_cache(updated_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_embedding_cache_updated ON embedding_cache(updated_at)`,
 ];
 
 // ---- MemoryIndexer Class ----
 
 export interface TokenStats {
-  embeddingCalls: number;
-  searchQueries: number;
-  chunksEmbedded: number;
+	embeddingCalls: number;
+	searchQueries: number;
+	chunksEmbedded: number;
 }
 
 export class MemoryIndexer {
-  private db: any = null;
-  private initialized = false;
-  private dirty = false;
-  private options: MemoryIndexerOptions;
-  private chunkingOptions: ChunkingOptions;
-  private tokenStats: TokenStats = { embeddingCalls: 0, searchQueries: 0, chunksEmbedded: 0 };
+	private db: any = null;
+	private initialized = false;
+	private dirty = false;
+	private options: MemoryIndexerOptions;
+	private chunkingOptions: ChunkingOptions;
+	private tokenStats: TokenStats = {
+		embeddingCalls: 0,
+		searchQueries: 0,
+		chunksEmbedded: 0,
+	};
 
-  constructor(options: MemoryIndexerOptions) {
-    this.options = options;
-    this.chunkingOptions = {
-      ...DEFAULT_CHUNKING,
-      ...options.chunking,
-    };
-  }
+	constructor(options: MemoryIndexerOptions) {
+		this.options = options;
+		this.chunkingOptions = {
+			...DEFAULT_CHUNKING,
+			...options.chunking,
+		};
+	}
 
-  /**
-   * Initialize the SQLite database (lazy — call before first use).
-   * Loads sql.js-fts5 WASM, opens/creates database, runs schema migration.
-   * On failure, the indexer stays uninitialized (Tier 3 legacy fallback).
-   */
-  async init(): Promise<void> {
-    if (this.initialized) return;
+	/**
+	 * Initialize the SQLite database (lazy — call before first use).
+	 * Loads sql.js-fts5 WASM, opens/creates database, runs schema migration.
+	 * On failure, the indexer stays uninitialized (Tier 3 legacy fallback).
+	 */
+	async init(): Promise<void> {
+		if (this.initialized) return;
 
-    try {
-      // Dynamic import to keep WASM loading lazy
-      const sqlJsModule = await import("sql.js-fts5");
-      const initSqlJs = sqlJsModule.default ?? sqlJsModule;
+		try {
+			// Dynamic import to keep WASM loading lazy
+			const sqlJsModule = await import('sql.js-fts5');
+			const initSqlJs = sqlJsModule.default ?? sqlJsModule;
 
-      // Use wasmBinary (pre-read file) instead of locateFile to avoid
-      // Bun treating Windows file paths as URLs (ConnectionRefused error)
-      const wasmPath = this.findWasmFile("sql-wasm.wasm");
-      const initOptions: Record<string, any> = {};
-      if (wasmPath && existsSync(wasmPath)) {
-        initOptions.wasmBinary = readFileSync(wasmPath);
-      } else {
-        // Fallback: let sql.js try its default resolution
-        initOptions.locateFile = (file: string) => this.findWasmFile(file);
-      }
+			// Use wasmBinary (pre-read file) instead of locateFile to avoid
+			// Bun treating Windows file paths as URLs (ConnectionRefused error)
+			const wasmPath = this.findWasmFile('sql-wasm.wasm');
+			const initOptions: Record<string, any> = {};
+			if (wasmPath && existsSync(wasmPath)) {
+				initOptions.wasmBinary = readFileSync(wasmPath);
+			} else {
+				// Fallback: let sql.js try its default resolution
+				initOptions.locateFile = (file: string) =>
+					this.findWasmFile(file);
+			}
 
-      const SQL = await initSqlJs(initOptions);
+			const SQL = await initSqlJs(initOptions);
 
-      // Load existing DB or create new
-      if (existsSync(this.options.dbPath)) {
-        const data = readFileSync(this.options.dbPath);
-        this.db = new SQL.Database(new Uint8Array(data));
-      } else {
-        mkdirSync(dirname(this.options.dbPath), { recursive: true });
-        this.db = new SQL.Database();
-      }
+			// Load existing DB or create new
+			if (existsSync(this.options.dbPath)) {
+				const data = readFileSync(this.options.dbPath);
+				this.db = new SQL.Database(new Uint8Array(data));
+			} else {
+				mkdirSync(dirname(this.options.dbPath), { recursive: true });
+				this.db = new SQL.Database();
+			}
 
-      this.createSchema();
-      this.initialized = true;
-    } catch (error) {
-      console.error("[indexer] Failed to initialize SQLite:", error);
-      this.initialized = false;
-      this.db = null;
-    }
-  }
+			this.createSchema();
+			this.initialized = true;
+		} catch (error) {
+			console.error('[indexer] Failed to initialize SQLite:', error);
+			this.initialized = false;
+			this.db = null;
+		}
+	}
 
-  /**
-   * Locate the sql-wasm.wasm file across multiple search paths.
-   * Searches: node_modules (dev), install dirs, alongside script (bundled).
-   */
-  private findWasmFile(filename: string): string {
-    const candidates: string[] = [];
+	/**
+	 * Locate the sql-wasm.wasm file across multiple search paths.
+	 * Searches: node_modules (dev), install dirs, alongside script (bundled).
+	 */
+	private findWasmFile(filename: string): string {
+		const candidates: string[] = [];
 
-    // 1. node_modules resolution (dev mode / unbundled)
-    try {
-      const resolved = require.resolve(`sql.js-fts5/dist/${filename}`);
-      if (resolved) candidates.push(resolved);
-    } catch {
-      // Not in node_modules — try createRequire for ESM
-      try {
-        const { createRequire } = require("node:module");
-        const r = createRequire(import.meta.url);
-        const resolved = r.resolve(`sql.js-fts5/dist/${filename}`);
-        if (resolved) candidates.push(resolved);
-      } catch {
-        // ignore
-      }
-    }
+		// 1. node_modules resolution (dev mode / unbundled)
+		try {
+			const resolved = require.resolve(`sql.js-fts5/dist/${filename}`);
+			if (resolved) candidates.push(resolved);
+		} catch {
+			// Not in node_modules — try createRequire for ESM
+			try {
+				const { createRequire } = require('node:module');
+				const r = createRequire(import.meta.url);
+				const resolved = r.resolve(`sql.js-fts5/dist/${filename}`);
+				if (resolved) candidates.push(resolved);
+			} catch {
+				// ignore
+			}
+		}
 
-    // 2. oh-my-claude install directories
-    const omcDir = join(homedir(), ".claude", "oh-my-claude");
-    candidates.push(join(omcDir, "mcp", filename));
-    candidates.push(join(omcDir, "wasm", filename));
+		// 2. oh-my-claude install directories
+		const omcDir = join(homedir(), '.claude', 'oh-my-claude');
+		candidates.push(join(omcDir, 'mcp', filename));
+		candidates.push(join(omcDir, 'wasm', filename));
 
-    // 3. Next to the DB file (custom deployment)
-    candidates.push(join(dirname(this.options.dbPath), filename));
+		// 3. Next to the DB file (custom deployment)
+		candidates.push(join(dirname(this.options.dbPath), filename));
 
-    for (const p of candidates) {
-      if (p && existsSync(p)) return p;
-    }
+		for (const p of candidates) {
+			if (p && existsSync(p)) return p;
+		}
 
-    // Fallback: let sql.js try its default resolution
-    return filename;
-  }
+		// Fallback: let sql.js try its default resolution
+		return filename;
+	}
 
-  /**
-   * Create or migrate the database schema.
-   */
-  private createSchema(): void {
-    // Check if schema is already at current version
-    try {
-      const result = this.db.exec(
-        "SELECT value FROM meta WHERE key = 'schema_version'"
-      );
-      if (
-        result.length > 0 &&
-        result[0].values.length > 0 &&
-        result[0].values[0][0] === SCHEMA_VERSION
-      ) {
-        return; // Up to date
-      }
-    } catch {
-      // meta table doesn't exist yet — need full schema creation
-    }
+	/**
+	 * Create or migrate the database schema.
+	 */
+	private createSchema(): void {
+		// Check if schema is already at current version
+		try {
+			const result = this.db.exec(
+				"SELECT value FROM meta WHERE key = 'schema_version'",
+			);
+			if (
+				result.length > 0 &&
+				result[0].values.length > 0 &&
+				result[0].values[0][0] === SCHEMA_VERSION
+			) {
+				return; // Up to date
+			}
+		} catch {
+			// meta table doesn't exist yet — need full schema creation
+		}
 
-    // Execute each DDL statement individually
-    for (const stmt of SCHEMA_STATEMENTS) {
-      try {
-        this.db.run(stmt);
-      } catch (e: any) {
-        // Skip "already exists" errors (safe for idempotent schema)
-        if (!e.message?.includes("already exists")) {
-          console.error(`[indexer] Schema DDL error: ${e.message}`);
-        }
-      }
-    }
+		// Execute each DDL statement individually
+		for (const stmt of SCHEMA_STATEMENTS) {
+			try {
+				this.db.run(stmt);
+			} catch (e: any) {
+				// Skip "already exists" errors (safe for idempotent schema)
+				if (!e.message?.includes('already exists')) {
+					console.error(`[indexer] Schema DDL error: ${e.message}`);
+				}
+			}
+		}
 
-    // Additive schema migrations for new columns
-    const migrations = [
-      "ALTER TABLE files ADD COLUMN concepts TEXT",
-      "ALTER TABLE files ADD COLUMN files_touched TEXT",
-    ];
-    for (const migration of migrations) {
-      try {
-        this.db.run(migration);
-      } catch (e: any) {
-        // "duplicate column" means already migrated — safe to ignore
-        if (!e.message?.includes("duplicate column")) {
-          console.error(`[indexer] Migration error: ${e.message}`);
-        }
-      }
-    }
+		// Additive schema migrations for new columns
+		const migrations = [
+			'ALTER TABLE files ADD COLUMN concepts TEXT',
+			'ALTER TABLE files ADD COLUMN files_touched TEXT',
+		];
+		for (const migration of migrations) {
+			try {
+				this.db.run(migration);
+			} catch (e: any) {
+				// "duplicate column" means already migrated — safe to ignore
+				if (!e.message?.includes('duplicate column')) {
+					console.error(`[indexer] Migration error: ${e.message}`);
+				}
+			}
+		}
 
-    this.db.run(
-      "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
-      [SCHEMA_VERSION]
-    );
-    this.dirty = true;
-  }
+		this.db.run(
+			"INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
+			[SCHEMA_VERSION],
+		);
+		this.dirty = true;
+	}
 
-  // ---- Query Helpers ----
+	// ---- Query Helpers ----
 
-  private queryAll(
-    sql: string,
-    params: any[] = []
-  ): Record<string, any>[] {
-    const stmt = this.db.prepare(sql);
-    if (params.length > 0) stmt.bind(params);
-    const rows: Record<string, any>[] = [];
-    while (stmt.step()) {
-      rows.push(stmt.getAsObject());
-    }
-    stmt.free();
-    return rows;
-  }
+	private queryAll(sql: string, params: any[] = []): Record<string, any>[] {
+		const stmt = this.db.prepare(sql);
+		if (params.length > 0) stmt.bind(params);
+		const rows: Record<string, any>[] = [];
+		while (stmt.step()) {
+			rows.push(stmt.getAsObject());
+		}
+		stmt.free();
+		return rows;
+	}
 
-  private queryOne(
-    sql: string,
-    params: any[] = []
-  ): Record<string, any> | null {
-    const stmt = this.db.prepare(sql);
-    if (params.length > 0) stmt.bind(params);
-    let row: Record<string, any> | null = null;
-    if (stmt.step()) {
-      row = stmt.getAsObject();
-    }
-    stmt.free();
-    return row;
-  }
+	private queryOne(
+		sql: string,
+		params: any[] = [],
+	): Record<string, any> | null {
+		const stmt = this.db.prepare(sql);
+		if (params.length > 0) stmt.bind(params);
+		let row: Record<string, any> | null = null;
+		if (stmt.step()) {
+			row = stmt.getAsObject();
+		}
+		stmt.free();
+		return row;
+	}
 
-  // ---- Core Operations ----
+	// ---- Core Operations ----
 
-  /**
-   * Sync markdown files into the index.
-   * Scans directories, compares hashes, indexes changed files, removes stale entries.
-   */
-  async syncFiles(
-    memoryDirs: Array<{
-      path: string;
-      scope: MemoryScope;
-      projectRoot?: string;
-    }>
-  ): Promise<{
-    added: number;
-    updated: number;
-    removed: number;
-    unchanged: number;
-  }> {
-    await this.init();
-    if (!this.db) return { added: 0, updated: 0, removed: 0, unchanged: 0 };
+	/**
+	 * Sync markdown files into the index.
+	 * Scans directories, compares hashes, indexes changed files, removes stale entries.
+	 */
+	async syncFiles(
+		memoryDirs: Array<{
+			path: string;
+			scope: MemoryScope;
+			projectRoot?: string;
+		}>,
+	): Promise<{
+		added: number;
+		updated: number;
+		removed: number;
+		unchanged: number;
+	}> {
+		await this.init();
+		if (!this.db) return { added: 0, updated: 0, removed: 0, unchanged: 0 };
 
-    let added = 0;
-    let updated = 0;
-    let removed = 0;
-    let unchanged = 0;
-    const seenPaths = new Set<string>();
+		let added = 0;
+		let updated = 0;
+		let removed = 0;
+		let unchanged = 0;
+		const seenPaths = new Set<string>();
 
-    for (const dir of memoryDirs) {
-      if (!existsSync(dir.path)) continue;
+		for (const dir of memoryDirs) {
+			if (!existsSync(dir.path)) continue;
 
-      const scope: "project" | "global" =
-        dir.scope === "all" ? "project" : (dir.scope as "project" | "global");
+			const scope: 'project' | 'global' =
+				dir.scope === 'all'
+					? 'project'
+					: (dir.scope as 'project' | 'global');
 
-      for (const subdir of ["notes", "sessions"]) {
-        const fullDir = join(dir.path, subdir);
-        if (!existsSync(fullDir)) continue;
+			for (const subdir of ['notes', 'sessions']) {
+				const fullDir = join(dir.path, subdir);
+				if (!existsSync(fullDir)) continue;
 
-        let files: string[];
-        try {
-          files = readdirSync(fullDir).filter((f) => f.endsWith(".md"));
-        } catch {
-          continue;
-        }
+				let files: string[];
+				try {
+					files = readdirSync(fullDir).filter((f) =>
+						f.endsWith('.md'),
+					);
+				} catch {
+					continue;
+				}
 
-        for (const file of files) {
-          const filePath = join(fullDir, file);
-          seenPaths.add(filePath);
+				for (const file of files) {
+					const filePath = join(fullDir, file);
+					seenPaths.add(filePath);
 
-          try {
-            const content = readFileSync(filePath, "utf-8");
-            const hash = hashContentSync(content);
-            const stats = statSync(filePath);
+					try {
+						const content = readFileSync(filePath, 'utf-8');
+						const hash = hashContentSync(content);
+						const stats = statSync(filePath);
 
-            // Check if already indexed with same hash
-            const existing = this.queryOne(
-              "SELECT hash FROM files WHERE path = ? AND scope = ?",
-              [filePath, scope]
-            );
+						// Check if already indexed with same hash
+						const existing = this.queryOne(
+							'SELECT hash FROM files WHERE path = ? AND scope = ?',
+							[filePath, scope],
+						);
 
-            if (existing && existing.hash === hash) {
-              unchanged++;
-              continue;
-            }
+						if (existing && existing.hash === hash) {
+							unchanged++;
+							continue;
+						}
 
-            // Index or re-index this file
-            this.indexFileInternal(
-              filePath,
-              content,
-              hash,
-              stats,
-              scope,
-              dir.projectRoot
-            );
+						// Index or re-index this file
+						this.indexFileInternal(
+							filePath,
+							content,
+							hash,
+							stats,
+							scope,
+							dir.projectRoot,
+						);
 
-            if (existing) {
-              updated++;
-            } else {
-              added++;
-            }
-          } catch (e) {
-            console.error(`[indexer] Error indexing ${filePath}:`, e);
-          }
-        }
-      }
-    }
+						if (existing) {
+							updated++;
+						} else {
+							added++;
+						}
+					} catch (e) {
+						console.error(
+							`[indexer] Error indexing ${filePath}:`,
+							e,
+						);
+					}
+				}
+			}
+		}
 
-    // Remove stale entries — only sweep entries whose (scope, project_root)
-    // matches a directory that was actively scanned. This prevents purging
-    // entries from dirs that were temporarily inaccessible or not included.
-    const syncedRoots = new Set(
-      memoryDirs.map((d) => `${d.scope === "all" ? "project" : d.scope}:${d.projectRoot ?? ""}`)
-    );
-    const allIndexed = this.queryAll("SELECT path, scope, project_root FROM files");
-    for (const row of allIndexed) {
-      const key = `${row.scope}:${row.project_root ?? ""}`;
-      if (syncedRoots.has(key) && !seenPaths.has(row.path as string)) {
-        this.removeFileInternal(row.path as string);
-        removed++;
-      }
-    }
+		// Remove stale entries — only sweep entries whose (scope, project_root)
+		// matches a directory that was actively scanned. This prevents purging
+		// entries from dirs that were temporarily inaccessible or not included.
+		const syncedRoots = new Set(
+			memoryDirs.map(
+				(d) =>
+					`${d.scope === 'all' ? 'project' : d.scope}:${d.projectRoot ?? ''}`,
+			),
+		);
+		const allIndexed = this.queryAll(
+			'SELECT path, scope, project_root FROM files',
+		);
+		for (const row of allIndexed) {
+			const key = `${row.scope}:${row.project_root ?? ''}`;
+			if (syncedRoots.has(key) && !seenPaths.has(row.path as string)) {
+				this.removeFileInternal(row.path as string);
+				removed++;
+			}
+		}
 
-    if (added > 0 || updated > 0 || removed > 0) {
-      this.dirty = true;
-    }
+		if (added > 0 || updated > 0 || removed > 0) {
+			this.dirty = true;
+		}
 
-    return { added, updated, removed, unchanged };
-  }
+		return { added, updated, removed, unchanged };
+	}
 
-  /**
-   * Internal: index a single file with pre-computed data
-   */
-  private indexFileInternal(
-    filePath: string,
-    content: string,
-    hash: string,
-    stats: Stats,
-    scope: "project" | "global",
-    projectRoot?: string
-  ): void {
-    // Parse frontmatter for metadata
-    const id = basename(filePath, ".md");
-    const parsed = parseMemoryFile(id, content);
+	/**
+	 * Internal: index a single file with pre-computed data
+	 */
+	private indexFileInternal(
+		filePath: string,
+		content: string,
+		hash: string,
+		stats: Stats,
+		scope: 'project' | 'global',
+		projectRoot?: string,
+	): void {
+		// Parse frontmatter for metadata
+		const id = basename(filePath, '.md');
+		const parsed = parseMemoryFile(id, content);
 
-    // Remove old entries for this file (triggers clean FTS5)
-    this.db.run("DELETE FROM chunks WHERE path = ?", [filePath]);
-    this.db.run("DELETE FROM files WHERE path = ?", [filePath]);
+		// Remove old entries for this file (triggers clean FTS5)
+		this.db.run('DELETE FROM chunks WHERE path = ?', [filePath]);
+		this.db.run('DELETE FROM files WHERE path = ?', [filePath]);
 
-    // Insert file record
-    this.db.run(
-      `INSERT INTO files (path, scope, project_root, hash, mtime, size, title, type, tags, concepts, files_touched, created_at)
+		// Insert file record
+		this.db.run(
+			`INSERT INTO files (path, scope, project_root, hash, mtime, size, title, type, tags, concepts, files_touched, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        filePath,
-        scope,
-        projectRoot ?? null,
-        hash,
-        stats.mtimeMs,
-        stats.size,
-        parsed?.title ?? null,
-        parsed?.type ?? null,
-        parsed?.tags ? JSON.stringify(parsed.tags) : null,
-        parsed?.concepts ? JSON.stringify(parsed.concepts) : null,
-        parsed?.files ? JSON.stringify(parsed.files) : null,
-        parsed?.createdAt ?? null,
-      ]
-    );
+			[
+				filePath,
+				scope,
+				projectRoot ?? null,
+				hash,
+				stats.mtimeMs,
+				stats.size,
+				parsed?.title ?? null,
+				parsed?.type ?? null,
+				parsed?.tags ? JSON.stringify(parsed.tags) : null,
+				parsed?.concepts ? JSON.stringify(parsed.concepts) : null,
+				parsed?.files ? JSON.stringify(parsed.files) : null,
+				parsed?.createdAt ?? null,
+			],
+		);
 
-    // Chunk content and insert (triggers auto-sync to FTS5)
-    // Strip private blocks before chunking — private content stays in file but is never indexed/searchable
-    const bodyContent = stripPrivateBlocks(parsed?.content ?? content);
-    const chunks = chunkMarkdown(bodyContent, this.chunkingOptions);
-    const now = Date.now();
+		// Chunk content and insert (triggers auto-sync to FTS5)
+		// Strip private blocks before chunking — private content stays in file but is never indexed/searchable
+		const bodyContent = stripPrivateBlocks(parsed?.content ?? content);
+		const chunks = chunkMarkdown(bodyContent, this.chunkingOptions);
+		const now = Date.now();
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]!;
-      const chunkHash = hashContentSync(chunk.text);
-      const chunkId = `${hash.slice(0, 12)}:${i}`;
+		for (let i = 0; i < chunks.length; i++) {
+			const chunk = chunks[i]!;
+			const chunkHash = hashContentSync(chunk.text);
+			const chunkId = `${hash.slice(0, 12)}:${i}`;
 
-      this.db.run(
-        `INSERT OR REPLACE INTO chunks (id, path, scope, project_root, start_line, end_line, hash, text, updated_at)
+			this.db.run(
+				`INSERT OR REPLACE INTO chunks (id, path, scope, project_root, start_line, end_line, hash, text, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          chunkId,
-          filePath,
-          scope,
-          projectRoot ?? null,
-          chunk.startLine,
-          chunk.endLine,
-          chunkHash,
-          chunk.text,
-          now,
-        ]
-      );
-    }
+				[
+					chunkId,
+					filePath,
+					scope,
+					projectRoot ?? null,
+					chunk.startLine,
+					chunk.endLine,
+					chunkHash,
+					chunk.text,
+					now,
+				],
+			);
+		}
 
-    this.dirty = true;
-  }
+		this.dirty = true;
+	}
 
-  /**
-   * Index a single file (public API)
-   */
-  async indexFile(
-    filePath: string,
-    scope: MemoryScope,
-    projectRoot?: string
-  ): Promise<void> {
-    await this.init();
-    if (!this.db || !existsSync(filePath)) return;
+	/**
+	 * Index a single file (public API)
+	 */
+	async indexFile(
+		filePath: string,
+		scope: MemoryScope,
+		projectRoot?: string,
+	): Promise<void> {
+		await this.init();
+		if (!this.db || !existsSync(filePath)) return;
 
-    const content = readFileSync(filePath, "utf-8");
-    const hash = hashContentSync(content);
-    const stats = statSync(filePath);
-    const resolvedScope: "project" | "global" =
-      scope === "all" ? "project" : (scope as "project" | "global");
+		const content = readFileSync(filePath, 'utf-8');
+		const hash = hashContentSync(content);
+		const stats = statSync(filePath);
+		const resolvedScope: 'project' | 'global' =
+			scope === 'all' ? 'project' : (scope as 'project' | 'global');
 
-    this.indexFileInternal(filePath, content, hash, stats, resolvedScope, projectRoot);
-  }
+		this.indexFileInternal(
+			filePath,
+			content,
+			hash,
+			stats,
+			resolvedScope,
+			projectRoot,
+		);
+	}
 
-  /**
-   * Internal: remove a file from the index (triggers clean FTS5)
-   */
-  private removeFileInternal(filePath: string): void {
-    this.db.run("DELETE FROM chunks WHERE path = ?", [filePath]);
-    this.db.run("DELETE FROM files WHERE path = ?", [filePath]);
-    this.dirty = true;
-  }
+	/**
+	 * Internal: remove a file from the index (triggers clean FTS5)
+	 */
+	private removeFileInternal(filePath: string): void {
+		this.db.run('DELETE FROM chunks WHERE path = ?', [filePath]);
+		this.db.run('DELETE FROM files WHERE path = ?', [filePath]);
+		this.dirty = true;
+	}
 
-  /**
-   * Remove a file from the index (public API)
-   */
-  async removeFile(filePath: string): Promise<void> {
-    await this.init();
-    if (!this.db) return;
-    this.removeFileInternal(filePath);
-  }
+	/**
+	 * Remove a file from the index (public API)
+	 */
+	async removeFile(filePath: string): Promise<void> {
+		await this.init();
+		if (!this.db) return;
+		this.removeFileInternal(filePath);
+	}
 
-  /**
-   * FTS5 BM25 search returning ranked chunks.
-   * Queries the FTS5 index and joins to chunks table for metadata.
-   */
-  async searchFTS(
-    query: string,
-    limit: number = 10,
-    scope?: MemoryScope,
-    projectRoot?: string
-  ): Promise<FTSSearchResult[]> {
-    await this.init();
-    if (!this.db) return [];
+	/**
+	 * FTS5 BM25 search returning ranked chunks.
+	 * Queries the FTS5 index and joins to chunks table for metadata.
+	 */
+	async searchFTS(
+		query: string,
+		limit: number = 10,
+		scope?: MemoryScope,
+		projectRoot?: string,
+	): Promise<FTSSearchResult[]> {
+		await this.init();
+		if (!this.db) return [];
 
-    const sanitized = sanitizeFTSQuery(query);
-    if (!sanitized) return [];
+		const sanitized = sanitizeFTSQuery(query);
+		if (!sanitized) return [];
 
-    this.tokenStats.searchQueries++;
+		this.tokenStats.searchQueries++;
 
-    try {
-      // Get matching rowids with BM25 rank from FTS5
-      const ftsRows = this.queryAll(
-        "SELECT rowid, rank FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?",
-        [sanitized, limit * 3] // extra for post-filtering
-      );
+		try {
+			// Get matching rowids with BM25 rank from FTS5
+			const ftsRows = this.queryAll(
+				'SELECT rowid, rank FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?',
+				[sanitized, limit * 3], // extra for post-filtering
+			);
 
-      if (ftsRows.length === 0) return [];
+			if (ftsRows.length === 0) return [];
 
-      const results: FTSSearchResult[] = [];
-      for (const fts of ftsRows) {
-        const chunk = this.queryOne(
-          "SELECT id, path, scope, project_root, start_line, end_line, text FROM chunks WHERE rowid = ?",
-          [fts.rowid]
-        );
-        if (!chunk) continue;
+			const results: FTSSearchResult[] = [];
+			for (const fts of ftsRows) {
+				const chunk = this.queryOne(
+					'SELECT id, path, scope, project_root, start_line, end_line, text FROM chunks WHERE rowid = ?',
+					[fts.rowid],
+				);
+				if (!chunk) continue;
 
-        // Filter by scope
-        if (scope && scope !== "all" && chunk.scope !== scope) continue;
-        if (
-          projectRoot &&
-          chunk.scope === "project" &&
-          chunk.project_root !== projectRoot
-        )
-          continue;
+				// Filter by scope
+				if (scope && scope !== 'all' && chunk.scope !== scope) continue;
+				if (
+					projectRoot &&
+					chunk.scope === 'project' &&
+					chunk.project_root !== projectRoot
+				)
+					continue;
 
-        results.push({
-          chunkId: chunk.id as string,
-          path: chunk.path as string,
-          scope: chunk.scope as string,
-          startLine: chunk.start_line as number,
-          endLine: chunk.end_line as number,
-          text: chunk.text as string,
-          rank: fts.rank as number,
-        });
+				results.push({
+					chunkId: chunk.id as string,
+					path: chunk.path as string,
+					scope: chunk.scope as string,
+					startLine: chunk.start_line as number,
+					endLine: chunk.end_line as number,
+					text: chunk.text as string,
+					rank: fts.rank as number,
+				});
 
-        if (results.length >= limit) break;
-      }
+				if (results.length >= limit) break;
+			}
 
-      return results;
-    } catch (e) {
-      console.error("[indexer] FTS search error:", e);
-      return [];
-    }
-  }
+			return results;
+		} catch (e) {
+			console.error('[indexer] FTS search error:', e);
+			return [];
+		}
+	}
 
-  /**
-   * Get file record by content hash (for dedup checks)
-   */
-  async getFileByHash(hash: string): Promise<IndexedFile | null> {
-    await this.init();
-    if (!this.db) return null;
+	/**
+	 * Get file record by content hash (for dedup checks)
+	 */
+	async getFileByHash(hash: string): Promise<IndexedFile | null> {
+		await this.init();
+		if (!this.db) return null;
 
-    const row = this.queryOne("SELECT * FROM files WHERE hash = ?", [hash]);
-    if (!row) return null;
+		const row = this.queryOne('SELECT * FROM files WHERE hash = ?', [hash]);
+		if (!row) return null;
 
-    return {
-      path: row.path as string,
-      scope: row.scope as MemoryScope,
-      projectRoot: row.project_root as string | null,
-      hash: row.hash as string,
-      mtime: row.mtime as number,
-      size: row.size as number,
-      title: row.title as string | null,
-      type: row.type as string | null,
-      tags: row.tags as string | null,
-      concepts: (row.concepts as string | null) ?? null,
-      filesTouched: (row.files_touched as string | null) ?? null,
-      createdAt: row.created_at as string | null,
-      potentialDuplicateOf: row.potential_duplicate_of as string | null,
-    };
-  }
+		return {
+			path: row.path as string,
+			scope: row.scope as MemoryScope,
+			projectRoot: row.project_root as string | null,
+			hash: row.hash as string,
+			mtime: row.mtime as number,
+			size: row.size as number,
+			title: row.title as string | null,
+			type: row.type as string | null,
+			tags: row.tags as string | null,
+			concepts: (row.concepts as string | null) ?? null,
+			filesTouched: (row.files_touched as string | null) ?? null,
+			createdAt: row.created_at as string | null,
+			potentialDuplicateOf: row.potential_duplicate_of as string | null,
+		};
+	}
 
-  /**
-   * Batch lookup files by their paths.
-   * Returns a map of path → IndexedFile for efficient metadata retrieval
-   * without disk reads (data comes from SQLite index).
-   */
-  async getFilesByPaths(paths: string[]): Promise<Map<string, IndexedFile>> {
-    await this.init();
-    const result = new Map<string, IndexedFile>();
-    if (!this.db || paths.length === 0) return result;
+	/**
+	 * Batch lookup files by their paths.
+	 * Returns a map of path → IndexedFile for efficient metadata retrieval
+	 * without disk reads (data comes from SQLite index).
+	 */
+	async getFilesByPaths(paths: string[]): Promise<Map<string, IndexedFile>> {
+		await this.init();
+		const result = new Map<string, IndexedFile>();
+		if (!this.db || paths.length === 0) return result;
 
-    // Batch query with IN clause (chunk into groups of 50 to avoid SQL limits)
-    const chunkSize = 50;
-    for (let i = 0; i < paths.length; i += chunkSize) {
-      const batch = paths.slice(i, i + chunkSize);
-      const placeholders = batch.map(() => "?").join(",");
-      const rows = this.queryAll(
-        `SELECT * FROM files WHERE path IN (${placeholders})`,
-        batch,
-      );
+		// Batch query with IN clause (chunk into groups of 50 to avoid SQL limits)
+		const chunkSize = 50;
+		for (let i = 0; i < paths.length; i += chunkSize) {
+			const batch = paths.slice(i, i + chunkSize);
+			const placeholders = batch.map(() => '?').join(',');
+			const rows = this.queryAll(
+				`SELECT * FROM files WHERE path IN (${placeholders})`,
+				batch,
+			);
 
-      for (const row of rows) {
-        result.set(row.path as string, {
-          path: row.path as string,
-          scope: row.scope as MemoryScope,
-          projectRoot: row.project_root as string | null,
-          hash: row.hash as string,
-          mtime: row.mtime as number,
-          size: row.size as number,
-          title: row.title as string | null,
-          type: row.type as string | null,
-          tags: row.tags as string | null,
-          concepts: (row.concepts as string | null) ?? null,
-          filesTouched: (row.files_touched as string | null) ?? null,
-          createdAt: row.created_at as string | null,
-          potentialDuplicateOf: row.potential_duplicate_of as string | null,
-        });
-      }
-    }
+			for (const row of rows) {
+				result.set(row.path as string, {
+					path: row.path as string,
+					scope: row.scope as MemoryScope,
+					projectRoot: row.project_root as string | null,
+					hash: row.hash as string,
+					mtime: row.mtime as number,
+					size: row.size as number,
+					title: row.title as string | null,
+					type: row.type as string | null,
+					tags: row.tags as string | null,
+					concepts: (row.concepts as string | null) ?? null,
+					filesTouched: (row.files_touched as string | null) ?? null,
+					createdAt: row.created_at as string | null,
+					potentialDuplicateOf: row.potential_duplicate_of as
+						| string
+						| null,
+				});
+			}
+		}
 
-    return result;
-  }
+		return result;
+	}
 
-  /**
-   * Get all chunk embeddings from cache for vector search.
-   * Returns a map of chunkId → embedding vector.
-   */
-  async getEmbeddings(
-    provider: string,
-    model: string
-  ): Promise<Map<string, number[]>> {
-    await this.init();
-    if (!this.db) return new Map();
+	/**
+	 * Get all chunk embeddings from cache for vector search.
+	 * Returns a map of chunkId → embedding vector.
+	 */
+	async getEmbeddings(
+		provider: string,
+		model: string,
+	): Promise<Map<string, number[]>> {
+		await this.init();
+		if (!this.db) return new Map();
 
-    const rows = this.queryAll(
-      `SELECT c.id as chunk_id, ec.embedding
+		const rows = this.queryAll(
+			`SELECT c.id as chunk_id, ec.embedding
        FROM embedding_cache ec
        JOIN chunks c ON c.hash = ec.hash
        WHERE ec.provider = ? AND ec.model = ?`,
-      [provider, model]
-    );
+			[provider, model],
+		);
 
-    const map = new Map<string, number[]>();
-    for (const row of rows) {
-      try {
-        const vec = JSON.parse(row.embedding as string) as number[];
-        map.set(row.chunk_id as string, vec);
-      } catch {
-        // Skip malformed embeddings
-      }
-    }
+		const map = new Map<string, number[]>();
+		for (const row of rows) {
+			try {
+				const vec = JSON.parse(row.embedding as string) as number[];
+				map.set(row.chunk_id as string, vec);
+			} catch {
+				// Skip malformed embeddings
+			}
+		}
 
-    return map;
-  }
+		return map;
+	}
 
-  /**
-   * Store an embedding in the cache
-   */
-  async cacheEmbedding(
-    provider: string,
-    model: string,
-    chunkHash: string,
-    embedding: number[]
-  ): Promise<void> {
-    await this.init();
-    if (!this.db) return;
+	/**
+	 * Store an embedding in the cache
+	 */
+	async cacheEmbedding(
+		provider: string,
+		model: string,
+		chunkHash: string,
+		embedding: number[],
+	): Promise<void> {
+		await this.init();
+		if (!this.db) return;
 
-    this.db.run(
-      `INSERT OR REPLACE INTO embedding_cache (provider, model, hash, embedding, dims, updated_at)
+		this.db.run(
+			`INSERT OR REPLACE INTO embedding_cache (provider, model, hash, embedding, dims, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        provider,
-        model,
-        chunkHash,
-        JSON.stringify(embedding),
-        embedding.length,
-        Date.now(),
-      ]
-    );
-    this.tokenStats.embeddingCalls++;
-    this.tokenStats.chunksEmbedded++;
-    this.dirty = true;
-  }
+			[
+				provider,
+				model,
+				chunkHash,
+				JSON.stringify(embedding),
+				embedding.length,
+				Date.now(),
+			],
+		);
+		this.tokenStats.embeddingCalls++;
+		this.tokenStats.chunksEmbedded++;
+		this.dirty = true;
+	}
 
-  /**
-   * Get chunks that don't have cached embeddings yet
-   */
-  async getChunksWithoutEmbeddings(
-    provider: string,
-    model: string
-  ): Promise<Array<{ id: string; hash: string; text: string }>> {
-    await this.init();
-    if (!this.db) return [];
+	/**
+	 * Get chunks that don't have cached embeddings yet
+	 */
+	async getChunksWithoutEmbeddings(
+		provider: string,
+		model: string,
+	): Promise<Array<{ id: string; hash: string; text: string }>> {
+		await this.init();
+		if (!this.db) return [];
 
-    return this.queryAll(
-      `SELECT c.id, c.hash, c.text FROM chunks c
+		return this.queryAll(
+			`SELECT c.id, c.hash, c.text FROM chunks c
        WHERE c.hash NOT IN (
          SELECT ec.hash FROM embedding_cache ec
          WHERE ec.provider = ? AND ec.model = ?
        )`,
-      [provider, model]
-    ) as Array<{ id: string; hash: string; text: string }>;
-  }
+			[provider, model],
+		) as Array<{ id: string; hash: string; text: string }>;
+	}
 
-  /**
-   * Check if the indexer is initialized and functional
-   */
-  isReady(): boolean {
-    return this.initialized && this.db !== null;
-  }
+	/**
+	 * Check if the indexer is initialized and functional
+	 */
+	isReady(): boolean {
+		return this.initialized && this.db !== null;
+	}
 
-  /**
-   * Get index statistics
-   */
-  async getStats(): Promise<{
-    filesIndexed: number;
-    chunksIndexed: number;
-    ftsAvailable: boolean;
-    dbSizeBytes: number;
-  }> {
-    if (!this.isReady()) {
-      return {
-        filesIndexed: 0,
-        chunksIndexed: 0,
-        ftsAvailable: false,
-        dbSizeBytes: 0,
-      };
-    }
+	/**
+	 * Get index statistics
+	 */
+	async getStats(): Promise<{
+		filesIndexed: number;
+		chunksIndexed: number;
+		ftsAvailable: boolean;
+		dbSizeBytes: number;
+	}> {
+		if (!this.isReady()) {
+			return {
+				filesIndexed: 0,
+				chunksIndexed: 0,
+				ftsAvailable: false,
+				dbSizeBytes: 0,
+			};
+		}
 
-    const fileCount = this.queryOne("SELECT COUNT(*) as cnt FROM files");
-    const chunkCount = this.queryOne("SELECT COUNT(*) as cnt FROM chunks");
+		const fileCount = this.queryOne('SELECT COUNT(*) as cnt FROM files');
+		const chunkCount = this.queryOne('SELECT COUNT(*) as cnt FROM chunks');
 
-    let dbSize = 0;
-    try {
-      if (existsSync(this.options.dbPath)) {
-        dbSize = statSync(this.options.dbPath).size;
-      }
-    } catch {
-      // ignore
-    }
+		let dbSize = 0;
+		try {
+			if (existsSync(this.options.dbPath)) {
+				dbSize = statSync(this.options.dbPath).size;
+			}
+		} catch {
+			// ignore
+		}
 
-    return {
-      filesIndexed: (fileCount?.cnt as number) ?? 0,
-      chunksIndexed: (chunkCount?.cnt as number) ?? 0,
-      ftsAvailable: true,
-      dbSizeBytes: dbSize,
-    };
-  }
+		return {
+			filesIndexed: (fileCount?.cnt as number) ?? 0,
+			chunksIndexed: (chunkCount?.cnt as number) ?? 0,
+			ftsAvailable: true,
+			dbSizeBytes: dbSize,
+		};
+	}
 
-  /**
-   * Get token usage statistics (operation counts for this session)
-   */
-  getTokenStats(): TokenStats {
-    return { ...this.tokenStats };
-  }
+	/**
+	 * Get token usage statistics (operation counts for this session)
+	 */
+	getTokenStats(): TokenStats {
+		return { ...this.tokenStats };
+	}
 
-  /**
-   * Persist the in-memory database to disk.
-   * Also writes token-stats.json for statusline consumption.
-   */
-  async flush(): Promise<void> {
-    if (!this.db || !this.dirty) return;
+	/**
+	 * Persist the in-memory database to disk.
+	 * Also writes token-stats.json for statusline consumption.
+	 */
+	async flush(): Promise<void> {
+		if (!this.db || !this.dirty) return;
 
-    try {
-      const data: Uint8Array = this.db.export();
-      mkdirSync(dirname(this.options.dbPath), { recursive: true });
-      writeFileSync(this.options.dbPath, Buffer.from(data));
-      this.dirty = false;
-    } catch (error) {
-      console.error("[indexer] Failed to flush DB to disk:", error);
-    }
+		try {
+			const data: Uint8Array = this.db.export();
+			mkdirSync(dirname(this.options.dbPath), { recursive: true });
+			writeFileSync(this.options.dbPath, Buffer.from(data));
+			this.dirty = false;
+		} catch (error) {
+			console.error('[indexer] Failed to flush DB to disk:', error);
+		}
 
-    // Persist token stats for statusline to read
-    this.persistTokenStats();
-  }
+		// Persist token stats for statusline to read
+		this.persistTokenStats();
+	}
 
-  /**
-   * Write token stats to a JSON file for cross-process consumption (statusline).
-   */
-  private persistTokenStats(): void {
-    try {
-      const statsPath = join(dirname(this.options.dbPath), "token-stats.json");
-      writeFileSync(statsPath, JSON.stringify(this.tokenStats), "utf-8");
-    } catch {
-      // Non-critical — statusline just won't show token stats
-    }
-  }
+	/**
+	 * Write token stats to a JSON file for cross-process consumption (statusline).
+	 */
+	private persistTokenStats(): void {
+		try {
+			const statsPath = join(
+				dirname(this.options.dbPath),
+				'token-stats.json',
+			);
+			writeFileSync(statsPath, JSON.stringify(this.tokenStats), 'utf-8');
+		} catch {
+			// Non-critical — statusline just won't show token stats
+		}
+	}
 
-  /**
-   * Close the database connection (flushes first)
-   */
-  async close(): Promise<void> {
-    if (this.db) {
-      await this.flush();
-      this.db.close();
-      this.db = null;
-      this.initialized = false;
-      this.dirty = false;
-    }
-  }
+	/**
+	 * Close the database connection (flushes first)
+	 */
+	async close(): Promise<void> {
+		if (this.db) {
+			await this.flush();
+			this.db.close();
+			this.db = null;
+			this.initialized = false;
+			this.dirty = false;
+		}
+	}
 }
 
 // ---- WASM Resolution (Public) ----
@@ -902,37 +928,37 @@ export class MemoryIndexer {
  * Returns the resolved path or null if not found.
  */
 export function findWasmPath(): string | null {
-  const filename = "sql-wasm.wasm";
-  const candidates: string[] = [];
+	const filename = 'sql-wasm.wasm';
+	const candidates: string[] = [];
 
-  // 1. node_modules resolution (dev mode)
-  try {
-    const resolved = require.resolve(`sql.js-fts5/dist/${filename}`);
-    if (resolved) candidates.push(resolved);
-  } catch {
-    try {
-      const { createRequire } = require("node:module");
-      const r = createRequire(import.meta.url);
-      const resolved = r.resolve(`sql.js-fts5/dist/${filename}`);
-      if (resolved) candidates.push(resolved);
-    } catch {
-      // ignore
-    }
-  }
+	// 1. node_modules resolution (dev mode)
+	try {
+		const resolved = require.resolve(`sql.js-fts5/dist/${filename}`);
+		if (resolved) candidates.push(resolved);
+	} catch {
+		try {
+			const { createRequire } = require('node:module');
+			const r = createRequire(import.meta.url);
+			const resolved = r.resolve(`sql.js-fts5/dist/${filename}`);
+			if (resolved) candidates.push(resolved);
+		} catch {
+			// ignore
+		}
+	}
 
-  // 2. oh-my-claude install directories
-  const omcDir = join(homedir(), ".claude", "oh-my-claude");
-  candidates.push(join(omcDir, "mcp", filename));
-  candidates.push(join(omcDir, "wasm", filename));
+	// 2. oh-my-claude install directories
+	const omcDir = join(homedir(), '.claude', 'oh-my-claude');
+	candidates.push(join(omcDir, 'mcp', filename));
+	candidates.push(join(omcDir, 'wasm', filename));
 
-  // 3. Next to the default DB file
-  candidates.push(join(omcDir, "memory", filename));
+	// 3. Next to the default DB file
+	candidates.push(join(omcDir, 'memory', filename));
 
-  for (const p of candidates) {
-    if (p && existsSync(p)) return p;
-  }
+	for (const p of candidates) {
+		if (p && existsSync(p)) return p;
+	}
 
-  return null;
+	return null;
 }
 
 // ---- Chunking Helpers ----
@@ -949,113 +975,113 @@ export function findWasmPath(): string | null {
  * 5. Merge very small tails into the last chunk
  */
 export function chunkMarkdown(
-  content: string,
-  options: ChunkingOptions = DEFAULT_CHUNKING
+	content: string,
+	options: ChunkingOptions = DEFAULT_CHUNKING,
 ): Array<{ text: string; startLine: number; endLine: number }> {
-  if (!content.trim()) return [];
+	if (!content.trim()) return [];
 
-  const lines = content.split("\n");
-  const targetChars = options.tokens * CHARS_PER_TOKEN;
-  const overlapChars = options.overlap * CHARS_PER_TOKEN;
-  const headingPattern = /^#{1,6}\s/;
+	const lines = content.split('\n');
+	const targetChars = options.tokens * CHARS_PER_TOKEN;
+	const overlapChars = options.overlap * CHARS_PER_TOKEN;
+	const headingPattern = /^#{1,6}\s/;
 
-  // Small content: return as single chunk
-  if (content.length <= targetChars * 1.3) {
-    return [{ text: content, startLine: 1, endLine: lines.length }];
-  }
+	// Small content: return as single chunk
+	if (content.length <= targetChars * 1.3) {
+		return [{ text: content, startLine: 1, endLine: lines.length }];
+	}
 
-  const chunks: Array<{
-    text: string;
-    startLine: number;
-    endLine: number;
-  }> = [];
-  let currentLines: string[] = [];
-  let currentStartLine = 1;
-  let currentCharCount = 0;
+	const chunks: Array<{
+		text: string;
+		startLine: number;
+		endLine: number;
+	}> = [];
+	let currentLines: string[] = [];
+	let currentStartLine = 1;
+	let currentCharCount = 0;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!;
-    const lineNum = i + 1;
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i]!;
+		const lineNum = i + 1;
 
-    // Split at headings if we have substantial content
-    if (
-      headingPattern.test(line) &&
-      currentLines.length > 0 &&
-      currentCharCount > targetChars * 0.3
-    ) {
-      chunks.push({
-        text: currentLines.join("\n"),
-        startLine: currentStartLine,
-        endLine: lineNum - 1,
-      });
+		// Split at headings if we have substantial content
+		if (
+			headingPattern.test(line) &&
+			currentLines.length > 0 &&
+			currentCharCount > targetChars * 0.3
+		) {
+			chunks.push({
+				text: currentLines.join('\n'),
+				startLine: currentStartLine,
+				endLine: lineNum - 1,
+			});
 
-      // Start new chunk with overlap from previous
-      const overlapLines = getOverlapLines(currentLines, overlapChars);
-      currentStartLine = lineNum - overlapLines.length;
-      currentLines = [...overlapLines, line];
-      currentCharCount = currentLines.join("\n").length;
-      continue;
-    }
+			// Start new chunk with overlap from previous
+			const overlapLines = getOverlapLines(currentLines, overlapChars);
+			currentStartLine = lineNum - overlapLines.length;
+			currentLines = [...overlapLines, line];
+			currentCharCount = currentLines.join('\n').length;
+			continue;
+		}
 
-    currentLines.push(line);
-    currentCharCount += line.length + 1; // +1 for newline
+		currentLines.push(line);
+		currentCharCount += line.length + 1; // +1 for newline
 
-    // Split when exceeding target size
-    if (currentCharCount >= targetChars) {
-      chunks.push({
-        text: currentLines.join("\n"),
-        startLine: currentStartLine,
-        endLine: lineNum,
-      });
+		// Split when exceeding target size
+		if (currentCharCount >= targetChars) {
+			chunks.push({
+				text: currentLines.join('\n'),
+				startLine: currentStartLine,
+				endLine: lineNum,
+			});
 
-      // Start new chunk with overlap
-      const overlapLines = getOverlapLines(currentLines, overlapChars);
-      currentStartLine = lineNum - overlapLines.length + 1;
-      currentLines = [...overlapLines];
-      currentCharCount = currentLines.join("\n").length;
-    }
-  }
+			// Start new chunk with overlap
+			const overlapLines = getOverlapLines(currentLines, overlapChars);
+			currentStartLine = lineNum - overlapLines.length + 1;
+			currentLines = [...overlapLines];
+			currentCharCount = currentLines.join('\n').length;
+		}
+	}
 
-  // Flush remaining lines
-  if (currentLines.length > 0) {
-    if (chunks.length > 0 && currentCharCount < targetChars * 0.15) {
-      // Very small tail: merge into last chunk
-      const last = chunks[chunks.length - 1]!;
-      last.text += "\n" + currentLines.join("\n");
-      last.endLine = currentStartLine + currentLines.length - 1;
-    } else {
-      chunks.push({
-        text: currentLines.join("\n"),
-        startLine: currentStartLine,
-        endLine: currentStartLine + currentLines.length - 1,
-      });
-    }
-  }
+	// Flush remaining lines
+	if (currentLines.length > 0) {
+		if (chunks.length > 0 && currentCharCount < targetChars * 0.15) {
+			// Very small tail: merge into last chunk
+			const last = chunks[chunks.length - 1]!;
+			last.text += '\n' + currentLines.join('\n');
+			last.endLine = currentStartLine + currentLines.length - 1;
+		} else {
+			chunks.push({
+				text: currentLines.join('\n'),
+				startLine: currentStartLine,
+				endLine: currentStartLine + currentLines.length - 1,
+			});
+		}
+	}
 
-  return chunks.length > 0
-    ? chunks
-    : [{ text: content, startLine: 1, endLine: lines.length }];
+	return chunks.length > 0
+		? chunks
+		: [{ text: content, startLine: 1, endLine: lines.length }];
 }
 
 /**
  * Get trailing lines from a chunk for overlap with next chunk
  */
 function getOverlapLines(
-  lines: string[],
-  targetOverlapChars: number
+	lines: string[],
+	targetOverlapChars: number,
 ): string[] {
-  if (targetOverlapChars <= 0 || lines.length === 0) return [];
+	if (targetOverlapChars <= 0 || lines.length === 0) return [];
 
-  let charCount = 0;
-  let startIdx = lines.length;
+	let charCount = 0;
+	let startIdx = lines.length;
 
-  for (let i = lines.length - 1; i >= 0; i--) {
-    charCount += lines[i]!.length + 1;
-    startIdx = i;
-    if (charCount >= targetOverlapChars) break;
-  }
+	for (let i = lines.length - 1; i >= 0; i--) {
+		charCount += lines[i]!.length + 1;
+		startIdx = i;
+		if (charCount >= targetOverlapChars) break;
+	}
 
-  return lines.slice(startIdx);
+	return lines.slice(startIdx);
 }
 
 // ---- FTS5 Query Sanitization ----
@@ -1065,20 +1091,20 @@ function getOverlapLines(
  * Strips special characters that could cause FTS5 syntax errors.
  */
 function sanitizeFTSQuery(query: string): string {
-  const cleaned = query
-    .replace(/[*"(){}[\]^~\\:!@#$%&+\-|<>=]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+	const cleaned = query
+		.replace(/[*"(){}[\]^~\\:!@#$%&+\-|<>=]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
 
-  if (!cleaned || cleaned.length < 2) return "";
+	if (!cleaned || cleaned.length < 2) return '';
 
-  // Join tokens with OR so any matching term produces results.
-  // FTS5 default is implicit AND which is too strict for recall queries
-  // (e.g., "omc ulw ultrawork permissions" would require ALL 4 tokens).
-  const tokens = cleaned.split(" ").filter((t) => t.length >= 2);
-  if (tokens.length === 0) return "";
-  if (tokens.length === 1) return tokens[0]!;
-  return tokens.join(" OR ");
+	// Join tokens with OR so any matching term produces results.
+	// FTS5 default is implicit AND which is too strict for recall queries
+	// (e.g., "omc ulw ultrawork permissions" would require ALL 4 tokens).
+	const tokens = cleaned.split(' ').filter((t) => t.length >= 2);
+	if (tokens.length === 0) return '';
+	if (tokens.length === 1) return tokens[0]!;
+	return tokens.join(' OR ');
 }
 
 // ---- Hashing ----
@@ -1087,12 +1113,12 @@ function sanitizeFTSQuery(query: string): string {
  * Compute SHA-256 hash of content (async)
  */
 export async function hashContent(content: string): Promise<string> {
-  return hashContentSync(content);
+	return hashContentSync(content);
 }
 
 /**
  * Compute SHA-256 hash of content (sync)
  */
 export function hashContentSync(content: string): string {
-  return createHash("sha256").update(content, "utf-8").digest("hex");
+	return createHash('sha256').update(content, 'utf-8').digest('hex');
 }

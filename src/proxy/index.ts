@@ -13,39 +13,36 @@
  */
 
 export type {
-  ProxySwitchState,
-  ProxyConfig,
-  ProxyAuthConfig,
-  ForwardOptions,
-} from "./state/types";
+	ProxySwitchState,
+	ProxyConfig,
+	ProxyAuthConfig,
+	ForwardOptions,
+} from './state/types';
+
+export { DEFAULT_PROXY_CONFIG, DEFAULT_SWITCH_STATE } from './state/types';
 
 export {
-  DEFAULT_PROXY_CONFIG,
-  DEFAULT_SWITCH_STATE,
-} from "./state/types";
+	readSwitchState,
+	writeSwitchState,
+	resetSwitchState,
+	getSwitchStatePath,
+} from './state/switch';
 
 export {
-  readSwitchState,
-  writeSwitchState,
-  resetSwitchState,
-  getSwitchStatePath,
-} from "./state/switch";
+	readAuthConfig,
+	writeAuthConfig,
+	initializeAuth,
+	getPassthroughAuth,
+	getProviderAuth,
+	getAuthConfigPath,
+	generateProxyToken,
+	validateProxyToken,
+} from './auth/auth';
 
 export {
-  readAuthConfig,
-  writeAuthConfig,
-  initializeAuth,
-  getPassthroughAuth,
-  getProviderAuth,
-  getAuthConfigPath,
-  generateProxyToken,
-  validateProxyToken,
-} from "./auth/auth";
-
-export {
-  startDaemon,
-  stopDaemon,
-  isRunning,
-  getPid,
-  getServerScript,
-} from "./daemon";
+	startDaemon,
+	stopDaemon,
+	isRunning,
+	getPid,
+	getServerScript,
+} from './daemon';

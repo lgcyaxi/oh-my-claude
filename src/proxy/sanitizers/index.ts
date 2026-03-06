@@ -12,8 +12,13 @@
  *   conversation history (needed when switching mid-session via omc-switch).
  */
 
-import { THINKING_CONTENT_TYPES, stripThinkingBlocks, stripTopLevelKeys, stripUnsupportedContentTypes } from "./types";
-import { sanitizeDeepSeekChat, sanitizeDeepSeekReasoner } from "./deepseek";
+import {
+	THINKING_CONTENT_TYPES,
+	stripThinkingBlocks,
+	stripTopLevelKeys,
+	stripUnsupportedContentTypes,
+} from './types';
+import { sanitizeDeepSeekChat, sanitizeDeepSeekReasoner } from './deepseek';
 
 /**
  * Sanitize a request body for the target provider.
@@ -24,28 +29,31 @@ import { sanitizeDeepSeekChat, sanitizeDeepSeekReasoner } from "./deepseek";
  *
  * Mutates the body in-place for performance.
  */
-export function sanitizeRequestBody(body: Record<string, unknown>, provider: string): void {
-  switch (provider) {
-    case "deepseek": {
-      const model = body.model as string | undefined;
-      if (model === "deepseek-reasoner") {
-        sanitizeDeepSeekReasoner(body);
-      } else {
-        sanitizeDeepSeekChat(body);
-      }
-      return;
-    }
+export function sanitizeRequestBody(
+	body: Record<string, unknown>,
+	provider: string,
+): void {
+	switch (provider) {
+		case 'deepseek': {
+			const model = body.model as string | undefined;
+			if (model === 'deepseek-reasoner') {
+				sanitizeDeepSeekReasoner(body);
+			} else {
+				sanitizeDeepSeekChat(body);
+			}
+			return;
+		}
 
-    case "kimi":
-      sanitizeAnthropicCompatible(body, "kimi");
-      return;
+		case 'kimi':
+			sanitizeAnthropicCompatible(body, 'kimi');
+			return;
 
-    default:
-      // No body sanitization needed — most Anthropic-compatible providers
-      // (ZhiPu, MiniMax, Aliyun) accept the Anthropic message format.
-      // The anthropic-beta header is stripped in the handler.
-      return;
-  }
+		default:
+			// No body sanitization needed — most Anthropic-compatible providers
+			// (ZhiPu, MiniMax, Aliyun) accept the Anthropic message format.
+			// The anthropic-beta header is stripped in the handler.
+			return;
+	}
 }
 
 /**
@@ -55,15 +63,20 @@ export function sanitizeRequestBody(body: Record<string, unknown>, provider: str
  * config key from the request body. This is needed when switching mid-session
  * because Claude Code includes thinking blocks from prior assistant messages.
  */
-function sanitizeAnthropicCompatible(body: Record<string, unknown>, provider: string): void {
-  const strippedBlocks = stripThinkingBlocks(body);
-  const strippedKeys = stripTopLevelKeys(body);
+function sanitizeAnthropicCompatible(
+	body: Record<string, unknown>,
+	provider: string,
+): void {
+	const strippedBlocks = stripThinkingBlocks(body);
+	const strippedKeys = stripTopLevelKeys(body);
 
-  if (strippedKeys > 0 || strippedBlocks > 0) {
-    console.error(`[sanitize:${provider}] stripped ${strippedBlocks} thinking blocks, ${strippedKeys} top-level keys`);
-  }
+	if (strippedKeys > 0 || strippedBlocks > 0) {
+		console.error(
+			`[sanitize:${provider}] stripped ${strippedBlocks} thinking blocks, ${strippedKeys} top-level keys`,
+		);
+	}
 
-  stripUnsupportedContentTypes(body, false);
+	stripUnsupportedContentTypes(body, false);
 }
 
 /**
@@ -76,45 +89,60 @@ function sanitizeAnthropicCompatible(body: Record<string, unknown>, provider: st
  * Also sets thinking to "adaptive" when assistant messages with tool_use
  * lack thinking blocks — prevents "reasoning_content is missing" errors.
  */
-export function stripThinkingFromBody(body: Record<string, unknown>): { strippedCount: number; modified: boolean } {
-  let count = stripThinkingBlocks(body);
-  let modified = count > 0;
+export function stripThinkingFromBody(body: Record<string, unknown>): {
+	strippedCount: number;
+	modified: boolean;
+} {
+	let count = stripThinkingBlocks(body);
+	let modified = count > 0;
 
-  if (hasAssistantToolUseWithoutThinking(body)) {
-    body.thinking = { type: "adaptive" };
-    modified = true;
-    console.error("[sanitize] Set thinking to adaptive for passthrough — assistant tool_use without thinking blocks");
-  }
+	if (hasAssistantToolUseWithoutThinking(body)) {
+		body.thinking = { type: 'adaptive' };
+		modified = true;
+		console.error(
+			'[sanitize] Set thinking to adaptive for passthrough — assistant tool_use without thinking blocks',
+		);
+	}
 
-  return { strippedCount: count, modified };
+	return { strippedCount: count, modified };
 }
 
 /** Check if any assistant message has tool_use blocks but no thinking blocks */
-function hasAssistantToolUseWithoutThinking(body: Record<string, unknown>): boolean {
-  const thinkingConfig = body.thinking as Record<string, unknown> | undefined;
-  if (!thinkingConfig) return false;
+function hasAssistantToolUseWithoutThinking(
+	body: Record<string, unknown>,
+): boolean {
+	const thinkingConfig = body.thinking as Record<string, unknown> | undefined;
+	if (!thinkingConfig) return false;
 
-  const messages = body.messages;
-  if (!Array.isArray(messages)) return false;
+	const messages = body.messages;
+	if (!Array.isArray(messages)) return false;
 
-  for (const message of messages) {
-    if (!message || typeof message !== "object") continue;
-    const msg = message as Record<string, unknown>;
-    if (msg.role !== "assistant") continue;
+	for (const message of messages) {
+		if (!message || typeof message !== 'object') continue;
+		const msg = message as Record<string, unknown>;
+		if (msg.role !== 'assistant') continue;
 
-    const content = msg.content;
-    if (!Array.isArray(content)) continue;
+		const content = msg.content;
+		if (!Array.isArray(content)) continue;
 
-    const hasToolUse = content.some(
-      (b: unknown) => b && typeof b === "object" && (b as Record<string, unknown>).type === "tool_use"
-    );
-    if (!hasToolUse) continue;
+		const hasToolUse = content.some(
+			(b: unknown) =>
+				b &&
+				typeof b === 'object' &&
+				(b as Record<string, unknown>).type === 'tool_use',
+		);
+		if (!hasToolUse) continue;
 
-    const hasThinking = content.some(
-      (b: unknown) => b && typeof b === "object" && THINKING_CONTENT_TYPES.has((b as Record<string, unknown>).type as string)
-    );
-    if (!hasThinking) return true;
-  }
+		const hasThinking = content.some(
+			(b: unknown) =>
+				b &&
+				typeof b === 'object' &&
+				THINKING_CONTENT_TYPES.has(
+					(b as Record<string, unknown>).type as string,
+				),
+		);
+		if (!hasThinking) return true;
+	}
 
-  return false;
+	return false;
 }

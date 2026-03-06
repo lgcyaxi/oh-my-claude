@@ -11,4 +11,4 @@
  * Add new provider sanitizers by creating sanitizers/{provider}.ts
  * and registering in sanitizers/index.ts.
  */
-export { sanitizeRequestBody, stripThinkingFromBody } from "./sanitizers";
+export { sanitizeRequestBody, stripThinkingFromBody } from './sanitizers';

@@ -9,91 +9,95 @@
 
 // Types
 export type {
-  MemoryType,
-  MemoryScope,
-  MemoryEntry,
-  MemoryFrontmatter,
-  MemoryStorageInfo,
-  MemorySearchOptions,
-  MemoryListOptions,
-  MemoryStats,
-  MemoryResult,
-  CreateMemoryInput,
-  SearchTier,
-  ChunkLocation,
-  MemoryIndexStatus,
-} from "./types";
+	MemoryType,
+	MemoryScope,
+	MemoryEntry,
+	MemoryFrontmatter,
+	MemoryStorageInfo,
+	MemorySearchOptions,
+	MemoryListOptions,
+	MemoryStats,
+	MemoryResult,
+	CreateMemoryInput,
+	SearchTier,
+	ChunkLocation,
+	MemoryIndexStatus,
+} from './types';
 
 // Store (CRUD + project detection)
 export {
-  getMemoryDir,
-  getProjectMemoryDir,
-  hasProjectMemory,
-  getMemoryDirForScope,
-  getDefaultWriteScope,
-  ensureMemoryDirs,
-  createMemory,
-  getMemory,
-  updateMemory,
-  deleteMemory,
-  listMemories,
-  getMemoryStats,
-  resolveCanonicalRoot,
-} from "./store";
+	getMemoryDir,
+	getProjectMemoryDir,
+	hasProjectMemory,
+	getMemoryDirForScope,
+	getDefaultWriteScope,
+	ensureMemoryDirs,
+	createMemory,
+	getMemory,
+	updateMemory,
+	deleteMemory,
+	listMemories,
+	getMemoryStats,
+	resolveCanonicalRoot,
+} from './store';
 
 // Parser
 export {
-  parseMemoryFile,
-  serializeMemoryFile,
-  generateMemoryId,
-  generateTitle,
-  nowISO,
-  stripPrivateBlocks,
-} from "./parser";
+	parseMemoryFile,
+	serializeMemoryFile,
+	generateMemoryId,
+	generateTitle,
+	nowISO,
+	stripPrivateBlocks,
+} from './parser';
 
 // Search
-export { searchMemories } from "./search";
-export type { SearchResult } from "./search";
+export { searchMemories } from './search';
+export type { SearchResult } from './search';
 
 // Indexer (SQLite + FTS5)
-export { MemoryIndexer, chunkMarkdown, hashContent, hashContentSync, findWasmPath } from "./indexer";
+export {
+	MemoryIndexer,
+	chunkMarkdown,
+	hashContent,
+	hashContentSync,
+	findWasmPath,
+} from './indexer';
 export type {
-  IndexedFile,
-  IndexedChunk,
-  FTSSearchResult,
-  ChunkingOptions,
-  MemoryIndexerOptions,
-  TokenStats,
-} from "./indexer";
+	IndexedFile,
+	IndexedChunk,
+	FTSSearchResult,
+	ChunkingOptions,
+	MemoryIndexerOptions,
+	TokenStats,
+} from './indexer';
 
 // Embeddings
 export {
-  createCustomEmbeddingProvider,
-  createZhiPuEmbeddingProvider,
-  resolveEmbeddingProvider,
-  cosineSimilarity,
-} from "./embeddings";
-export type {
-  EmbeddingProvider,
-  EmbeddingConfig,
-} from "./embeddings";
+	createCustomEmbeddingProvider,
+	createZhiPuEmbeddingProvider,
+	resolveEmbeddingProvider,
+	cosineSimilarity,
+} from './embeddings';
+export type { EmbeddingProvider, EmbeddingConfig } from './embeddings';
 
 // Hybrid Search
-export { mergeHybridResults, DEFAULT_HYBRID_WEIGHTS } from "./hybrid-search";
+export { mergeHybridResults, DEFAULT_HYBRID_WEIGHTS } from './hybrid-search';
 export type {
-  VectorSearchResult,
-  MergedSearchResult,
-  HybridSearchWeights,
-} from "./hybrid-search";
+	VectorSearchResult,
+	MergedSearchResult,
+	HybridSearchWeights,
+} from './hybrid-search';
 
 // Deduplication
-export { checkDuplicate, DEFAULT_DEDUP_CONFIG } from "./dedup";
-export type {
-  DedupResult,
-  NearDuplicate,
-  DedupConfig,
-} from "./dedup";
+export { checkDuplicate, DEFAULT_DEDUP_CONFIG } from './dedup';
+export type { DedupResult, NearDuplicate, DedupConfig } from './dedup';
 
 // Timeline
-export { generateTimeline, writeTimeline, readTimeline, regenerateTimelines } from "./timeline";
-export type { TimelineOptions } from "./timeline";
+export {
+	generateTimeline,
+	writeTimeline,
+	readTimeline,
+	regenerateTimelines,
+} from './timeline';
+export type { TimelineOptions } from './timeline';

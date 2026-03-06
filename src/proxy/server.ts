@@ -26,7 +26,11 @@ import {
 } from './handlers';
 import { handleControl } from './control';
 import { registerShutdown } from './control/switch';
-import { readSwitchState, resetSwitchState, writeSwitchState } from './state/switch';
+import {
+	readSwitchState,
+	resetSwitchState,
+	writeSwitchState,
+} from './state/switch';
 import {
 	parseSessionFromPath,
 	cleanupStaleSessions,
