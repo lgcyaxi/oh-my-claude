@@ -262,6 +262,18 @@ function searchLegacy(
 	}
 
 	let filtered = entries;
+
+	// Category filter
+	if (options.category) {
+		const cats = Array.isArray(options.category)
+			? options.category
+			: [options.category];
+		const catSet = new Set(cats);
+		filtered = filtered.filter(
+			(entry) => entry.category && catSet.has(entry.category),
+		);
+	}
+
 	if (options.tags && options.tags.length > 0) {
 		const filterTags = new Set(options.tags.map((t) => t.toLowerCase()));
 		filtered = filtered.filter((entry) =>
@@ -378,6 +390,9 @@ async function convertChunkResults(
 		if (indexed) {
 			if (indexed.title) entry.title = indexed.title;
 			if (indexed.type) entry.type = indexed.type as 'note' | 'session';
+			if (indexed.category)
+				entry.category =
+					indexed.category as import('./types').MemoryCategory;
 			if (indexed.tags) {
 				try {
 					entry.tags = JSON.parse(indexed.tags);
@@ -436,7 +451,19 @@ async function convertChunkResults(
 		});
 	}
 
-	const results = Array.from(seenFiles.values());
+	let results = Array.from(seenFiles.values());
+
+	// Post-filter by category if specified
+	if (options.category) {
+		const cats = Array.isArray(options.category)
+			? options.category
+			: [options.category];
+		const catSet = new Set(cats);
+		results = results.filter(
+			(r) => r.entry.category && catSet.has(r.entry.category),
+		);
+	}
+
 	results.sort((a, b) => b.score - a.score);
 	return results;
 }

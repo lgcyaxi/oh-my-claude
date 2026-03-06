@@ -11,6 +11,7 @@
 export type {
 	MemoryType,
 	MemoryScope,
+	MemoryCategory,
 	MemoryEntry,
 	MemoryFrontmatter,
 	MemoryStorageInfo,
@@ -28,6 +29,7 @@ export type {
 export {
 	getMemoryDir,
 	getProjectMemoryDir,
+	getClaudeNativeMemoryDir,
 	hasProjectMemory,
 	getMemoryDirForScope,
 	getDefaultWriteScope,
@@ -92,6 +94,10 @@ export type {
 // Deduplication
 export { checkDuplicate, DEFAULT_DEDUP_CONFIG } from './dedup';
 export type { DedupResult, NearDuplicate, DedupConfig } from './dedup';
+
+// AI Client (proxy-routed)
+export { callMemoryAI, callMemoryAIWithMessages } from './ai-client';
+export type { MemoryAIResponse } from './ai-client';
 
 // Timeline
 export {

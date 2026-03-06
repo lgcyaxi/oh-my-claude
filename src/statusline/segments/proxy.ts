@@ -120,6 +120,44 @@ async function fetchStatusFromControlApi(
 }
 
 /**
+ * Check if this is an auto-spawned memory-only proxy (no session URL).
+ */
+function isAutoSpawnedProxy(): boolean {
+	try {
+		const { existsSync, readFileSync, readdirSync } =
+			require('node:fs') as typeof import('node:fs');
+		const { join } = require('node:path') as typeof import('node:path');
+		const { homedir } = require('node:os') as typeof import('node:os');
+
+		const sessionsDir = join(
+			homedir(),
+			'.claude',
+			'oh-my-claude',
+			'sessions',
+		);
+		if (!existsSync(sessionsDir)) return false;
+
+		for (const entry of readdirSync(sessionsDir)) {
+			const autoProxyFile = join(sessionsDir, entry, 'auto-proxy.json');
+			if (existsSync(autoProxyFile)) {
+				const data = JSON.parse(readFileSync(autoProxyFile, 'utf-8'));
+				if (data.autoSpawned && data.pid) {
+					try {
+						process.kill(data.pid, 0);
+						return true;
+					} catch {
+						// Process not running
+					}
+				}
+			}
+		}
+		return false;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Collect proxy switch data
  */
 async function collectProxyData(
@@ -141,8 +179,15 @@ async function collectProxyData(
 
 		const isSwitched = state.switched;
 
-		// Hidden when not switched AND no session (not connected through proxy)
+		// Check for auto-spawned memory-only proxy
 		if (!isSwitched && !sessionId) {
+			if (isAutoSpawnedProxy()) {
+				return {
+					primary: 'proxy:mem',
+					metadata: { mode: 'memory-only' },
+					color: 'neutral',
+				};
+			}
 			return null;
 		}
 

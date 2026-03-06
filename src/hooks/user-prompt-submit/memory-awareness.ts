@@ -297,6 +297,31 @@ function getTimelineContent(
 	return combined;
 }
 
+/**
+ * Read Claude's native MEMORY.md from ~/.claude/projects/<project-key>/MEMORY.md
+ * Returns the content or null if not found.
+ */
+function getClaudeNativeMemory(projectCwd?: string): string | null {
+	if (!projectCwd) return null;
+
+	try {
+		const claudeProjectsDir = join(homedir(), '.claude', 'projects');
+		if (!existsSync(claudeProjectsDir)) return null;
+
+		// Claude uses the full project path with slashes replaced
+		const projectKey = projectCwd.replace(/\//g, '-').replace(/^-/, '');
+		const memoryFile = join(claudeProjectsDir, projectKey, 'CLAUDE.md');
+
+		if (existsSync(memoryFile)) {
+			const content = readFileSync(memoryFile, 'utf-8').trim();
+			if (content && content.length > 10) return content;
+		}
+	} catch {
+		// ignore
+	}
+	return null;
+}
+
 // ── Proactive recall (in-process lightweight keyword search) ────────
 
 const STOP_WORDS = new Set([
@@ -916,6 +941,17 @@ async function main() {
 
 		if (timeline) {
 			context += `\n\n${timeline}`;
+		}
+
+		// Include Claude native MEMORY.md if available
+		const nativeMemory = getClaudeNativeMemory(projectCwd);
+		if (nativeMemory) {
+			const maxNative = 2000;
+			const truncated =
+				nativeMemory.length > maxNative
+					? nativeMemory.slice(0, maxNative) + '\n... (truncated)'
+					: nativeMemory;
+			context += `\n\n# Claude Native Memory\n${truncated}`;
 		}
 
 		const response: HookResponse = {

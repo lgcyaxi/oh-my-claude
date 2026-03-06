@@ -72,6 +72,43 @@ function readTokenStats(): {
 	}
 }
 
+/** Short display labels for memory model providers */
+const MEMORY_PROVIDER_SHORT: Record<string, string> = {
+	zhipu: 'ZP',
+	minimax: 'MM',
+	'minimax-cn': 'MM',
+	deepseek: 'DS',
+	kimi: 'Kimi',
+	aliyun: 'Qwen',
+	anthropic: 'Claude',
+	openai: 'OAI',
+};
+
+/**
+ * Fetch current memory model config from proxy (cached, best-effort).
+ */
+async function fetchMemoryModelLabel(): Promise<string | null> {
+	try {
+		const controlPort =
+			process.env.OMC_CONTROL_PORT ||
+			process.env.OMC_PROXY_CONTROL_PORT ||
+			'18911';
+		const resp = await fetch(
+			`http://localhost:${controlPort}/internal/memory-config`,
+			{ signal: AbortSignal.timeout(300) },
+		);
+		if (!resp.ok) return null;
+		const data = (await resp.json()) as {
+			provider: string | null;
+			source: string;
+		};
+		if (!data.provider || data.source === 'auto') return null;
+		return MEMORY_PROVIDER_SHORT[data.provider] ?? data.provider;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Collect memory data
  */
@@ -83,7 +120,6 @@ async function collectMemoryData(
 		const stats = getMemoryStats(projectRoot);
 		const { project, global: glob } = stats.byScope;
 
-		// Format: mem:12P/5G (both), mem:5G (global only), mem:12P (project only)
 		let display: string;
 		if (project > 0 && glob > 0) {
 			display = `mem:${project}P/${glob}G`;
@@ -102,6 +138,12 @@ async function collectMemoryData(
 			(tokenStats.embeddingCalls > 0 || tokenStats.searchQueries > 0)
 		) {
 			display += ` tk:${tokenStats.embeddingCalls}/${tokenStats.searchQueries}`;
+		}
+
+		// Append memory model indicator when configured
+		const memModelLabel = await fetchMemoryModelLabel();
+		if (memModelLabel) {
+			display += ` →${memModelLabel}`;
 		}
 
 		return {

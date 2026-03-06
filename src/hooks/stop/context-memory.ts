@@ -66,28 +66,230 @@ interface HookResponse {
 	suppressOutput?: boolean;
 }
 
-// ---- Provider definitions ----
+// ---- Proxy-based AI client ----
 
-const DEFAULT_PROVIDER_PRIORITY = [
-	{
-		name: 'zhipu',
-		model: 'glm-5',
-		baseUrl: 'https://open.bigmodel.cn/api/anthropic',
-		apiKeyEnv: 'ZHIPU_API_KEY',
-	},
-	{
-		name: 'minimax',
-		model: 'MiniMax-M2.5',
-		baseUrl: 'https://api.minimaxi.com/anthropic',
-		apiKeyEnv: 'MINIMAX_API_KEY',
-	},
-	{
-		name: 'deepseek',
-		model: 'deepseek-chat',
-		baseUrl: 'https://api.deepseek.com/anthropic',
-		apiKeyEnv: 'DEEPSEEK_API_KEY',
-	},
-];
+const DEFAULT_CONTROL_PORT = 18911;
+
+function getControlPort(): number {
+	const env =
+		process.env.OMC_CONTROL_PORT || process.env.OMC_PROXY_CONTROL_PORT;
+	if (env) {
+		const parsed = parseInt(env, 10);
+		if (!isNaN(parsed)) return parsed;
+	}
+	return DEFAULT_CONTROL_PORT;
+}
+
+async function isProxyHealthy(controlPort: number): Promise<boolean> {
+	try {
+		const resp = await fetch(`http://localhost:${controlPort}/health`, {
+			signal: AbortSignal.timeout(500),
+		});
+		if (!resp.ok) return false;
+		const data = (await resp.json()) as { status?: string };
+		return data.status === 'ok';
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Auto-spawn the proxy if not running. Session-scoped: tracked PID is killed on Stop.
+ * Returns the control port to use, or null if proxy couldn't start.
+ */
+async function ensureProxy(projectCwd?: string): Promise<number | null> {
+	const controlPort = getControlPort();
+
+	if (await isProxyHealthy(controlPort)) {
+		return controlPort;
+	}
+
+	// Proxy not running — try to auto-spawn
+	try {
+		const proxyScript = join(
+			homedir(),
+			'.claude',
+			'oh-my-claude',
+			'dist',
+			'proxy',
+			'server.js',
+		);
+		if (!existsSync(proxyScript)) {
+			console.error(
+				'[context-memory] Proxy script not found, cannot auto-spawn',
+			);
+			return null;
+		}
+
+		// Resolve bun path
+		let bunPath = 'bun';
+		try {
+			const { execSync } = await import('node:child_process');
+			bunPath = execSync('which bun', {
+				encoding: 'utf-8',
+				timeout: 3000,
+				stdio: ['ignore', 'pipe', 'ignore'],
+			}).trim();
+		} catch {
+			/* use default */
+		}
+
+		const { spawn: spawnProcess } = await import('node:child_process');
+		const child = spawnProcess(
+			bunPath,
+			[
+				'run',
+				proxyScript,
+				'--port',
+				'18910',
+				'--control-port',
+				String(controlPort),
+			],
+			{
+				detached: process.platform !== 'win32',
+				stdio: ['ignore', 'ignore', 'ignore'],
+				env: { ...process.env },
+				windowsHide: true,
+			},
+		);
+		child.unref();
+
+		const pid = child.pid;
+		if (!pid) {
+			console.error('[context-memory] Failed to spawn proxy (no PID)');
+			return null;
+		}
+
+		// Track PID for cleanup on Stop
+		const sessionHash = projectCwd ? shortHash(projectCwd) : 'global';
+		const sessionsDir = join(
+			homedir(),
+			'.claude',
+			'oh-my-claude',
+			'sessions',
+			sessionHash,
+		);
+		mkdirSync(sessionsDir, { recursive: true });
+		writeFileSync(
+			join(sessionsDir, 'auto-proxy.json'),
+			JSON.stringify({
+				pid,
+				autoSpawned: true,
+				startedAt: new Date().toISOString(),
+			}),
+			'utf-8',
+		);
+
+		// Wait for proxy to become healthy (up to 3s)
+		for (let i = 0; i < 15; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 200));
+			if (await isProxyHealthy(controlPort)) {
+				console.error(
+					`[context-memory] Auto-spawned proxy (PID ${pid}) on port ${controlPort}`,
+				);
+				return controlPort;
+			}
+		}
+
+		console.error(
+			'[context-memory] Auto-spawned proxy but health check timed out',
+		);
+		return null;
+	} catch (error) {
+		console.error('[context-memory] Failed to auto-spawn proxy:', error);
+		return null;
+	}
+}
+
+/**
+ * Kill the auto-spawned proxy on session end.
+ */
+function cleanupAutoProxy(projectCwd?: string): void {
+	try {
+		const sessionHash = projectCwd ? shortHash(projectCwd) : 'global';
+		const autoProxyFile = join(
+			homedir(),
+			'.claude',
+			'oh-my-claude',
+			'sessions',
+			sessionHash,
+			'auto-proxy.json',
+		);
+		if (!existsSync(autoProxyFile)) return;
+
+		const data = JSON.parse(readFileSync(autoProxyFile, 'utf-8')) as {
+			pid?: number;
+			autoSpawned?: boolean;
+		};
+
+		if (data.autoSpawned && data.pid) {
+			try {
+				process.kill(data.pid, 'SIGTERM');
+				console.error(
+					`[context-memory] Killed auto-spawned proxy (PID ${data.pid})`,
+				);
+			} catch {
+				// Already dead
+			}
+		}
+
+		// Clean up the tracking file
+		const { unlinkSync } = require('node:fs') as typeof import('node:fs');
+		unlinkSync(autoProxyFile);
+	} catch {
+		// Best-effort
+	}
+}
+
+/**
+ * Call the proxy's /internal/complete endpoint for memory AI operations.
+ * Falls back to null if proxy is unavailable (caller decides what to do).
+ */
+async function callMemoryAI(
+	context: string,
+	prompt: string,
+	controlPort: number,
+): Promise<{ text: string; provider: string } | null> {
+	try {
+		const resp = await fetch(
+			`http://localhost:${controlPort}/internal/complete`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					messages: [
+						{
+							role: 'user',
+							content: `${prompt}\n\n---\n\nSession context:\n${context}`,
+						},
+					],
+					temperature: 0.1,
+					max_tokens: 1024,
+				}),
+				signal: AbortSignal.timeout(60_000),
+			},
+		);
+
+		if (!resp.ok) {
+			console.error(
+				`[context-memory] /internal/complete returned ${resp.status}`,
+			);
+			return null;
+		}
+
+		const data = (await resp.json()) as {
+			content?: string;
+			provider?: string;
+		};
+		if (data.content) {
+			return { text: data.content, provider: data.provider ?? 'unknown' };
+		}
+		return null;
+	} catch (error) {
+		console.error('[context-memory] callMemoryAI failed:', error);
+		return null;
+	}
+}
 
 // ---- Constants ----
 
@@ -249,7 +451,7 @@ function saveState(state: ContextMemoryState, projectCwd?: string): void {
 
 // ---- Config ----
 
-function loadConfig(): { threshold: number; providerPriority: string[] } {
+function loadHookConfig(): { threshold: number } {
 	const configPath = join(homedir(), '.claude', 'oh-my-claude.json');
 	try {
 		if (existsSync(configPath)) {
@@ -262,11 +464,6 @@ function loadConfig(): { threshold: number; providerPriority: string[] } {
 						: Math.round(
 								(config.memory?.autoSaveThreshold ?? 75) * 1.33,
 							),
-				providerPriority: config.memory?.aiProviderPriority ?? [
-					'zhipu',
-					'minimax',
-					'deepseek',
-				],
 			};
 		}
 	} catch {
@@ -274,32 +471,7 @@ function loadConfig(): { threshold: number; providerPriority: string[] } {
 	}
 	return {
 		threshold: DEFAULT_SESSION_LOG_THRESHOLD_KB,
-		providerPriority: ['zhipu', 'minimax', 'deepseek'],
 	};
-}
-
-function getOrderedProviders(
-	priority: string[],
-): typeof DEFAULT_PROVIDER_PRIORITY {
-	const providerMap = new Map(
-		DEFAULT_PROVIDER_PRIORITY.map((p) => [p.name, p]),
-	);
-	const ordered: typeof DEFAULT_PROVIDER_PRIORITY = [];
-
-	for (const name of priority) {
-		const provider = providerMap.get(name);
-		if (provider) {
-			ordered.push(provider);
-		}
-	}
-
-	for (const provider of DEFAULT_PROVIDER_PRIORITY) {
-		if (!ordered.includes(provider)) {
-			ordered.push(provider);
-		}
-	}
-
-	return ordered;
 }
 
 // ---- Session log operations ----
@@ -358,69 +530,9 @@ function clearSessionLog(projectCwd?: string): void {
 	}
 }
 
-// ---- Provider operations ----
-
-function findAvailableProvider(
-	providers: typeof DEFAULT_PROVIDER_PRIORITY,
-): (typeof DEFAULT_PROVIDER_PRIORITY)[number] | null {
-	for (const provider of providers) {
-		const apiKey = process.env[provider.apiKeyEnv];
-		if (apiKey && apiKey.length > 0) {
-			return provider;
-		}
-	}
-	return null;
-}
-
-async function callExternalModel(
-	provider: (typeof DEFAULT_PROVIDER_PRIORITY)[number],
-	context: string,
-	prompt: string,
-): Promise<string | null> {
-	const apiKey = process.env[provider.apiKeyEnv];
-	if (!apiKey) return null;
-
-	try {
-		const response = await fetch(`${provider.baseUrl}/v1/messages`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': apiKey,
-				'anthropic-version': '2023-06-01',
-			},
-			body: JSON.stringify({
-				model: provider.model,
-				max_tokens: 1024,
-				messages: [
-					{
-						role: 'user',
-						content: `${prompt}\n\n---\n\nSession context:\n${context}`,
-					},
-				],
-			}),
-		});
-
-		if (!response.ok) {
-			console.error(
-				`[context-memory] Provider ${provider.name} returned ${response.status}`,
-			);
-			return null;
-		}
-
-		const data = (await response.json()) as {
-			content?: Array<{ type: string; text?: string }>;
-		};
-
-		const textBlock = data.content?.find((b) => b.type === 'text');
-		return textBlock?.text ?? null;
-	} catch (error) {
-		console.error(
-			`[context-memory] Failed to call ${provider.name}:`,
-			error,
-		);
-		return null;
-	}
-}
+// ---- Provider operations (now routed through proxy) ----
+// All AI calls go through the proxy's /internal/complete endpoint.
+// See callMemoryAI() above and ensureProxy() for auto-spawn logic.
 
 // ---- Memory save ----
 
@@ -734,7 +846,7 @@ async function handlePostToolUse(input: HookInput): Promise<HookResponse> {
 		}
 	}
 
-	const config = loadConfig();
+	const config = loadHookConfig();
 
 	// Skip if threshold is 0 (disabled)
 	if (config.threshold === 0) {
@@ -760,14 +872,6 @@ async function handlePostToolUse(input: HookInput): Promise<HookResponse> {
 		return { decision: 'approve' };
 	}
 
-	// Find available provider
-	const providers = getOrderedProviders(config.providerPriority);
-	const provider = findAvailableProvider(providers);
-
-	if (!provider) {
-		return { decision: 'approve' };
-	}
-
 	// Build context for summarization (project-scoped log)
 	const sessionLog = readSessionLog(projectCwd);
 
@@ -775,19 +879,25 @@ async function handlePostToolUse(input: HookInput): Promise<HookResponse> {
 		return { decision: 'approve' };
 	}
 
+	// Ensure proxy is running (auto-spawn if needed)
+	const controlPort = await ensureProxy(projectCwd);
+	if (!controlPort) {
+		return { decision: 'approve' };
+	}
+
 	const context = `Session activity log (${logSizeKB}KB, threshold: ${config.threshold}KB):\n\n${sessionLog}`;
 
 	try {
-		const summary = await callExternalModel(
-			provider,
+		const result = await callMemoryAI(
 			context,
 			CHECKPOINT_PROMPT,
+			controlPort,
 		);
 
-		if (summary) {
+		if (result) {
 			const filePath = saveSessionMemory(
-				summary,
-				provider.name,
+				result.text,
+				result.provider,
 				'checkpoint',
 				logSizeKB,
 				projectCwd,
@@ -808,7 +918,7 @@ async function handlePostToolUse(input: HookInput): Promise<HookResponse> {
 
 			return {
 				decision: 'approve',
-				message: `Context memory auto-saved (${logSizeKB}KB activity, via ${provider.name})`,
+				message: `Context memory auto-saved (${logSizeKB}KB activity, via ${result.provider})`,
 			};
 		}
 	} catch (error) {
@@ -833,16 +943,13 @@ async function handleStop(input: HookInput): Promise<HookResponse> {
 		return { decision: 'approve' };
 	}
 
-	const config = loadConfig();
 	const state = loadState(projectCwd);
 
-	// Find available provider
-	const providers = getOrderedProviders(config.providerPriority);
-	const provider = findAvailableProvider(providers);
-
-	if (!provider) {
-		// Clear session log even if no provider (prevent stale accumulation)
+	// Ensure proxy is running for AI summarization
+	const controlPort = await ensureProxy(projectCwd);
+	if (!controlPort) {
 		clearSessionLog(projectCwd);
+		cleanupAutoProxy(projectCwd);
 		return { decision: 'approve' };
 	}
 
@@ -947,17 +1054,17 @@ async function handleStop(input: HookInput): Promise<HookResponse> {
 	}
 
 	try {
-		const summary = await callExternalModel(
-			provider,
+		const result = await callMemoryAI(
 			context,
 			SESSION_END_PROMPT,
+			controlPort,
 		);
 
-		if (summary) {
+		if (result) {
 			const logSizeKB = getSessionLogSizeKB(projectCwd);
 			const filePath = saveSessionMemory(
-				summary,
-				provider.name,
+				result.text,
+				result.provider,
 				'session-end',
 				logSizeKB,
 				projectCwd,
@@ -973,27 +1080,22 @@ async function handleStop(input: HookInput): Promise<HookResponse> {
 				projectCwd,
 			);
 
-			// Clear session log (rotate for next session)
 			clearSessionLog(projectCwd);
+			cleanupAutoProxy(projectCwd);
 
 			console.error(`[context-memory] Session-end saved: ${filePath}`);
 
-			// NOTE: auto-decisions extraction disabled — decisions are already
-			// in the session summary and separate extraction creates noisy duplicates
-			// with contradictory content across sessions. Use /omc-mem-compact or
-			// /omc-mem-daily to consolidate instead.
-
 			return {
 				decision: 'approve',
-				message: `Session memory saved via ${provider.name} (${provider.model})`,
+				message: `Session memory saved via proxy (${result.provider})`,
 			};
 		}
 	} catch (error) {
 		console.error('[context-memory] Session-end error:', error);
 	}
 
-	// Clear session log even on failure
 	clearSessionLog(projectCwd);
+	cleanupAutoProxy(projectCwd);
 	return { decision: 'approve' };
 }
 

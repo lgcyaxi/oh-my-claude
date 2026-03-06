@@ -18,7 +18,12 @@
  * ```
  */
 
-import type { MemoryEntry, MemoryFrontmatter, MemoryType } from './types';
+import type {
+	MemoryEntry,
+	MemoryFrontmatter,
+	MemoryType,
+	MemoryCategory,
+} from './types';
 
 /**
  * Parse a memory markdown file into a MemoryEntry
@@ -38,6 +43,7 @@ export function parseMemoryFile(id: string, raw: string): MemoryEntry | null {
 		id,
 		title: frontmatter.title || id,
 		type: frontmatter.type,
+		...(frontmatter.category && { category: frontmatter.category }),
 		tags: frontmatter.tags,
 		...(frontmatter.concepts &&
 			frontmatter.concepts.length > 0 && {
@@ -57,12 +63,13 @@ export function parseMemoryFile(id: string, raw: string): MemoryEntry | null {
 export function serializeMemoryFile(entry: MemoryEntry): string {
 	const tagsStr = entry.tags.length > 0 ? `[${entry.tags.join(', ')}]` : '[]';
 
-	const lines = [
-		'---',
-		`title: ${entry.title}`,
-		`type: ${entry.type}`,
-		`tags: ${tagsStr}`,
-	];
+	const lines = ['---', `title: ${entry.title}`, `type: ${entry.type}`];
+
+	if (entry.category) {
+		lines.push(`category: ${entry.category}`);
+	}
+
+	lines.push(`tags: ${tagsStr}`);
 
 	if (entry.concepts && entry.concepts.length > 0) {
 		lines.push(`concepts: [${entry.concepts.join(', ')}]`);
@@ -161,6 +168,27 @@ function parseFrontmatter(raw: string): MemoryFrontmatter {
 			const t = typeMatch[1].trim();
 			if (t === 'session' || t === 'note') {
 				result.type = t as MemoryType;
+			}
+			continue;
+		}
+
+		// category
+		const categoryMatch = trimmed.match(/^category:\s*(.+)$/);
+		if (categoryMatch?.[1]) {
+			const c = categoryMatch[1].trim() as MemoryCategory;
+			const validCategories: MemoryCategory[] = [
+				'architecture',
+				'convention',
+				'decision',
+				'debugging',
+				'workflow',
+				'pattern',
+				'reference',
+				'session',
+				'uncategorized',
+			];
+			if (validCategories.includes(c)) {
+				result.category = c;
 			}
 			continue;
 		}

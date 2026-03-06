@@ -13,6 +13,21 @@
 export type MemoryType = 'session' | 'note';
 
 /**
+ * Structured memory categories for predictable retrieval.
+ * Provides a fixed taxonomy alongside freeform tags.
+ */
+export type MemoryCategory =
+	| 'architecture'
+	| 'convention'
+	| 'decision'
+	| 'debugging'
+	| 'workflow'
+	| 'pattern'
+	| 'reference'
+	| 'session'
+	| 'uncategorized';
+
+/**
  * Memory storage scope
  * - project: .claude/mem/ under project root
  * - global: ~/.claude/oh-my-claude/memory/
@@ -39,6 +54,8 @@ export interface MemoryEntry {
 	title: string;
 	/** Memory type */
 	type: MemoryType;
+	/** Structured category for taxonomy-based retrieval */
+	category?: MemoryCategory;
 	/** Tags for categorization and search */
 	tags: string[];
 	/** Semantic concepts (e.g., ["authentication", "jwt"]) */
@@ -59,6 +76,7 @@ export interface MemoryEntry {
 export interface MemoryFrontmatter {
 	title: string;
 	type: MemoryType;
+	category?: MemoryCategory;
 	tags: string[];
 	concepts?: string[];
 	files?: string[];
@@ -74,6 +92,8 @@ export interface MemorySearchOptions {
 	query?: string;
 	/** Filter by memory type */
 	type?: MemoryType;
+	/** Filter by category (single or multiple) */
+	category?: MemoryCategory | MemoryCategory[];
 	/** Filter by tags (any match) */
 	tags?: string[];
 	/** Filter/boost by semantic concepts */
@@ -110,6 +130,8 @@ export interface MemoryStats {
 	total: number;
 	/** Count by type */
 	byType: Record<MemoryType, number>;
+	/** Count by category */
+	byCategory?: Partial<Record<MemoryCategory, number>>;
 	/** Count by scope (project vs global) */
 	byScope: Record<'project' | 'global', number>;
 	/** Total size in bytes across all memory files */
@@ -163,6 +185,8 @@ export interface CreateMemoryInput {
 	title?: string;
 	/** Memory type (defaults to "note") */
 	type?: MemoryType;
+	/** Structured category (auto-inferred if not provided) */
+	category?: MemoryCategory;
 	/** Tags for categorization */
 	tags?: string[];
 	/** Semantic concepts (e.g., ["authentication", "jwt"]) */

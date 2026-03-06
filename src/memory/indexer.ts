@@ -44,11 +44,13 @@ export interface IndexedFile {
 	size: number;
 	title: string | null;
 	type: string | null;
+	category: string | null;
 	tags: string | null;
 	concepts: string | null;
 	filesTouched: string | null;
 	createdAt: string | null;
 	potentialDuplicateOf: string | null;
+	source: string | null;
 }
 
 export interface IndexedChunk {
@@ -92,7 +94,7 @@ const DEFAULT_CHUNKING: ChunkingOptions = {
 	overlap: 80,
 };
 
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
 
 /** Approximate characters per token for estimation */
 const CHARS_PER_TOKEN = 4;
@@ -119,9 +121,11 @@ const SCHEMA_STATEMENTS: string[] = [
     size INTEGER NOT NULL,
     title TEXT,
     type TEXT,
+    category TEXT,
     tags TEXT,
     created_at TEXT,
     potential_duplicate_of TEXT,
+    source TEXT DEFAULT 'omc',
     PRIMARY KEY (path, scope)
   )`,
 
@@ -403,13 +407,28 @@ export class MemoryIndexer {
 					? 'project'
 					: (dir.scope as 'project' | 'global');
 
-			for (const subdir of ['notes', 'sessions']) {
-				const fullDir = join(dir.path, subdir);
-				if (!existsSync(fullDir)) continue;
+			// Detect if this is a Claude native memory dir
+			const isClaudeNative = dir.path.includes('/.claude/projects/');
+			const source = isClaudeNative ? 'claude-native' : 'omc';
 
+			// Scan subdirs (notes, sessions) for omc memories
+			const dirsToScan: string[] = [];
+			if (!isClaudeNative) {
+				for (const subdir of ['notes', 'sessions']) {
+					const fullDir = join(dir.path, subdir);
+					if (existsSync(fullDir)) {
+						dirsToScan.push(fullDir);
+					}
+				}
+			} else {
+				// Claude native memory: .md files directly in the directory
+				dirsToScan.push(dir.path);
+			}
+
+			for (const scanDir of dirsToScan) {
 				let files: string[];
 				try {
-					files = readdirSync(fullDir).filter((f) =>
+					files = readdirSync(scanDir).filter((f) =>
 						f.endsWith('.md'),
 					);
 				} catch {
@@ -417,7 +436,7 @@ export class MemoryIndexer {
 				}
 
 				for (const file of files) {
-					const filePath = join(fullDir, file);
+					const filePath = join(scanDir, file);
 					seenPaths.add(filePath);
 
 					try {
@@ -444,6 +463,7 @@ export class MemoryIndexer {
 							stats,
 							scope,
 							dir.projectRoot,
+							source,
 						);
 
 						if (existing) {
@@ -498,6 +518,7 @@ export class MemoryIndexer {
 		stats: Stats,
 		scope: 'project' | 'global',
 		projectRoot?: string,
+		source: string = 'omc',
 	): void {
 		// Parse frontmatter for metadata
 		const id = basename(filePath, '.md');
@@ -509,8 +530,8 @@ export class MemoryIndexer {
 
 		// Insert file record
 		this.db.run(
-			`INSERT INTO files (path, scope, project_root, hash, mtime, size, title, type, tags, concepts, files_touched, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO files (path, scope, project_root, hash, mtime, size, title, type, category, tags, concepts, files_touched, created_at, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				filePath,
 				scope,
@@ -520,10 +541,12 @@ export class MemoryIndexer {
 				stats.size,
 				parsed?.title ?? null,
 				parsed?.type ?? null,
+				parsed?.category ?? null,
 				parsed?.tags ? JSON.stringify(parsed.tags) : null,
 				parsed?.concepts ? JSON.stringify(parsed.concepts) : null,
 				parsed?.files ? JSON.stringify(parsed.files) : null,
 				parsed?.createdAt ?? null,
+				source,
 			],
 		);
 
@@ -686,11 +709,13 @@ export class MemoryIndexer {
 			size: row.size as number,
 			title: row.title as string | null,
 			type: row.type as string | null,
+			category: (row.category as string | null) ?? null,
 			tags: row.tags as string | null,
 			concepts: (row.concepts as string | null) ?? null,
 			filesTouched: (row.files_touched as string | null) ?? null,
 			createdAt: row.created_at as string | null,
 			potentialDuplicateOf: row.potential_duplicate_of as string | null,
+			source: (row.source as string | null) ?? 'omc',
 		};
 	}
 
@@ -724,6 +749,7 @@ export class MemoryIndexer {
 					size: row.size as number,
 					title: row.title as string | null,
 					type: row.type as string | null,
+					category: (row.category as string | null) ?? null,
 					tags: row.tags as string | null,
 					concepts: (row.concepts as string | null) ?? null,
 					filesTouched: (row.files_touched as string | null) ?? null,
@@ -731,6 +757,7 @@ export class MemoryIndexer {
 					potentialDuplicateOf: row.potential_duplicate_of as
 						| string
 						| null,
+					source: (row.source as string | null) ?? 'omc',
 				});
 			}
 		}

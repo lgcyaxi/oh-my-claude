@@ -1,10 +1,3 @@
-/*
- * @Author       : Lihao leolihao@arizona.edu
- * @Date         : 2026-03-05 15:54:07
- * @FilePath     : /oh-my-claude/src/memory/store.ts
- * @Description  :
- * Copyright (c) 2026 by Lihao (leolihao@arizona.edu), All Rights Reserved.
- */
 /**
  * Memory Store
  *
@@ -36,6 +29,7 @@ import { cwd } from 'node:process';
 import type {
 	MemoryEntry,
 	MemoryType,
+	MemoryCategory,
 	MemoryScope,
 	MemoryStats,
 	MemoryResult,
@@ -100,6 +94,116 @@ function normalizeTags(input: unknown): string[] {
 			.filter((s) => s.length > 0);
 	}
 	return [];
+}
+
+// ---- Category inference ----
+
+const CATEGORY_KEYWORDS: Record<MemoryCategory, string[]> = {
+	architecture: [
+		'architecture',
+		'design',
+		'data-flow',
+		'component',
+		'system',
+		'structure',
+		'diagram',
+		'schema',
+	],
+	convention: [
+		'convention',
+		'standard',
+		'naming',
+		'style',
+		'lint',
+		'format',
+		'code-style',
+	],
+	decision: [
+		'decision',
+		'adr',
+		'trade-off',
+		'tradeoff',
+		'chose',
+		'why',
+		'rationale',
+		'alternative',
+	],
+	debugging: [
+		'debug',
+		'bug',
+		'fix',
+		'error',
+		'issue',
+		'crash',
+		'gotcha',
+		'troubleshoot',
+		'workaround',
+	],
+	workflow: [
+		'workflow',
+		'build',
+		'deploy',
+		'ci',
+		'cd',
+		'pipeline',
+		'process',
+		'release',
+		'test',
+	],
+	pattern: [
+		'pattern',
+		'idiom',
+		'recipe',
+		'technique',
+		'approach',
+		'best-practice',
+		'reusable',
+	],
+	reference: [
+		'reference',
+		'api',
+		'doc',
+		'config',
+		'snippet',
+		'example',
+		'link',
+		'cheatsheet',
+	],
+	session: ['session', 'auto-capture', 'session-end', 'context-threshold'],
+	uncategorized: [],
+};
+
+/**
+ * Infer a memory category from type, tags, and content keywords.
+ * Returns undefined if no confident match — caller decides default.
+ */
+function inferCategory(
+	type: MemoryType,
+	tags: string[],
+	content: string,
+): MemoryCategory | undefined {
+	if (type === 'session') return 'session';
+
+	const lowerTags = tags.map((t) => t.toLowerCase());
+	const lowerContent = content.toLowerCase().slice(0, 500);
+
+	let bestCategory: MemoryCategory | undefined;
+	let bestScore = 0;
+
+	for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+		if (cat === 'uncategorized' || cat === 'session') continue;
+		let score = 0;
+		for (const kw of keywords) {
+			if (lowerTags.some((t) => t.includes(kw))) score += 3;
+			if (lowerContent.includes(kw)) score += 1;
+		}
+		if (score > bestScore) {
+			bestScore = score;
+			bestCategory = cat as MemoryCategory;
+		}
+	}
+
+	return bestScore >= 2 ? bestCategory : undefined;
 }
 
 // ---- Project detection helpers ----
@@ -178,6 +282,24 @@ export function resolveCanonicalRoot(projectRoot?: string): string | null {
  */
 export function getMemoryDir(): string {
 	return join(homedir(), '.claude', 'oh-my-claude', 'memory');
+}
+
+/**
+ * Get Claude's native memory directory for the current project.
+ * Claude Code stores memories in ~/.claude/projects/<project-hash>/memory/
+ * Returns null if not in a project or directory doesn't exist.
+ */
+export function getClaudeNativeMemoryDir(projectRoot?: string): string | null {
+	if (!projectRoot) return null;
+	const claudeProjectsDir = join(homedir(), '.claude', 'projects');
+	if (!existsSync(claudeProjectsDir)) return null;
+
+	// Claude uses the full project path with slashes replaced
+	const projectKey = projectRoot.replace(/\//g, '-').replace(/^-/, '');
+	const nativeDir = join(claudeProjectsDir, projectKey, 'memory');
+	if (existsSync(nativeDir)) return nativeDir;
+
+	return null;
 }
 
 /**
@@ -335,10 +457,15 @@ export function createMemory(
 		const idDate = input.createdAt ? new Date(input.createdAt) : undefined;
 		const id = generateMemoryId(title, idDate);
 
+		const category =
+			input.category ??
+			inferCategory(type, normalizeTags(input.tags), input.content);
+
 		const entry: MemoryEntry = {
 			id,
 			title,
 			type,
+			...(category && { category }),
 			tags: normalizeTags(input.tags),
 			...(input.concepts &&
 				input.concepts.length > 0 && {

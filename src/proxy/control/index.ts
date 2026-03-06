@@ -20,6 +20,7 @@ import {
 } from './switch';
 import { handleProviders, handleModels } from './providers';
 import { handleResponse, handleStream } from './response';
+import { handleInternalComplete, handleMemoryConfig } from './internal';
 import { jsonResponse } from './helpers';
 
 // Re-export registerShutdown for server.ts
@@ -89,6 +90,12 @@ export async function handleControl(req: Request): Promise<Response> {
 			case '/stop':
 				return await handleStop(req, corsHeaders);
 
+			case '/internal/complete':
+				return await handleInternalComplete(req, corsHeaders);
+
+			case '/internal/memory-config':
+				return await handleMemoryConfig(req, corsHeaders);
+
 			default:
 				return jsonResponse(
 					{
@@ -105,6 +112,8 @@ export async function handleControl(req: Request): Promise<Response> {
 							'/revert',
 							'/models',
 							'/stop',
+							'/internal/complete',
+							'/internal/memory-config',
 						],
 						hint: 'Add ?session=ID for session-scoped operations',
 					},
