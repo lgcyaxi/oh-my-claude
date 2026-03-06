@@ -93,7 +93,7 @@ export async function handlePreferenceTool(
       }
 
       const store = ctx.getPrefStore();
-      const result = store.get(id);
+      const result = store.resolve(id);
 
       if (!result.success || !result.data) {
         return {
@@ -127,7 +127,15 @@ export async function handlePreferenceTool(
       }
 
       const store = ctx.getPrefStore();
-      const result = store.update(id, updates);
+      const resolved = store.resolve(id);
+      if (!resolved.success || !resolved.data) {
+        return {
+          content: [{ type: "text", text: `Error: ${resolved.error}` }],
+          isError: true,
+        };
+      }
+
+      const result = store.update(resolved.data.id, updates);
 
       if (!result.success) {
         return {
@@ -160,7 +168,18 @@ export async function handlePreferenceTool(
       }
 
       const store = ctx.getPrefStore();
-      const result = store.delete(id);
+      const resolved = store.resolve(id);
+      if (!resolved.success || !resolved.data) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ deleted: false, error: resolved.error ?? "Preference not found" }),
+          }],
+          isError: true,
+        };
+      }
+
+      const result = store.delete(resolved.data.id);
 
       return {
         content: [{

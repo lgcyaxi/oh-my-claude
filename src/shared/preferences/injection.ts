@@ -383,6 +383,8 @@ function formatMatchReason(match: PreferenceMatch): string {
       return `matched: ${match.matchedTerms?.join(", ") ?? "keyword"}`;
     case "category":
       return `category: ${match.matchedTerms?.join(", ") ?? "detected"}`;
+    case "tag":
+      return `tag: ${match.matchedTerms?.join(", ") ?? "tag"}`;
     default:
       return "matched";
   }

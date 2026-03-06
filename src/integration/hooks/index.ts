@@ -27,6 +27,13 @@ export const HOOKS = {
     matcher: "",
     source: "./memory-awareness.ts",
   },
+  "preference-awareness": {
+    name: "preference-awareness",
+    description: "Auto-inject matching preferences into session context",
+    type: "UserPromptSubmit",
+    matcher: "",
+    source: "./preference-awareness.ts",
+  },
   "context-memory": {
     name: "context-memory",
     description: "Session-end capture (Stop hook only — PostToolUse moved to post-tool)",

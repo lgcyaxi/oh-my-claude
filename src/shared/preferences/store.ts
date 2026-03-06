@@ -84,15 +84,13 @@ export function getProjectPreferencesPath(projectRoot?: string): string | null {
 
 export function generatePreferenceId(title: string, date?: Date): string {
   const d = date ?? new Date();
-  const dateStr = d.toISOString().slice(0, 10).replace(/-/g, "");
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
-  return `pref-${dateStr}-${slug}`;
+  const input = `${title}${d.toISOString()}`;
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) - hash + input.charCodeAt(i)) | 0;
+  }
+  const hex = Math.abs(hash).toString(16).padStart(6, "0").slice(0, 6);
+  return `pref-${hex}`;
 }
 
 export function nowISO(): string {
@@ -156,11 +154,12 @@ export class PreferenceStore implements PreferenceStorage {
       const store = readJsonStore(path);
 
       const now = nowISO();
-      let id = generatePreferenceId(input.title);
+      const baseId = generatePreferenceId(input.title);
+      let id = baseId;
 
       let counter = 1;
       while (store[id]) {
-        id = `${generatePreferenceId(input.title)}-${counter}`;
+        id = `${baseId}-${counter}`;
         counter++;
       }
 
@@ -196,6 +195,24 @@ export class PreferenceStore implements PreferenceStorage {
     } catch (error) {
       return { success: false, error: `Failed to read preference: ${error}` };
     }
+  }
+
+  /** Resolve a full ID or prefix to a single preference. Exact match first, then prefix scan. */
+  resolve(idOrPrefix: string): PreferenceResult<Preference> {
+    const exact = this.get(idOrPrefix);
+    if (exact.success) return exact;
+
+    const candidates: Preference[] = [];
+    for (const { store } of this.getAllStores()) {
+      for (const [key, pref] of Object.entries(store)) {
+        if (key.startsWith(idOrPrefix)) candidates.push(pref);
+      }
+    }
+
+    if (candidates.length === 1) return { success: true, data: candidates[0] };
+    if (candidates.length === 0) return { success: false, error: `No preference matching "${idOrPrefix}"` };
+    const ids = candidates.map((p) => p.id).join(", ");
+    return { success: false, error: `Ambiguous: ${candidates.length} preferences match "${idOrPrefix}" (${ids}). Be more specific.` };
   }
 
   update(
@@ -310,6 +327,25 @@ export class PreferenceStore implements PreferenceStorage {
             preference: pref,
             score: matched.length / trigger.categories.length,
             matchedBy: "category",
+            matchedTerms: matched,
+          });
+          continue;
+        }
+      }
+
+      // Fallback: match preference tags against prompt keywords (lower score)
+      if (pref.tags.length > 0 && (promptLower || contextKeywords.length > 0)) {
+        const matched = pref.tags.filter((tag) => {
+          const tagLower = tag.toLowerCase();
+          return promptLower.includes(tagLower) || contextKeywords.includes(tagLower);
+        });
+
+        if (matched.length > 0) {
+          const score = (matched.length / pref.tags.length) * 0.6;
+          matches.push({
+            preference: pref,
+            score: Math.min(score, 0.6),
+            matchedBy: "tag",
             matchedTerms: matched,
           });
         }

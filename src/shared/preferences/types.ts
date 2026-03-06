@@ -61,7 +61,7 @@ export interface PreferenceMatch {
   /** Relevance score (0-1, higher is more relevant) */
   score: number;
   /** How the preference was matched */
-  matchedBy: "keyword" | "category" | "always";
+  matchedBy: "keyword" | "category" | "tag" | "always";
   /** Specific terms that triggered the match (for keyword/category matches) */
   matchedTerms?: string[];
 }

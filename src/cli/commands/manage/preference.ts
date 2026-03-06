@@ -6,7 +6,7 @@ export function registerPreferenceCommand(program: Command) {
 
   const prefCmd = program
     .command("pref")
-    .description("Manage oh-my-claude omc preferences")
+    .description("Manage preferences")
     .action(() => {
       const { PreferenceStore } = require("../../../shared/preferences/store");
       const store = new PreferenceStore();
@@ -18,14 +18,14 @@ export function registerPreferenceCommand(program: Command) {
       console.log(`  Global:      ${c.dim}${stats.globalPath}${c.reset}`);
       console.log(`  Project:     ${stats.projectPath ? c.dim + stats.projectPath + c.reset : c.yellow + "(not in git repo)" + c.reset}`);
       console.log(`\nUsage:`);
-      console.log(`  oh-my-claude omc pref add <title>            ${c.dim}# Add a preference${c.reset}`);
-      console.log(`  oh-my-claude omc pref list                   ${c.dim}# List preferences${c.reset}`);
-      console.log(`  oh-my-claude omc pref show <id>              ${c.dim}# Show preference detail${c.reset}`);
-      console.log(`  oh-my-claude omc pref remove <id>            ${c.dim}# Remove a preference${c.reset}`);
-      console.log(`  oh-my-claude omc pref enable <id>            ${c.dim}# Enable auto-inject${c.reset}`);
-      console.log(`  oh-my-claude omc pref disable <id>           ${c.dim}# Disable auto-inject${c.reset}`);
-      console.log(`  oh-my-claude omc pref status                 ${c.dim}# Show stats${c.reset}`);
-      console.log(`  oh-my-claude omc pref test <prompt>          ${c.dim}# Test trigger matching${c.reset}`);
+      console.log(`  omc m pref add <title>            ${c.dim}# Add a preference${c.reset}`);
+      console.log(`  omc m pref list                   ${c.dim}# List preferences${c.reset}`);
+      console.log(`  omc m pref show <id>              ${c.dim}# Show preference detail${c.reset}`);
+      console.log(`  omc m pref remove <id>            ${c.dim}# Remove a preference${c.reset}`);
+      console.log(`  omc m pref enable <id>            ${c.dim}# Enable auto-inject${c.reset}`);
+      console.log(`  omc m pref disable <id>           ${c.dim}# Disable auto-inject${c.reset}`);
+      console.log(`  omc m pref status                 ${c.dim}# Show stats${c.reset}`);
+      console.log(`  omc m pref test <prompt>          ${c.dim}# Test trigger matching${c.reset}`);
     });
 
   prefCmd
@@ -107,12 +107,12 @@ export function registerPreferenceCommand(program: Command) {
 
       if (prefs.length === 0) {
         console.log(`  ${c.dim}No preferences found.${c.reset}`);
-        console.log(`  ${c.dim}Use: oh-my-claude omc pref add "My rule" --tags tag1,tag2${c.reset}`);
+        console.log(`  ${c.dim}Use: omc m pref add "My rule" --tags tag1,tag2${c.reset}`);
         return;
       }
 
-      const idW = 44;
-      const titleW = 32;
+      const idW = 12;
+      const titleW = 40;
       const scopeW = 7;
       const autoW = 4;
 
@@ -139,7 +139,7 @@ export function registerPreferenceCommand(program: Command) {
       const { PreferenceStore } = require("../../../shared/preferences/store");
       const store = new PreferenceStore();
 
-      const result = store.get(id);
+      const result = store.resolve(id);
       if (!result.success || !result.data) {
         console.log(fail(result.error ?? `Preference "${id}" not found`));
         process.exit(1);
@@ -181,20 +181,21 @@ export function registerPreferenceCommand(program: Command) {
       const { PreferenceStore } = require("../../../shared/preferences/store");
       const store = new PreferenceStore();
 
-      const existing = store.get(id);
-      if (!existing.success) {
+      const existing = store.resolve(id);
+      if (!existing.success || !existing.data) {
         console.log(fail(existing.error ?? `Preference "${id}" not found`));
         process.exit(1);
       }
 
+      const resolvedId = existing.data.id;
       if (!options.force) {
-        console.log(`Removing: ${c.bold}${existing.data!.title}${c.reset} ${c.dim}(${id})${c.reset}`);
+        console.log(`Removing: ${c.bold}${existing.data.title}${c.reset} ${c.dim}(${resolvedId})${c.reset}`);
         console.log(`${c.dim}Use --force to skip this message${c.reset}`);
       }
 
-      const result = store.delete(id);
+      const result = store.delete(resolvedId);
       if (result.success) {
-        console.log(ok(`Preference "${id}" removed.`));
+        console.log(ok(`Preference "${resolvedId}" removed.`));
       } else {
         console.log(fail(result.error ?? "Unknown error"));
         process.exit(1);
@@ -208,11 +209,17 @@ export function registerPreferenceCommand(program: Command) {
       const { PreferenceStore } = require("../../../shared/preferences/store");
       const store = new PreferenceStore();
 
-      const result = store.update(id, { autoInject: true });
+      const resolved = store.resolve(id);
+      if (!resolved.success || !resolved.data) {
+        console.log(fail(resolved.error ?? `Preference "${id}" not found`));
+        process.exit(1);
+      }
+
+      const result = store.update(resolved.data.id, { autoInject: true });
       if (result.success && result.data) {
         console.log(ok(`Preference "${result.data.title}" enabled for auto-injection.`));
       } else {
-        console.log(fail(result.error ?? `Preference "${id}" not found`));
+        console.log(fail(result.error ?? "Unknown error"));
         process.exit(1);
       }
     });
@@ -224,11 +231,17 @@ export function registerPreferenceCommand(program: Command) {
       const { PreferenceStore } = require("../../../shared/preferences/store");
       const store = new PreferenceStore();
 
-      const result = store.update(id, { autoInject: false });
+      const resolved = store.resolve(id);
+      if (!resolved.success || !resolved.data) {
+        console.log(fail(resolved.error ?? `Preference "${id}" not found`));
+        process.exit(1);
+      }
+
+      const result = store.update(resolved.data.id, { autoInject: false });
       if (result.success && result.data) {
         console.log(ok(`Preference "${result.data.title}" disabled for auto-injection.`));
       } else {
-        console.log(fail(result.error ?? `Preference "${id}" not found`));
+        console.log(fail(result.error ?? "Unknown error"));
         process.exit(1);
       }
     });
@@ -255,11 +268,22 @@ export function registerPreferenceCommand(program: Command) {
     .description("Test which preferences match a given prompt")
     .action((prompt: string) => {
       const { PreferenceStore } = require("../../../shared/preferences/store");
+      const { buildPreferenceContext } = require("../../../shared/preferences/injection");
       const store = new PreferenceStore();
 
-      const matches = store.match({ prompt });
+      const context = buildPreferenceContext(prompt);
+      const matches = store.match(context);
 
       console.log(`${c.bold}Matching preferences for:${c.reset} "${prompt}"\n`);
+
+      // Show detected context for debugging
+      if (context.category) {
+        console.log(`  ${c.dim}Category: ${c.reset}${c.cyan}${context.category}${c.reset}`);
+      }
+      if (context.keywords?.length) {
+        console.log(`  ${c.dim}Keywords: ${c.reset}${context.keywords.slice(0, 10).join(", ")}`);
+      }
+      console.log();
 
       if (matches.length === 0) {
         console.log(`  ${c.dim}No preferences matched.${c.reset}`);

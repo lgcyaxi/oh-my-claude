@@ -375,6 +375,24 @@ export function installHooks(hooksDir: string, force = false): {
     skipped.push("memory-awareness (already installed)");
   }
 
+  // Preference awareness hook (UserPromptSubmit — auto-inject matching preferences)
+  const prefResult = addHook(
+    settings,
+    "UserPromptSubmit",
+    "",
+    `${nodeCmd} "${join(hooksDir, "preference-awareness.js")}"`,
+    force
+  );
+  if (prefResult) {
+    if (force) {
+      updated.push("preference-awareness (UserPromptSubmit)");
+    } else {
+      installed.push("preference-awareness (UserPromptSubmit)");
+    }
+  } else {
+    skipped.push("preference-awareness (already installed)");
+  }
+
   saveSettings(settings);
   return { installed, updated, skipped };
 }
