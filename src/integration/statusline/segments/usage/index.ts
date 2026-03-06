@@ -193,18 +193,6 @@ async function collectUsageData(_context: SegmentContext): Promise<SegmentData |
       }
     }
 
-    // --- Ollama (local only, no API fetch) ---
-    const ollamaConfigured = !!process.env.OLLAMA_API_KEY || !!process.env.OLLAMA_HOST || !!process.env.OLLAMA_API_BASE;
-    if (ollamaConfigured) {
-      const order = providerOrder++;
-      tasks.push(
-        fetchLocalUsage().then((localUsage) => {
-          const abbrev = PROVIDER_ABBREV.ollama!;
-          return { key: null, abbrev, order, result: { abbrev, display: `${localUsage?.ollama ?? 0}req`, color: "neutral" as any } };
-        })
-      );
-    }
-
     // --- OpenAI / Codex ---
     if (hasOpenAI) {
       const order = providerOrder++;

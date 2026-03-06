@@ -13,9 +13,8 @@ export const PROVIDER_ABBREV: Record<string, string> = {
   minimax: "MM",
   "minimax-cn": "MM",
   kimi: "KM",
-  openai: "OC",
+  openai: "Codex",
   aliyun: "AY",
-  ollama: "OL",
 };
 
 /** Per-provider cached data */

@@ -31,7 +31,7 @@ export const PROVIDER_ABBREV: Record<string, string> = {
   minimax: "MM",
   kimi: "KM",
   aliyun: "AY",
-  openai: "OC",
+  openai: "Codex",
 };
 
 export interface ProviderDefinition {
@@ -96,7 +96,7 @@ export function buildProviderRegistry(): ProviderDefinition[] {
     fetch: () => hasAliyunCredential() ? fetchAliyunQuota() : Promise.resolve(null),
   });
 
-  // OpenAI / Codex: subscription shows "Sub", API key shows credit balance
+  // OpenAI / Codex: shows login status ("ok" when authenticated)
   registry.push({
     key: "openai",
     abbrev: PROVIDER_ABBREV.openai!,
