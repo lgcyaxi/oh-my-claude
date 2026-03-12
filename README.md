@@ -4,12 +4,12 @@
 
 Multi-provider MCP server for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with specialized agent workflows.
 
-Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, Kimi, Ollama, Google Gemini, OpenAI, GitHub Copilot) via Anthropic-compatible APIs while leveraging Claude Code's native capabilities.
+Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun, Ollama) via Anthropic-compatible APIs while leveraging Claude Code's native capabilities.
 
 ## Features
 
-- **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax, Google Gemini, OpenAI
-- **OAuth Authentication** - One-command login for Google Gemini (multi-account), OpenAI Codex, and GitHub Copilot — no API keys needed
+- **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun
+- **OAuth Authentication** - One-command login for OpenAI Codex, MiniMax, Kimi, and Aliyun — no API keys needed
 - **Concurrent Background Tasks** - Run multiple agents in parallel with configurable limits
 - **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Hephaestus, Librarian, etc.)
 - **Native Coworker Runtimes** - Codex and OpenCode native execution with unified cross-platform viewer (tmux/WezTerm/Terminal), task cancellation/interrupt, TUI toasts, viewer auto-close, and live status. OpenCode agent selection is resolved from the live `/agent` list, including plugin agents exposed by the server. Plus scoped-diff reviews (focused git diff for specific paths), rich approval metadata (decisionOptions, questions, details), and 9 operations: send, review, diff, fork, approve, revert, cancel, status, recent_activity
@@ -79,18 +79,9 @@ export ALIYUN_API_KEY=your-aliyun-api-key
 For providers that support OAuth, you can authenticate without API keys:
 
 ```bash
-# Google Gemini (supports multi-account for quota rotation)
-oh-my-claude auth login google
-oh-my-claude auth add-account google          # Add more accounts
-oh-my-claude auth switch-account google       # List accounts
-oh-my-claude auth switch-account google 2     # Switch active account
-
-# OpenAI
+# OpenAI (for Codex coworker)
 oh-my-claude auth login openai
 oh-my-claude auth login openai --headless  # For SSH/remote environments
-
-# GitHub Copilot
-oh-my-claude auth login copilot
 
 # MiniMax (for quota display)
 oh-my-claude auth login minimax  # Opens browser for QR code login
@@ -105,7 +96,7 @@ oh-my-claude auth login kimi     # Opens browser for Kimi login
 oh-my-claude auth list
 ```
 
-Once authenticated, use `/omc-switch gm` (Gemini), `/omc-switch gpt` (OpenAI), or `/omc-switch cp` (Copilot) to route requests through these providers.
+Once authenticated, use `/omc-switch ds` (DeepSeek), `/omc-switch g5` (ZhiPu GLM-5), or `/omc-switch km` (Kimi) to route requests through these providers.
 
 ### Setup Official MCP Servers
 
@@ -136,6 +127,7 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 
 - [Codex App-Server Guide](docs/guides/codex-app-server.md)
 - [Coworker Architecture](docs/guides/orchestrator-architecture.md)
+- [Coworker GUI Acceptance](docs/guides/coworker-gui-acceptance.md)
 - [Coworker Protocol Coverage](docs/guides/coworker-protocol-coverage.md)
 - [Coworker Smoke Tests](docs/guides/coworker-smoke-tests.md)
 
@@ -537,18 +529,13 @@ oh-my-claude includes an HTTP proxy that enables **in-conversation model switchi
   │  oh-my-claude Proxy (localhost:18910)                        │
   │                                                              │
   │  switched=false?  → Passthrough to Anthropic                 │
-  │  switched=true?   → Three-way format routing:                │
-  │    ├─ Google     → Antigravity (Gemini native + envelope)    │
+  │  switched=true?   → Format routing:                          │
   │    ├─ OpenAI     → Responses API (input/instructions)        │
-  │    ├─ Copilot    → OpenAI Chat Completions (messages)        │
-  │    └─ DS/ZP/MM/KM → Anthropic /v1/messages (passthrough)    │
+  │    └─ DS/ZP/MM/KM/AY → Anthropic /v1/messages (passthrough) │
   └──────────────────────────────────────────────────────────────┘
 ```
 
-**Format conversion**: API-key providers (DeepSeek, ZhiPu, MiniMax, Kimi) use Anthropic-compatible `/v1/messages` — no translation needed. OAuth providers each need different conversion:
-- **Google Gemini**: Antigravity API with Gemini native format, auto-rotates accounts on 429
-- **OpenAI Codex**: Responses API format (`input` array + `instructions`)
-- **Copilot/OpenRouter**: Standard OpenAI Chat Completions (`messages` array)
+**Format conversion**: API-key providers (DeepSeek, ZhiPu, MiniMax, Kimi, Aliyun) use Anthropic-compatible `/v1/messages` — no translation needed. OpenAI uses Responses API format (`input` array + `instructions`).
 
 ### Quick Start
 
@@ -611,17 +598,14 @@ For Codex specifically, prefer coworker-style delegation: assign the goal, scope
 | Shortcut | Provider | Model |
 |----------|----------|-------|
 | `ds` | deepseek | deepseek-chat |
-| `ds-r` | deepseek | deepseek-reasoner |
-| `zp` | zhipu | GLM-5 |
-| `mm` | minimax | MiniMax-M2.5 |
-| `km` | kimi | K2.5 |
-| `ali` | aliyun | qwen3.5-plus |
-| `ali-c` | aliyun | qwen3-coder-plus |
-| `gm` | google | gemini-3-flash |
-| `gm-p` | google | gemini-3-pro |
-| `gpt` | openai | gpt-5.3-codex |
-| `cx` | openai | gpt-5.3-codex |
-| `cp` | copilot | gpt-5.3-codex |
+| `dr` | deepseek | deepseek-reasoner |
+| `g5` | zhipu | glm-5 |
+| `mm` | minimax-cn | MiniMax-M2.5 |
+| `km` | kimi | kimi-for-coding |
+| `q` | aliyun | qwen3.5-plus |
+| `qc` | aliyun | qwen3-coder-plus |
+| `qn` | aliyun | qwen3-coder-next |
+| `g4` | aliyun | glm-4.7 |
 | `ol` | ollama | *(auto-discovered)* |
 
 **Via CLI** (session ID supports prefix matching):
@@ -660,13 +644,13 @@ All agents run as native Task tool agents with full Claude Code tool access (Edi
 
 | Agent | Model | Routing |
 |-------|-------|---------|
-| Oracle | claude-sonnet-4-6 | Passthrough (Claude native) |
+| Oracle | *(Claude native)* | Passthrough (dual-mode) |
 | Analyst | qwen3.5-plus | Directive → Aliyun |
 | Librarian | glm-5 | Directive → ZhiPu |
-| Navigator | kimi-for-coding | Directive → Kimi |
-| Hephaestus | kimi-for-coding | Directive → Kimi |
+| Navigator | *(Claude native)* | Passthrough (dual-mode) |
+| Hephaestus | *(Claude native)* | Passthrough (dual-mode) |
 | Document-Writer | MiniMax-M2.5 | Directive → MiniMax |
-| Frontend-UI-UX | gemini-3-pro | Directive → Google |
+| UI-Designer | *(Claude native)* | Passthrough (dual-mode) |
 | @kimi | kimi-for-coding | Directive → Kimi |
 | @mm-cn | MiniMax-M2.5 | Directive → MiniMax CN |
 | @deepseek | deepseek-chat | Directive → DeepSeek |
@@ -678,7 +662,6 @@ All agents run as native Task tool agents with full Claude Code tool access (Edi
 
 - **Session Isolation**: Each `oh-my-claude cc` session gets its own proxy instance — no interference between sessions
 - **Permanent Switches**: Model switches persist until explicitly reverted (no request counting)
-- **Google 429 Auto-Rotation**: Multi-account quota exhaustion triggers automatic account rotation (up to 3 retries)
 - **DeepSeek Reasoner Compatibility**: Proxy automatically injects required `thinking` blocks when switching mid-conversation to DeepSeek Reasoner
 - **Graceful Fallback**: If provider API key is missing, silently falls back to native Claude
 - **Error Recovery**: Provider request failures fall back to native Claude
@@ -756,13 +739,13 @@ All task agents run via Claude Code's Task tool. Each agent's prompt contains an
 
 | Agent | Model | Provider (directive-routed) | Role |
 |-------|-------|---------------------------|------|
-| **Oracle** | claude-sonnet-4-6 | Anthropic (passthrough) | Deep reasoning |
+| **Oracle** | *(Claude native)* | Anthropic (dual-mode) | Deep reasoning |
 | **Analyst** | qwen3.5-plus | Aliyun | Quick code analysis |
 | **Librarian** | glm-5 | ZhiPu | External research |
-| **Frontend-UI-UX** | gemini-3-pro | Google | Visual/UI design |
+| **UI-Designer** | *(Claude native)* | Anthropic (dual-mode) | Visual/UI design |
 | **Document-Writer** | MiniMax-M2.5 | MiniMax | Documentation |
-| **Navigator** | kimi-for-coding | Kimi | Visual-to-code & multi-step tasks |
-| **Hephaestus** | kimi-for-coding | Kimi | Code forge specialist |
+| **Navigator** | *(Claude native)* | Anthropic (dual-mode) | Visual-to-code & multi-step tasks |
+| **Hephaestus** | *(Claude native)* | Anthropic (dual-mode) | Code forge specialist |
 
 **Invocation:** `Task(subagent_type="analyst")` or use `@analyst` in prompts. The proxy auto-routes based on the embedded route directive.
 
@@ -848,11 +831,9 @@ npx @lgcyaxi/oh-my-claude cc -p km                # Direct Kimi connection
 npx @lgcyaxi/oh-my-claude cc -- --resume           # Forward args to claude
 
 # Authentication (OAuth)
-npx @lgcyaxi/oh-my-claude auth login <provider>          # Authenticate (google/openai/copilot/minimax)
+npx @lgcyaxi/oh-my-claude auth login <provider>          # Authenticate (openai/minimax/kimi/aliyun)
 npx @lgcyaxi/oh-my-claude auth logout <provider>         # Remove credentials
 npx @lgcyaxi/oh-my-claude auth list                      # List authenticated providers
-npx @lgcyaxi/oh-my-claude auth add-account google        # Add Google account (quota rotation)
-npx @lgcyaxi/oh-my-claude auth switch-account google     # List / switch active Google account
 
 # Proxy (Live Model Switching — auto-managed per session)
 npx @lgcyaxi/oh-my-claude proxy                    # Show sessions overview
@@ -914,17 +895,9 @@ Configuration file: `~/.claude/oh-my-claude.json`
       "base_url": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
       "api_key_env": "ALIYUN_API_KEY"
     },
-    "google": {
-      "type": "google-oauth",
-      "note": "Authenticate via: oh-my-claude auth login google"
-    },
     "openai": {
       "type": "openai-oauth",
       "note": "Authenticate via: oh-my-claude auth login openai"
-    },
-    "copilot": {
-      "type": "copilot-oauth",
-      "note": "Authenticate via: oh-my-claude auth login copilot"
     }
   },
   "agents": {
@@ -997,8 +970,8 @@ Configure memory system behavior:
 │                ├── ZhiPu GLM        (default)   Provider                 │
 │                ├── MiniMax                       (switched)               │
 │                ├── Kimi                                                   │
-│                ├── Google (OAuth)      Menubar App                        │
-│                └── OpenAI (OAuth)      (GUI session manager)             │
+│                ├── Aliyun             Menubar App                         │
+│                └── OpenAI (OAuth)     (GUI session manager)              │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
