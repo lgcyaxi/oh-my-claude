@@ -16,132 +16,196 @@
  * Usage:
  *   bun run src/proxy/server.ts
  *   bun run src/proxy/server.ts --port 18910 --control-port 18911
+ *   bun run src/proxy/server.ts --port 59069 --control-port 59070 --provider minimax-cn --model MiniMax-M2.5
  */
 
-import { handleMessages, handleOtherRequest } from "./handler";
-import { handleControl, registerShutdown } from "./control";
-import { readSwitchState, resetSwitchState } from "./state";
-import { parseSessionFromPath, cleanupStaleSessions, getCleanupIntervalMs } from "./session";
-import { DEFAULT_PROXY_CONFIG } from "./types";
+import {
+	handleMessages,
+	handleOtherRequest,
+	handleModelsRequest,
+} from './handlers';
+import { handleControl } from './control';
+import { registerShutdown } from './control/switch';
+import {
+	readSwitchState,
+	resetSwitchState,
+	writeSwitchState,
+} from './state/switch';
+import {
+	parseSessionFromPath,
+	cleanupStaleSessions,
+	getCleanupIntervalMs,
+	setDefaultSwitchState,
+	getDefaultSwitchState,
+} from './state/session';
+import { initializeAuth } from './auth/auth';
+import { DEFAULT_PROXY_CONFIG } from './state/types';
+import { resolveProviderName } from '../shared/providers/aliases';
 
-// Parse CLI arguments
-function parseArgs(): { port: number; controlPort: number } {
-  const args = process.argv.slice(2);
-  let port = DEFAULT_PROXY_CONFIG.port;
-  let controlPort = DEFAULT_PROXY_CONFIG.controlPort;
+interface ParsedArgs {
+	port: number;
+	controlPort: number;
+	provider?: string;
+	model?: string;
+}
 
-  for (let i = 0; i < args.length; i++) {
-    const next = args[i + 1];
-    if (args[i] === "--port" && next) {
-      port = parseInt(next, 10);
-      i++;
-    } else if (args[i] === "--control-port" && next) {
-      controlPort = parseInt(next, 10);
-      i++;
-    }
-  }
+function parseArgs(): ParsedArgs {
+	const args = process.argv.slice(2);
+	let port = DEFAULT_PROXY_CONFIG.port;
+	let controlPort = DEFAULT_PROXY_CONFIG.controlPort;
+	let provider: string | undefined;
+	let model: string | undefined;
 
-  return { port, controlPort };
+	for (let i = 0; i < args.length; i++) {
+		const next = args[i + 1];
+		if (args[i] === '--port' && next) {
+			port = parseInt(next, 10);
+			i++;
+		} else if (args[i] === '--control-port' && next) {
+			controlPort = parseInt(next, 10);
+			i++;
+		} else if (args[i] === '--provider' && next) {
+			provider = next;
+			i++;
+		} else if (args[i] === '--model' && next) {
+			model = next;
+			i++;
+		}
+	}
+
+	return { port, controlPort, provider, model };
 }
 
 /**
  * Start the proxy and control servers
  */
 async function main() {
-  const { port, controlPort } = parseArgs();
+	const { port, controlPort, provider: rawProvider, model } = parseArgs();
 
-  // Ensure clean global state on startup
-  resetSwitchState();
+	// Ensure auth config exists (auto-detects api-key vs oauth mode)
+	const authConfig = initializeAuth();
+	const authModeLabel =
+		authConfig.authMode === 'oauth' ? 'oauth (subscription)' : 'api-key';
 
-  // Start proxy server
-  const proxy = Bun.serve({
-    port,
-    // SSE streaming responses from Claude API can take 30-120+ seconds.
-    // Bun's default idleTimeout is 10s which causes premature disconnects.
-    idleTimeout: 255, // max allowed by Bun (seconds)
-    fetch(req: Request): Promise<Response> | Response {
-      const url = new URL(req.url);
-      let pathname = url.pathname;
-      let sessionId: string | undefined;
+	// Initialize switch state from CLI args (--provider/--model) or env vars (legacy)
+	const switchProviderRaw =
+		rawProvider || process.env.OMC_PROXY_SWITCH_PROVIDER;
+	const switchModel = model || process.env.OMC_PROXY_SWITCH_MODEL;
 
-      // Check for session prefix: /s/{sessionId}/...
-      const sessionInfo = parseSessionFromPath(pathname);
-      if (sessionInfo) {
-        sessionId = sessionInfo.sessionId;
-        pathname = sessionInfo.strippedPath;
-      }
+	if (switchProviderRaw && switchModel) {
+		const switchProvider = resolveProviderName(switchProviderRaw);
+		const switchState = {
+			switched: true as const,
+			provider: switchProvider,
+			model: switchModel,
+			switchedAt: Date.now(),
+		};
+		setDefaultSwitchState(switchState);
+		writeSwitchState(switchState);
+	} else {
+		resetSwitchState();
+	}
 
-      // Route /v1/messages to the switching handler
-      if (pathname === "/v1/messages") {
-        return handleMessages(req, sessionId);
-      }
+	// Start proxy server
+	const proxy = Bun.serve({
+		port,
+		// SSE streaming responses from Claude API can take 30-120+ seconds.
+		// Bun's default idleTimeout is 10s which causes premature disconnects.
+		idleTimeout: 255, // max allowed by Bun (seconds)
+		fetch(req: Request): Promise<Response> | Response {
+			const url = new URL(req.url);
+			let pathname = url.pathname;
+			let sessionId: string | undefined;
 
-      // All other paths — passthrough to Anthropic
-      return handleOtherRequest(req, sessionId);
-    },
-    error(error: Error): Response {
-      console.error(`[proxy] Server error: ${error.message}`);
-      return new Response(
-        JSON.stringify({
-          error: { type: "proxy_error", message: error.message },
-        }),
-        { status: 500, headers: { "content-type": "application/json" } }
-      );
-    },
-  });
+			// Check for session prefix: /s/{sessionId}/...
+			const sessionInfo = parseSessionFromPath(pathname);
+			if (sessionInfo) {
+				sessionId = sessionInfo.sessionId;
+				pathname = sessionInfo.strippedPath;
+			}
 
-  // Start control server
-  const control = Bun.serve({
-    port: controlPort,
-    fetch: handleControl,
-    error(error: Error): Response {
-      console.error(`[control] Server error: ${error.message}`);
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 500, headers: { "content-type": "application/json" } }
-      );
-    },
-  });
+			// Route /v1/messages to the switching handler
+			if (pathname === '/v1/messages') {
+				return handleMessages(req, sessionId);
+			}
 
-  console.error("oh-my-claude Proxy Server");
-  console.error(`  Proxy:   http://localhost:${proxy.port}`);
-  console.error(`  Control: http://localhost:${control.port}`);
-  console.error("");
-  console.error("Set in your shell:");
-  console.error(`  export ANTHROPIC_BASE_URL=http://localhost:${proxy.port}`);
-  console.error("");
+			// Intercept GET /v1/models — return provider-specific model list when switched
+			if (pathname === '/v1/models' && req.method === 'GET') {
+				return handleModelsRequest(req, sessionId);
+			}
 
-  // Log initial state
-  const state = readSwitchState();
-  console.error(
-    `  Mode: ${state.switched ? `switched → ${state.provider}/${state.model}` : "passthrough → Anthropic"}`
-  );
-  console.error("  Session isolation: enabled (path-based /s/{id}/...)");
-  if (process.env.OMC_PROXY_DEBUG === "1") {
-    console.error("  Debug: ON (verbose logging for all endpoints)");
-  }
+			// All other paths — passthrough to Anthropic
+			return handleOtherRequest(req, sessionId);
+		},
+		error(error: Error): Response {
+			console.error(`[proxy] Server error: ${error.message}`);
+			return new Response(
+				JSON.stringify({
+					error: { type: 'proxy_error', message: error.message },
+				}),
+				{
+					status: 500,
+					headers: { 'content-type': 'application/json' },
+				},
+			);
+		},
+	});
 
-  // Periodic cleanup of stale sessions
-  const cleanupTimer = setInterval(cleanupStaleSessions, getCleanupIntervalMs());
+	// Start control server
+	const control = Bun.serve({
+		port: controlPort,
+		fetch: handleControl,
+		error(error: Error): Response {
+			console.error(`[control] Server error: ${error.message}`);
+			return new Response(JSON.stringify({ error: error.message }), {
+				status: 500,
+				headers: { 'content-type': 'application/json' },
+			});
+		},
+	});
 
-  // Handle graceful shutdown
-  const shutdown = () => {
-    console.error("\n[proxy] Shutting down...");
-    clearInterval(cleanupTimer);
-    resetSwitchState();
-    proxy.stop();
-    control.stop();
-    process.exit(0);
-  };
+	console.error('oh-my-claude Proxy Server');
+	console.error(`  Proxy:   http://localhost:${proxy.port}`);
+	console.error(`  Control: http://localhost:${control.port}`);
+	console.error('');
+	console.error('Set in your shell:');
+	console.error(`  export ANTHROPIC_BASE_URL=http://localhost:${proxy.port}`);
+	console.error('');
 
-  // Register shutdown for /stop endpoint
-  registerShutdown(shutdown);
+	const state = getDefaultSwitchState() ?? readSwitchState();
+	console.error(`  Auth:  ${authModeLabel}`);
+	console.error(
+		`  Mode: ${state.switched ? `switched → ${state.provider}/${state.model}` : 'passthrough → Anthropic'}`,
+	);
+	console.error('  Session isolation: enabled (path-based /s/{id}/...)');
+	if (process.env.OMC_PROXY_DEBUG === '1') {
+		console.error('  Debug: ON (verbose logging for all endpoints)');
+	}
 
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+	// Periodic cleanup of stale sessions
+	const cleanupTimer = setInterval(
+		cleanupStaleSessions,
+		getCleanupIntervalMs(),
+	);
+
+	// Handle graceful shutdown
+	const shutdown = () => {
+		console.error('\n[proxy] Shutting down...');
+		clearInterval(cleanupTimer);
+		resetSwitchState();
+		proxy.stop();
+		control.stop();
+		process.exit(0);
+	};
+
+	// Register shutdown for /stop endpoint
+	registerShutdown(shutdown);
+
+	process.on('SIGINT', shutdown);
+	process.on('SIGTERM', shutdown);
 }
 
 main().catch((error) => {
-  console.error("Failed to start proxy server:", error);
-  process.exit(1);
+	console.error('Failed to start proxy server:', error);
+	process.exit(1);
 });

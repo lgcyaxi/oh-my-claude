@@ -10,6 +10,8 @@ pub struct ProxySessionEntry {
     pub pid: u32,
     pub started_at: u64,
     pub cwd: Option<String>,
+    /// Session origin: Some("wsl2") for WSL sessions
+    pub source: Option<String>,
 }
 
 /// Session info returned to the frontend (enriched with live status)
@@ -27,6 +29,8 @@ pub struct SessionInfo {
     pub provider: Option<String>,
     pub model: Option<String>,
     pub healthy: bool,
+    /// Session origin: Some("wsl2") for WSL sessions
+    pub source: Option<String>,
 }
 
 /// Health response from proxy control API
@@ -82,4 +86,24 @@ pub struct ProviderInfo {
 pub struct ModelInfo {
     pub id: String,
     pub label: String,
+}
+
+/// Memory model configuration from /internal/memory-config
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryModelConfig {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub source: String,
+    pub resolved_provider: Option<String>,
+    pub resolved_model: Option<String>,
+}
+
+/// Body for POST /internal/memory-config
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetMemoryModelRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }

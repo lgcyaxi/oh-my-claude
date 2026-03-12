@@ -9,88 +9,107 @@
 
 // Types
 export type {
-  MemoryType,
-  MemoryScope,
-  MemoryEntry,
-  MemoryFrontmatter,
-  MemoryStorageInfo,
-  MemorySearchOptions,
-  MemoryListOptions,
-  MemoryStats,
-  MemoryResult,
-  CreateMemoryInput,
-  SearchTier,
-  ChunkLocation,
-  MemoryIndexStatus,
-} from "./types";
+	MemoryType,
+	MemoryScope,
+	MemoryCategory,
+	MemoryEntry,
+	MemoryFrontmatter,
+	MemoryStorageInfo,
+	MemorySearchOptions,
+	MemoryListOptions,
+	MemoryStats,
+	MemoryResult,
+	CreateMemoryInput,
+	SearchTier,
+	ChunkLocation,
+	MemoryIndexStatus,
+} from './types';
 
-// Store (CRUD)
+// Store (CRUD + project detection)
 export {
-  getMemoryDir,
-  getProjectMemoryDir,
-  hasProjectMemory,
-  getMemoryDirForScope,
-  getDefaultWriteScope,
-  ensureMemoryDirs,
-  createMemory,
-  getMemory,
-  updateMemory,
-  deleteMemory,
-  listMemories,
-  getMemoryStats,
-} from "./store";
+	getMemoryDir,
+	getProjectMemoryDir,
+	getClaudeNativeMemoryDir,
+	hasProjectMemory,
+	getMemoryDirForScope,
+	getDefaultWriteScope,
+	ensureMemoryDirs,
+	createMemory,
+	getMemory,
+	updateMemory,
+	deleteMemory,
+	listMemories,
+	getMemoryStats,
+	resolveCanonicalRoot,
+} from './store';
 
 // Parser
 export {
-  parseMemoryFile,
-  serializeMemoryFile,
-  generateMemoryId,
-  generateTitle,
-  nowISO,
-} from "./parser";
+	parseMemoryFile,
+	serializeMemoryFile,
+	generateMemoryId,
+	generateTitle,
+	nowISO,
+	stripPrivateBlocks,
+} from './parser';
 
 // Search
-export { searchMemories } from "./search";
-export type { SearchResult } from "./search";
+export { searchMemories } from './search';
+export type { SearchResult } from './search';
 
 // Indexer (SQLite + FTS5)
-export { MemoryIndexer, chunkMarkdown, hashContent, hashContentSync, findWasmPath } from "./indexer";
+export {
+	MemoryIndexer,
+	chunkMarkdown,
+	hashContent,
+	hashContentSync,
+	findWasmPath,
+} from './indexer';
 export type {
-  IndexedFile,
-  IndexedChunk,
-  FTSSearchResult,
-  ChunkingOptions,
-  MemoryIndexerOptions,
-} from "./indexer";
+	IndexedFile,
+	IndexedChunk,
+	FTSSearchResult,
+	ChunkingOptions,
+	MemoryIndexerOptions,
+	TokenStats,
+} from './indexer';
 
 // Embeddings
 export {
-  createCustomEmbeddingProvider,
-  createZhiPuEmbeddingProvider,
-  resolveEmbeddingProvider,
-  cosineSimilarity,
-} from "./embeddings";
-export type {
-  EmbeddingProvider,
-  EmbeddingConfig,
-} from "./embeddings";
+	createCustomEmbeddingProvider,
+	createZhiPuEmbeddingProvider,
+	resolveEmbeddingProvider,
+	cosineSimilarity,
+} from './embeddings';
+export type { EmbeddingProvider, EmbeddingConfig } from './embeddings';
 
 // Hybrid Search
-export { mergeHybridResults, DEFAULT_HYBRID_WEIGHTS } from "./hybrid-search";
+export { mergeHybridResults, DEFAULT_HYBRID_WEIGHTS } from './hybrid-search';
 export type {
-  VectorSearchResult,
-  MergedSearchResult,
-  HybridSearchWeights,
-} from "./hybrid-search";
+	VectorSearchResult,
+	MergedSearchResult,
+	HybridSearchWeights,
+} from './hybrid-search';
 
 // Deduplication
-export { checkDuplicate, DEFAULT_DEDUP_CONFIG } from "./dedup";
-export type {
-  DedupResult,
-  NearDuplicate,
-  DedupConfig,
-} from "./dedup";
+export { checkDuplicate, DEFAULT_DEDUP_CONFIG } from './dedup';
+export type { DedupResult, NearDuplicate, DedupConfig } from './dedup';
+
+// AI Client (proxy-routed)
+export { callMemoryAI, callMemoryAIWithMessages } from './ai-client';
+export type { MemoryAIResponse } from './ai-client';
 
 // Timeline
-export { generateTimeline, writeTimeline, readTimeline, regenerateTimelines } from "./timeline";
-export type { TimelineOptions } from "./timeline";
+export {
+	generateTimeline,
+	writeTimeline,
+	readTimeline,
+	regenerateTimelines,
+} from './timeline';
+export type { TimelineOptions } from './timeline';
+
+// Hook utilities (lightweight, Node.js built-ins only — no SQLite/WASM)
+// Hooks import directly from './hooks' to avoid pulling heavy deps.
+// Re-export select utilities that are useful outside hooks.
+export { getTimelineContent, logUserPrompt, getControlPort } from './hooks';
+export type { HookConfig, ContextMemoryState } from './hooks';

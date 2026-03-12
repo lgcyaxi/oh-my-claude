@@ -14,34 +14,197 @@
  */
 
 import {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-  unlinkSync,
-  mkdirSync,
-  statSync,
-} from "node:fs";
-import { join, dirname } from "node:path";
-import { homedir } from "node:os";
-import { cwd } from "node:process";
+	existsSync,
+	readFileSync,
+	writeFileSync,
+	readdirSync,
+	unlinkSync,
+	mkdirSync,
+	statSync,
+} from 'node:fs';
+import { join, dirname } from 'node:path';
+import { homedir } from 'node:os';
+import { cwd } from 'node:process';
 
 import type {
-  MemoryEntry,
-  MemoryType,
-  MemoryScope,
-  MemoryStats,
-  MemoryResult,
-  MemoryListOptions,
-  CreateMemoryInput,
-} from "./types";
+	MemoryEntry,
+	MemoryType,
+	MemoryCategory,
+	MemoryScope,
+	MemoryStats,
+	MemoryResult,
+	MemoryListOptions,
+	CreateMemoryInput,
+} from './types';
 import {
-  parseMemoryFile,
-  serializeMemoryFile,
-  generateMemoryId,
-  generateTitle,
-  nowISO,
-} from "./parser";
+	parseMemoryFile,
+	serializeMemoryFile,
+	generateMemoryId,
+	generateTitle,
+	nowISO,
+} from './parser';
+
+// ---- Input normalization helpers ----
+
+/**
+ * Normalize tags/concepts input to string[].
+ * AI models sometimes send a comma-separated string instead of an array,
+ * or a JSON-stringified array like '["a","b"]'. Both cause character-level
+ * splitting when later joined (e.g., "sidebar" → "s, i, d, e, b, a, r").
+ */
+function normalizeTags(input: unknown): string[] {
+	if (!input) return [];
+	if (Array.isArray(input)) {
+		// Flatten: if any element is itself a comma-separated string, split it
+		return input
+			.flatMap((item) =>
+				typeof item === 'string'
+					? item.split(',').map((s) => s.trim())
+					: [],
+			)
+			.filter((s) => s.length > 0);
+	}
+	if (typeof input === 'string') {
+		let trimmed = input.trim();
+		// Strip surrounding quotes: '"sidebar, polling"' → 'sidebar, polling'
+		if (
+			(trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+			(trimmed.startsWith("'") && trimmed.endsWith("'"))
+		) {
+			trimmed = trimmed.slice(1, -1).trim();
+		}
+		// Handle JSON array strings like '["agents", "reorganization"]'
+		if (trimmed.startsWith('[')) {
+			try {
+				const parsed = JSON.parse(trimmed);
+				if (Array.isArray(parsed)) {
+					return parsed.filter(
+						(s): s is string =>
+							typeof s === 'string' && s.length > 0,
+					);
+				}
+			} catch {
+				// Not valid JSON, fall through to comma split
+			}
+		}
+		// Plain comma-separated string: "sidebar, polling, sse"
+		return trimmed
+			.split(',')
+			.map((s) => s.trim())
+			.filter((s) => s.length > 0);
+	}
+	return [];
+}
+
+// ---- Category inference ----
+
+const CATEGORY_KEYWORDS: Record<MemoryCategory, string[]> = {
+	architecture: [
+		'architecture',
+		'design',
+		'data-flow',
+		'component',
+		'system',
+		'structure',
+		'diagram',
+		'schema',
+	],
+	convention: [
+		'convention',
+		'standard',
+		'naming',
+		'style',
+		'lint',
+		'format',
+		'code-style',
+	],
+	decision: [
+		'decision',
+		'adr',
+		'trade-off',
+		'tradeoff',
+		'chose',
+		'why',
+		'rationale',
+		'alternative',
+	],
+	debugging: [
+		'debug',
+		'bug',
+		'fix',
+		'error',
+		'issue',
+		'crash',
+		'gotcha',
+		'troubleshoot',
+		'workaround',
+	],
+	workflow: [
+		'workflow',
+		'build',
+		'deploy',
+		'ci',
+		'cd',
+		'pipeline',
+		'process',
+		'release',
+		'test',
+	],
+	pattern: [
+		'pattern',
+		'idiom',
+		'recipe',
+		'technique',
+		'approach',
+		'best-practice',
+		'reusable',
+	],
+	reference: [
+		'reference',
+		'api',
+		'doc',
+		'config',
+		'snippet',
+		'example',
+		'link',
+		'cheatsheet',
+	],
+	session: ['session', 'auto-capture', 'session-end', 'context-threshold'],
+	uncategorized: [],
+};
+
+/**
+ * Infer a memory category from type, tags, and content keywords.
+ * Returns undefined if no confident match — caller decides default.
+ */
+function inferCategory(
+	type: MemoryType,
+	tags: string[],
+	content: string,
+): MemoryCategory | undefined {
+	if (type === 'session') return 'session';
+
+	const lowerTags = tags.map((t) => t.toLowerCase());
+	const lowerContent = content.toLowerCase().slice(0, 500);
+
+	let bestCategory: MemoryCategory | undefined;
+	let bestScore = 0;
+
+	for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+		if (cat === 'uncategorized' || cat === 'session') continue;
+		let score = 0;
+		for (const kw of keywords) {
+			if (lowerTags.some((t) => t.includes(kw))) score += 3;
+			if (lowerContent.includes(kw)) score += 1;
+		}
+		if (score > bestScore) {
+			bestScore = score;
+			bestCategory = cat as MemoryCategory;
+		}
+	}
+
+	return bestScore >= 2 ? bestCategory : undefined;
+}
 
 // ---- Project detection helpers ----
 
@@ -53,24 +216,63 @@ import {
  *                  Hooks should pass cwd from JSON input, MCP server should pass roots/list result.
  */
 function findProjectRoot(fromDir?: string): string | null {
-  let dir = fromDir ?? cwd();
-  const root = dirname(dir);
+	let dir = fromDir ?? cwd();
+	const root = dirname(dir);
 
-  while (dir !== root) {
-    if (existsSync(join(dir, ".git"))) {
-      return dir;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break; // Reached filesystem root
-    dir = parent;
-  }
+	while (dir !== root) {
+		if (existsSync(join(dir, '.git'))) {
+			return dir;
+		}
+		const parent = dirname(dir);
+		if (parent === dir) break; // Reached filesystem root
+		dir = parent;
+	}
 
-  // Check root directory too
-  if (existsSync(join(dir, ".git"))) {
-    return dir;
-  }
+	// Check root directory too
+	if (existsSync(join(dir, '.git'))) {
+		return dir;
+	}
 
-  return null;
+	return null;
+}
+
+/**
+ * Resolve the canonical (non-worktree) repo root from any git directory.
+ *
+ * In a worktree, `.git` is a file containing `gitdir: /path/to/.git/worktrees/<name>`.
+ * We follow this pointer to find the main repo root.
+ * In a normal repo, `.git` is a directory — returns the same path.
+ * Returns null if not in a git repo.
+ *
+ * @param projectRoot - The git root (may be a worktree). If omitted, uses findProjectRoot().
+ */
+export function resolveCanonicalRoot(projectRoot?: string): string | null {
+	const root = projectRoot ?? findProjectRoot();
+	if (!root) return null;
+
+	const gitPath = join(root, '.git');
+	if (!existsSync(gitPath)) return null;
+
+	try {
+		const stat = statSync(gitPath);
+		if (stat.isDirectory()) return root; // Already canonical
+
+		// .git is a file → worktree pointer: "gitdir: /path/to/.git/worktrees/name"
+		const content = readFileSync(gitPath, 'utf-8').trim();
+		const match = content.match(/^gitdir:\s*(.+)$/);
+		if (!match) return null;
+
+		const gitdir = match[1]!.trim();
+		// Walk up from gitdir to find the main .git dir
+		// Pattern: {repo}/.git/worktrees/{name} → extract {repo}
+		const normalized = gitdir.replace(/\\/g, '/');
+		const worktreesIdx = normalized.indexOf('/.git/worktrees/');
+		if (worktreesIdx === -1) return null;
+
+		return gitdir.slice(0, worktreesIdx);
+	} catch {
+		return null;
+	}
 }
 
 // ---- Directory helpers ----
@@ -79,7 +281,25 @@ function findProjectRoot(fromDir?: string): string | null {
  * Get global memory storage directory
  */
 export function getMemoryDir(): string {
-  return join(homedir(), ".claude", "oh-my-claude", "memory");
+	return join(homedir(), '.claude', 'oh-my-claude', 'memory');
+}
+
+/**
+ * Get Claude's native memory directory for the current project.
+ * Claude Code stores memories in ~/.claude/projects/<project-hash>/memory/
+ * Returns null if not in a project or directory doesn't exist.
+ */
+export function getClaudeNativeMemoryDir(projectRoot?: string): string | null {
+	if (!projectRoot) return null;
+	const claudeProjectsDir = join(homedir(), '.claude', 'projects');
+	if (!existsSync(claudeProjectsDir)) return null;
+
+	// Claude uses the full project path with slashes replaced
+	const projectKey = projectRoot.replace(/\//g, '-').replace(/^-/, '');
+	const nativeDir = join(claudeProjectsDir, projectKey, 'memory');
+	if (existsSync(nativeDir)) return nativeDir;
+
+	return null;
 }
 
 /**
@@ -90,10 +310,10 @@ export function getMemoryDir(): string {
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
 export function getProjectMemoryDir(projectRoot?: string): string | null {
-  const root = projectRoot ?? findProjectRoot();
-  if (!root) return null;
+	const root = projectRoot ?? findProjectRoot();
+	if (!root) return null;
 
-  return join(root, ".claude", "mem");
+	return join(root, '.claude', 'mem');
 }
 
 /**
@@ -102,8 +322,8 @@ export function getProjectMemoryDir(projectRoot?: string): string | null {
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
 export function hasProjectMemory(projectRoot?: string): boolean {
-  const dir = getProjectMemoryDir(projectRoot);
-  return dir !== null && existsSync(dir);
+	const dir = getProjectMemoryDir(projectRoot);
+	return dir !== null && existsSync(dir);
 }
 
 /**
@@ -112,41 +332,57 @@ export function hasProjectMemory(projectRoot?: string): boolean {
  *
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function getMemoryDirForScope(scope: MemoryScope, projectRoot?: string): string[] {
-  const globalDir = getMemoryDir();
-  const projectDir = getProjectMemoryDir(projectRoot);
+export function getMemoryDirForScope(
+	scope: MemoryScope,
+	projectRoot?: string,
+): string[] {
+	const globalDir = getMemoryDir();
+	const projectDir = getProjectMemoryDir(projectRoot);
 
-  switch (scope) {
-    case "project":
-      return projectDir ? [projectDir] : [];
-    case "global":
-      return [globalDir];
-    case "all":
-      // Project first for ranking priority
-      return projectDir ? [projectDir, globalDir] : [globalDir];
-  }
+	switch (scope) {
+		case 'project':
+			return projectDir ? [projectDir] : [];
+		case 'global':
+			return [globalDir];
+		case 'all':
+			// Project first for ranking priority
+			return projectDir ? [projectDir, globalDir] : [globalDir];
+	}
 }
 
 /**
- * Determine default write scope based on environment
- * - If .claude/mem/ exists -> project
- * - If in git repo -> project (will create .claude/mem/)
- * - Otherwise -> global
+ * Determine default write scope.
+ *
+ * Priority:
+ * 1. configuredScope from oh-my-claude.json memory.defaultWriteScope
+ *    - "project" / "global" → use directly
+ *    - "auto" / undefined → fall through to auto-detect
+ * 2. Auto-detect: project if in git repo, otherwise global
  *
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
+ * @param configuredScope - Value from config memory.defaultWriteScope (passed by caller).
  */
-export function getDefaultWriteScope(projectRoot?: string): "project" | "global" {
-  if (hasProjectMemory(projectRoot)) return "project";
-  if (findProjectRoot(projectRoot) !== null) return "project";
-  return "global";
+export function getDefaultWriteScope(
+	projectRoot?: string,
+	configuredScope?: string,
+): 'project' | 'global' {
+	// Explicit config override (not "auto")
+	if (configuredScope === 'project' || configuredScope === 'global') {
+		return configuredScope;
+	}
+
+	// Auto-detect
+	if (hasProjectMemory(projectRoot)) return 'project';
+	if (findProjectRoot(projectRoot) !== null) return 'project';
+	return 'global';
 }
 
 /**
  * Get subdirectory for a memory type within a base directory
  */
 function getTypeDir(baseDir: string, type: MemoryType): string {
-  const subdir = type === "session" ? "sessions" : "notes";
-  return join(baseDir, subdir);
+	const subdir = type === 'session' ? 'sessions' : 'notes';
+	return join(baseDir, subdir);
 }
 
 /**
@@ -154,22 +390,25 @@ function getTypeDir(baseDir: string, type: MemoryType): string {
  *
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function ensureMemoryDirs(scope?: MemoryScope, projectRoot?: string): void {
-  const targetScope = scope ?? "all";
+export function ensureMemoryDirs(
+	scope?: MemoryScope,
+	projectRoot?: string,
+): void {
+	const targetScope = scope ?? 'all';
 
-  if (targetScope === "project" || targetScope === "all") {
-    const projectDir = getProjectMemoryDir(projectRoot);
-    if (projectDir) {
-      mkdirSync(join(projectDir, "sessions"), { recursive: true });
-      mkdirSync(join(projectDir, "notes"), { recursive: true });
-    }
-  }
+	if (targetScope === 'project' || targetScope === 'all') {
+		const projectDir = getProjectMemoryDir(projectRoot);
+		if (projectDir) {
+			mkdirSync(join(projectDir, 'sessions'), { recursive: true });
+			mkdirSync(join(projectDir, 'notes'), { recursive: true });
+		}
+	}
 
-  if (targetScope === "global" || targetScope === "all") {
-    const globalDir = getMemoryDir();
-    mkdirSync(join(globalDir, "sessions"), { recursive: true });
-    mkdirSync(join(globalDir, "notes"), { recursive: true });
-  }
+	if (targetScope === 'global' || targetScope === 'all') {
+		const globalDir = getMemoryDir();
+		mkdirSync(join(globalDir, 'sessions'), { recursive: true });
+		mkdirSync(join(globalDir, 'notes'), { recursive: true });
+	}
 }
 
 // ---- CRUD operations ----
@@ -180,69 +419,86 @@ export function ensureMemoryDirs(scope?: MemoryScope, projectRoot?: string): voi
  * @param projectRoot - Explicit project root for project-scoped writes.
  *                      Avoids cwd() dependency when provided.
  */
-export function createMemory(input: CreateMemoryInput, projectRoot?: string): MemoryResult<MemoryEntry> {
-  try {
-    // Determine write scope
-    const writeScope = input.scope === "all" ? getDefaultWriteScope(projectRoot) : (input.scope ?? getDefaultWriteScope(projectRoot));
+export function createMemory(
+	input: CreateMemoryInput,
+	projectRoot?: string,
+): MemoryResult<MemoryEntry> {
+	try {
+		// Determine write scope
+		const writeScope =
+			input.scope === 'all'
+				? getDefaultWriteScope(projectRoot)
+				: (input.scope ?? getDefaultWriteScope(projectRoot));
 
-    // Determine target directory
-    let targetDir: string;
-    if (writeScope === "project") {
-      const projectDir = getProjectMemoryDir(projectRoot);
-      if (!projectDir) {
-        return {
-          success: false,
-          error: "No project directory found. Use scope: 'global' or initialize a git repo.",
-        };
-      }
-      targetDir = projectDir;
-    } else {
-      targetDir = getMemoryDir();
-    }
+		// Determine target directory
+		let targetDir: string;
+		if (writeScope === 'project') {
+			const projectDir = getProjectMemoryDir(projectRoot);
+			if (!projectDir) {
+				return {
+					success: false,
+					error: "No project directory found. Use scope: 'global' or initialize a git repo.",
+				};
+			}
+			targetDir = projectDir;
+		} else {
+			targetDir = getMemoryDir();
+		}
 
-    // Ensure directories exist
-    const type = input.type ?? "note";
-    const subdir = type === "session" ? "sessions" : "notes";
-    mkdirSync(join(targetDir, subdir), { recursive: true });
+		// Ensure directories exist
+		const type = input.type ?? 'note';
+		const subdir = type === 'session' ? 'sessions' : 'notes';
+		mkdirSync(join(targetDir, subdir), { recursive: true });
 
-    const title = input.title || generateTitle(input.content);
-    const now = nowISO();
-    // Use provided createdAt for date prefix (compact preserves original dates)
-    const createdAt = input.createdAt ?? now;
-    const idDate = input.createdAt ? new Date(input.createdAt) : undefined;
-    const id = generateMemoryId(title, idDate);
+		const title = input.title || generateTitle(input.content);
+		const now = nowISO();
+		// Use provided createdAt for date prefix (compact preserves original dates)
+		const createdAt = input.createdAt ?? now;
+		const idDate = input.createdAt ? new Date(input.createdAt) : undefined;
+		const id = generateMemoryId(title, idDate);
 
-    const entry: MemoryEntry = {
-      id,
-      title,
-      type,
-      tags: input.tags ?? [],
-      content: input.content,
-      createdAt,
-      updatedAt: now,
-    };
+		const category =
+			input.category ??
+			inferCategory(type, normalizeTags(input.tags), input.content);
 
-    const dir = getTypeDir(targetDir, type);
-    const filePath = join(dir, `${id}.md`);
+		const entry: MemoryEntry = {
+			id,
+			title,
+			type,
+			...(category && { category }),
+			tags: normalizeTags(input.tags),
+			...(input.concepts &&
+				input.concepts.length > 0 && {
+					concepts: normalizeTags(input.concepts),
+				}),
+			...(input.files &&
+				input.files.length > 0 && { files: input.files }),
+			content: input.content,
+			createdAt,
+			updatedAt: now,
+		};
 
-    // Avoid ID collision by appending a counter
-    let finalPath = filePath;
-    let finalId = id;
-    let counter = 1;
-    while (existsSync(finalPath)) {
-      finalId = `${id}-${counter}`;
-      finalPath = join(dir, `${finalId}.md`);
-      counter++;
-    }
-    entry.id = finalId;
+		const dir = getTypeDir(targetDir, type);
+		const filePath = join(dir, `${id}.md`);
 
-    const markdown = serializeMemoryFile(entry);
-    writeFileSync(finalPath, markdown, "utf-8");
+		// Avoid ID collision by appending a counter
+		let finalPath = filePath;
+		let finalId = id;
+		let counter = 1;
+		while (existsSync(finalPath)) {
+			finalId = `${id}-${counter}`;
+			finalPath = join(dir, `${finalId}.md`);
+			counter++;
+		}
+		entry.id = finalId;
 
-    return { success: true, data: entry };
-  } catch (error) {
-    return { success: false, error: `Failed to create memory: ${error}` };
-  }
+		const markdown = serializeMemoryFile(entry);
+		writeFileSync(finalPath, markdown, 'utf-8');
+
+		return { success: true, data: entry };
+	} catch (error) {
+		return { success: false, error: `Failed to create memory: ${error}` };
+	}
 }
 
 /**
@@ -251,64 +507,75 @@ export function createMemory(input: CreateMemoryInput, projectRoot?: string): Me
  *
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function getMemory(id: string, scope: MemoryScope = "all", projectRoot?: string): MemoryResult<MemoryEntry> {
-  try {
-    const dirs = getMemoryDirForScope(scope, projectRoot);
+export function getMemory(
+	id: string,
+	scope: MemoryScope = 'all',
+	projectRoot?: string,
+): MemoryResult<MemoryEntry> {
+	try {
+		const dirs = getMemoryDirForScope(scope, projectRoot);
 
-    for (const baseDir of dirs) {
-      for (const type of ["session", "note"] as MemoryType[]) {
-        const filePath = join(getTypeDir(baseDir, type), `${id}.md`);
-        if (existsSync(filePath)) {
-          const raw = readFileSync(filePath, "utf-8");
-          const entry = parseMemoryFile(id, raw);
-          if (entry) {
-            // Add scope metadata
-            const projectDir = getProjectMemoryDir(projectRoot);
-            (entry as any)._scope = baseDir === projectDir ? "project" : "global";
-            (entry as any)._path = filePath;
-            return { success: true, data: entry };
-          }
-        }
-      }
-    }
-    return { success: false, error: `Memory "${id}" not found` };
-  } catch (error) {
-    return { success: false, error: `Failed to read memory: ${error}` };
-  }
+		for (const baseDir of dirs) {
+			for (const type of ['session', 'note'] as MemoryType[]) {
+				const filePath = join(getTypeDir(baseDir, type), `${id}.md`);
+				if (existsSync(filePath)) {
+					const raw = readFileSync(filePath, 'utf-8');
+					const entry = parseMemoryFile(id, raw);
+					if (entry) {
+						// Add scope metadata
+						const projectDir = getProjectMemoryDir(projectRoot);
+						(entry as any)._scope =
+							baseDir === projectDir ? 'project' : 'global';
+						(entry as any)._path = filePath;
+						return { success: true, data: entry };
+					}
+				}
+			}
+		}
+		return { success: false, error: `Memory "${id}" not found` };
+	} catch (error) {
+		return { success: false, error: `Failed to read memory: ${error}` };
+	}
 }
 
 /**
  * Update an existing memory entry
  */
 export function updateMemory(
-  id: string,
-  updates: Partial<Pick<MemoryEntry, "title" | "content" | "tags">>
+	id: string,
+	updates: Partial<Pick<MemoryEntry, 'title' | 'content' | 'tags'>>,
 ): MemoryResult<MemoryEntry> {
-  try {
-    const existing = getMemory(id);
-    if (!existing.success || !existing.data) {
-      return { success: false, error: existing.error ?? `Memory "${id}" not found` };
-    }
+	try {
+		const existing = getMemory(id);
+		if (!existing.success || !existing.data) {
+			return {
+				success: false,
+				error: existing.error ?? `Memory "${id}" not found`,
+			};
+		}
 
-    const entry = { ...existing.data };
-    if (updates.title !== undefined) entry.title = updates.title;
-    if (updates.content !== undefined) entry.content = updates.content;
-    if (updates.tags !== undefined) entry.tags = updates.tags;
-    entry.updatedAt = nowISO();
+		const entry = { ...existing.data };
+		if (updates.title !== undefined) entry.title = updates.title;
+		if (updates.content !== undefined) entry.content = updates.content;
+		if (updates.tags !== undefined) entry.tags = updates.tags;
+		entry.updatedAt = nowISO();
 
-    // Use the path from getMemory
-    const filePath = (existing.data as any)._path;
-    if (!filePath) {
-      return { success: false, error: "Could not determine file path for memory" };
-    }
+		// Use the path from getMemory
+		const filePath = (existing.data as any)._path;
+		if (!filePath) {
+			return {
+				success: false,
+				error: 'Could not determine file path for memory',
+			};
+		}
 
-    const markdown = serializeMemoryFile(entry);
-    writeFileSync(filePath, markdown, "utf-8");
+		const markdown = serializeMemoryFile(entry);
+		writeFileSync(filePath, markdown, 'utf-8');
 
-    return { success: true, data: entry };
-  } catch (error) {
-    return { success: false, error: `Failed to update memory: ${error}` };
-  }
+		return { success: true, data: entry };
+	} catch (error) {
+		return { success: false, error: `Failed to update memory: ${error}` };
+	}
 }
 
 /**
@@ -317,23 +584,27 @@ export function updateMemory(
  *
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function deleteMemory(id: string, scope: MemoryScope = "all", projectRoot?: string): MemoryResult {
-  try {
-    const dirs = getMemoryDirForScope(scope, projectRoot);
+export function deleteMemory(
+	id: string,
+	scope: MemoryScope = 'all',
+	projectRoot?: string,
+): MemoryResult {
+	try {
+		const dirs = getMemoryDirForScope(scope, projectRoot);
 
-    for (const baseDir of dirs) {
-      for (const type of ["session", "note"] as MemoryType[]) {
-        const filePath = join(getTypeDir(baseDir, type), `${id}.md`);
-        if (existsSync(filePath)) {
-          unlinkSync(filePath);
-          return { success: true };
-        }
-      }
-    }
-    return { success: false, error: `Memory "${id}" not found` };
-  } catch (error) {
-    return { success: false, error: `Failed to delete memory: ${error}` };
-  }
+		for (const baseDir of dirs) {
+			for (const type of ['session', 'note'] as MemoryType[]) {
+				const filePath = join(getTypeDir(baseDir, type), `${id}.md`);
+				if (existsSync(filePath)) {
+					unlinkSync(filePath);
+					return { success: true };
+				}
+			}
+		}
+		return { success: false, error: `Memory "${id}" not found` };
+	} catch (error) {
+		return { success: false, error: `Failed to delete memory: ${error}` };
+	}
 }
 
 /**
@@ -342,61 +613,70 @@ export function deleteMemory(id: string, scope: MemoryScope = "all", projectRoot
  *
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
-export function listMemories(options?: MemoryListOptions, projectRoot?: string): MemoryEntry[] {
-  const entries: MemoryEntry[] = [];
-  const types: MemoryType[] = options?.type ? [options.type] : ["session", "note"];
-  const scope = options?.scope ?? "all";
-  const dirs = getMemoryDirForScope(scope, projectRoot);
-  const projectDir = getProjectMemoryDir(projectRoot);
+export function listMemories(
+	options?: MemoryListOptions,
+	projectRoot?: string,
+): MemoryEntry[] {
+	const entries: MemoryEntry[] = [];
+	const types: MemoryType[] = options?.type
+		? [options.type]
+		: ['session', 'note'];
+	const scope = options?.scope ?? 'all';
+	const dirs = getMemoryDirForScope(scope, projectRoot);
+	const projectDir = getProjectMemoryDir(projectRoot);
 
-  for (const baseDir of dirs) {
-    const isProjectDir = baseDir === projectDir;
+	for (const baseDir of dirs) {
+		const isProjectDir = baseDir === projectDir;
 
-    for (const type of types) {
-      const dir = getTypeDir(baseDir, type);
-      if (!existsSync(dir)) continue;
+		for (const type of types) {
+			const dir = getTypeDir(baseDir, type);
+			if (!existsSync(dir)) continue;
 
-      const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
-      for (const file of files) {
-        try {
-          const id = file.replace(".md", "");
-          const raw = readFileSync(join(dir, file), "utf-8");
-          const entry = parseMemoryFile(id, raw);
-          if (entry) {
-            // Add scope metadata
-            (entry as any)._scope = isProjectDir ? "project" : "global";
-            (entry as any)._path = join(dir, file);
+			const files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+			for (const file of files) {
+				try {
+					const id = file.replace('.md', '');
+					const raw = readFileSync(join(dir, file), 'utf-8');
+					const entry = parseMemoryFile(id, raw);
+					if (entry) {
+						// Add scope metadata
+						(entry as any)._scope = isProjectDir
+							? 'project'
+							: 'global';
+						(entry as any)._path = join(dir, file);
 
-            // Apply date filters
-            if (options?.after && entry.createdAt < options.after) continue;
-            if (options?.before && entry.createdAt > options.before) continue;
-            entries.push(entry);
-          }
-        } catch {
-          // Skip unreadable files
-        }
-      }
-    }
-  }
+						// Apply date filters
+						if (options?.after && entry.createdAt < options.after)
+							continue;
+						if (options?.before && entry.createdAt > options.before)
+							continue;
+						entries.push(entry);
+					}
+				} catch {
+					// Skip unreadable files
+				}
+			}
+		}
+	}
 
-  // Sort by newest first, with project memories ranked higher for same timestamp
-  entries.sort((a, b) => {
-    const timeCompare = b.createdAt.localeCompare(a.createdAt);
-    if (timeCompare !== 0) return timeCompare;
-    // Project memories first for same timestamp
-    const aScope = (a as any)._scope;
-    const bScope = (b as any)._scope;
-    if (aScope === "project" && bScope === "global") return -1;
-    if (aScope === "global" && bScope === "project") return 1;
-    return 0;
-  });
+	// Sort by newest first, with project memories ranked higher for same timestamp
+	entries.sort((a, b) => {
+		const timeCompare = b.createdAt.localeCompare(a.createdAt);
+		if (timeCompare !== 0) return timeCompare;
+		// Project memories first for same timestamp
+		const aScope = (a as any)._scope;
+		const bScope = (b as any)._scope;
+		if (aScope === 'project' && bScope === 'global') return -1;
+		if (aScope === 'global' && bScope === 'project') return 1;
+		return 0;
+	});
 
-  // Apply limit
-  if (options?.limit && options.limit > 0) {
-    return entries.slice(0, options.limit);
-  }
+	// Apply limit
+	if (options?.limit && options.limit > 0) {
+		return entries.slice(0, options.limit);
+	}
 
-  return entries;
+	return entries;
 }
 
 /**
@@ -406,59 +686,59 @@ export function listMemories(options?: MemoryListOptions, projectRoot?: string):
  * @param projectRoot - Explicit project root. Avoids cwd() dependency when provided.
  */
 export function getMemoryStats(projectRoot?: string): MemoryStats {
-  const projectDir = getProjectMemoryDir(projectRoot);
+	const projectDir = getProjectMemoryDir(projectRoot);
 
-  const stats: MemoryStats = {
-    total: 0,
-    byType: { session: 0, note: 0 },
-    byScope: { project: 0, global: 0 },
-    totalSizeBytes: 0,
-    storagePath: getMemoryDir(),
-    projectPath: projectDir ?? undefined,
-  };
+	const stats: MemoryStats = {
+		total: 0,
+		byType: { session: 0, note: 0 },
+		byScope: { project: 0, global: 0 },
+		totalSizeBytes: 0,
+		storagePath: getMemoryDir(),
+		projectPath: projectDir ?? undefined,
+	};
 
-  // Count global memories
-  const globalDir = getMemoryDir();
-  for (const type of ["session", "note"] as MemoryType[]) {
-    const dir = getTypeDir(globalDir, type);
-    if (!existsSync(dir)) continue;
+	// Count global memories
+	const globalDir = getMemoryDir();
+	for (const type of ['session', 'note'] as MemoryType[]) {
+		const dir = getTypeDir(globalDir, type);
+		if (!existsSync(dir)) continue;
 
-    const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
-    stats.byType[type] += files.length;
-    stats.byScope.global += files.length;
-    stats.total += files.length;
+		const files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+		stats.byType[type] += files.length;
+		stats.byScope.global += files.length;
+		stats.total += files.length;
 
-    for (const file of files) {
-      try {
-        const st = statSync(join(dir, file));
-        stats.totalSizeBytes += st.size;
-      } catch {
-        // Skip unreadable files
-      }
-    }
-  }
+		for (const file of files) {
+			try {
+				const st = statSync(join(dir, file));
+				stats.totalSizeBytes += st.size;
+			} catch {
+				// Skip unreadable files
+			}
+		}
+	}
 
-  // Count project memories if exists
-  if (projectDir && existsSync(projectDir)) {
-    for (const type of ["session", "note"] as MemoryType[]) {
-      const dir = getTypeDir(projectDir, type);
-      if (!existsSync(dir)) continue;
+	// Count project memories if exists
+	if (projectDir && existsSync(projectDir)) {
+		for (const type of ['session', 'note'] as MemoryType[]) {
+			const dir = getTypeDir(projectDir, type);
+			if (!existsSync(dir)) continue;
 
-      const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
-      stats.byType[type] += files.length;
-      stats.byScope.project += files.length;
-      stats.total += files.length;
+			const files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+			stats.byType[type] += files.length;
+			stats.byScope.project += files.length;
+			stats.total += files.length;
 
-      for (const file of files) {
-        try {
-          const st = statSync(join(dir, file));
-          stats.totalSizeBytes += st.size;
-        } catch {
-          // Skip unreadable files
-        }
-      }
-    }
-  }
+			for (const file of files) {
+				try {
+					const st = statSync(join(dir, file));
+					stats.totalSizeBytes += st.size;
+				} catch {
+					// Skip unreadable files
+				}
+			}
+		}
+	}
 
-  return stats;
+	return stats;
 }

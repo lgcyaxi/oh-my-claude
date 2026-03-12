@@ -4,7 +4,7 @@
 
 Multi-provider MCP server for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with specialized agent workflows.
 
-Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, Kimi, Google Gemini, OpenAI, GitHub Copilot) via Anthropic-compatible APIs while leveraging Claude Code's native capabilities.
+Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, Kimi, Ollama, Google Gemini, OpenAI, GitHub Copilot) via Anthropic-compatible APIs while leveraging Claude Code's native capabilities.
 
 ## Features
 
@@ -12,17 +12,19 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, K
 - **OAuth Authentication** - One-command login for Google Gemini (multi-account), OpenAI Codex, and GitHub Copilot — no API keys needed
 - **Concurrent Background Tasks** - Run multiple agents in parallel with configurable limits
 - **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Hephaestus, Librarian, etc.)
+- **Native Coworker Runtimes** - Codex and OpenCode native execution with unified cross-platform viewer (tmux/WezTerm/Terminal), task cancellation/interrupt, TUI toasts, viewer auto-close, and live status. OpenCode agent selection is resolved from the live `/agent` list, including plugin agents exposed by the server. Plus scoped-diff reviews (focused git diff for specific paths), rich approval metadata (decisionOptions, questions, details), and 9 operations: send, review, diff, fork, approve, revert, cancel, status, recent_activity
 - **Slash Commands** - Quick actions (`/omcx-commit`, `/omcx-implement`) and agent activation (`/omc-sisyphus`, `/omc-plan`)
 - **Real-Time StatusLine** - Live status bar showing active agents, task progress, and concurrency slots
 - **Planning System** - Strategic planning with Prometheus agent and boulder-state tracking
 - **Official MCP Setup** - One-command installation for Sequential Thinking, MiniMax, and GLM MCPs
 - **Hook Integration** - Code quality checks, todo tracking, and agent monitoring
 - **Output Style Manager** - Switch between built-in and custom output styles via CLI
-- **Semantic Memory** - Three-tier search (hybrid FTS5+vector, FTS5, legacy) with deduplication and snippet-only recall
 - **Memory Timeline** - Auto-maintained chronological index injected into agent context for cross-session awareness
-- **Live Model Switching** - HTTP proxy for in-conversation model switching to external providers (DeepSeek, ZhiPu, MiniMax, Kimi, Google Gemini, OpenAI, Copilot)
-- **Proxy-Aware Agent Delegation** - Agent commands auto-detect proxy and use switch+Task for full tool access (Edit, Write, Bash); MCP fallback when proxy unavailable
-- **Terminal Configuration** - One-command WezTerm/tmux setup with zsh auto-detection, cross-platform clipboard, and split-pane bridge layout
+- **Live Model Switching** - HTTP proxy for in-conversation model switching with 5-priority routing chain: directive(1) → model-driven(2) → session(3) → global(4) → passthrough(5)
+- **Route Directive Auto-Routing** - Subagents embed `[omc-route:provider/model]` directives in their prompts; the proxy extracts and routes automatically at Priority 1 — no manual switching needed
+- **Unified Agent Architecture** - 11 role agents + 6 provider agents (`@kimi`, `@deepseek`, `@qwen`, etc.) run as native Task tool agents with route directives
+- **Semantic Memory** - Three-tier search (hybrid FTS5+vector, FTS5, legacy) with deduplication, snippet-only recall, and structured categories (architecture, convention, decision, debugging, workflow, pattern, reference, session)
+- **Terminal Configuration** - One-command WezTerm/tmux setup with zsh auto-detection and cross-platform clipboard
 - **Companion Tools** - One-command setup for UI UX Pro Max, CCometixLine, and more
 
 ## Quick Start
@@ -52,14 +54,24 @@ bun run install-local
 # DeepSeek (for Analyst agent)
 export DEEPSEEK_API_KEY=your-deepseek-api-key
 
-# ZhiPu GLM (for Librarian, Frontend-UI-UX agents)
+# ZhiPu GLM CN (for Librarian agent)
 export ZHIPU_API_KEY=your-zhipu-api-key
+# ZhiPu GLM Global (Z.ai)
+export ZAI_API_KEY=your-zai-api-key
 
-# MiniMax (for Document-Writer agent)
+# MiniMax Global (api.minimax.io)
 export MINIMAX_API_KEY=your-minimax-api-key
+# MiniMax CN (for Document-Writer agent)
+export MINIMAX_CN_API_KEY=your-minimax-cn-api-key
 
 # Kimi (for proxy model switching)
 export KIMI_API_KEY=your-kimi-api-key
+
+# Aliyun Coding Plan (Qwen models)
+export ALIYUN_API_KEY=your-aliyun-api-key
+
+# Ollama (local, no API key needed — auto-discovered)
+# export OLLAMA_HOST=http://localhost:11434  # default, only set if non-standard
 ```
 
 ### OAuth Authentication (Optional)
@@ -82,6 +94,12 @@ oh-my-claude auth login copilot
 
 # MiniMax (for quota display)
 oh-my-claude auth login minimax  # Opens browser for QR code login
+
+# Aliyun Bailian (for Coding Plan quota display)
+oh-my-claude auth login aliyun   # Opens browser for Aliyun console login
+
+# Kimi (for quota display)
+oh-my-claude auth login kimi     # Opens browser for Kimi login
 
 # List authenticated providers
 oh-my-claude auth list
@@ -114,6 +132,13 @@ npx @lgcyaxi/oh-my-claude status
 npx @lgcyaxi/oh-my-claude doctor --detail
 ```
 
+### Guides
+
+- [Codex App-Server Guide](docs/guides/codex-app-server.md)
+- [Coworker Architecture](docs/guides/orchestrator-architecture.md)
+- [Coworker Protocol Coverage](docs/guides/coworker-protocol-coverage.md)
+- [Coworker Smoke Tests](docs/guides/coworker-smoke-tests.md)
+
 ## Slash Commands
 
 ### Agent Commands (`/omc-*`)
@@ -121,20 +146,20 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 | Command | Description |
 |---------|-------------|
 | `/omc-sisyphus` | Activate Sisyphus - full implementation orchestrator |
-| `/omc-oracle` | Activate Oracle - deep reasoning and architecture |
-| `/omc-librarian` | Activate Librarian - external research and docs |
-| `/omc-reviewer` | Activate Claude-Reviewer - code review and QA |
-| `/omc-scout` | Activate Claude-Scout - fast exploration |
-| `/omc-explore` | Activate Explore - codebase search |
 | `/omc-plan` | Start strategic planning with Prometheus |
 | `/omc-start-work` | Begin work on an existing plan |
-| `/omc-status` | Display MCP background agent status dashboard |
-| `/omc-hephaestus` | Activate Hephaestus - code forge specialist |
-| `/omc-navigator` | Activate Navigator - multimodal & visual-to-code |
-| `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r 3`) |
+| `/omc-status` | Display proxy + coworker status via `coworker_task(action="status")` |
+| `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r`) |
+| `/omc-opencode` | Activate OpenCode for refactoring and UI design |
+| `/omc-codex` | Assign a self-contained task to the Codex coworker |
+| `/omc-pref` | Manage persistent preferences (always/never rules) |
+| `/omc-up` | Upvote — mark a response as helpful |
+| `/omc-down` | Downvote — mark a response as unhelpful |
+| `/omc-pend` | Pending — pause current task for later |
 | `/omc-mem-compact` | Compact memories with AI-assisted grouping |
 | `/omc-mem-clear` | AI-powered selective memory cleanup |
 | `/omc-mem-summary` | Consolidate memories into timeline summary |
+| `/omc-mem-daily` | Generate daily narrative from session memories |
 | `/omc-ulw` | **Ultrawork Mode** - Maximum performance, work until done |
 
 ### Quick Action Commands (`/omcx-*`)
@@ -202,6 +227,8 @@ omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [�
 | **MCP** | Background tasks | `[⠙ Oracle: 32s]` |
 | **Memory** | Memory store count | `[mem:5]` |
 | **Proxy** | Model switch state | `[→DS/R ×2]` |
+| **Usage** | Provider quota/balance (line 3) | `DS:¥98.5 \| ZP:1%/w:5%/m:2% \| AY:0%/w:1%/m:1%` |
+| **Preferences** | Active preference rules | `[pref:3]` |
 
 ### Presets
 
@@ -262,7 +289,7 @@ npx @lgcyaxi/oh-my-claude statusline toggle output-style  # Toggle output-style
 npx @lgcyaxi/oh-my-claude statusline toggle context off   # Disable context segment
 ```
 
-**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mcp`, `memory`, `proxy`
+**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mode`, `mcp`, `memory`, `proxy`, `codex`, `usage`, `preferences`
 
 ### Multi-Line Support
 
@@ -485,6 +512,7 @@ Each memory is a markdown file with YAML frontmatter:
 title: Team prefers functional components
 type: note
 tags: [pattern, react, convention]
+category: convention
 createdAt: "2026-01-29T10:00:00.000Z"
 updatedAt: "2026-01-29T10:00:00.000Z"
 ---
@@ -492,6 +520,8 @@ updatedAt: "2026-01-29T10:00:00.000Z"
 The team prefers functional components with hooks over class components.
 Use `useState` and `useEffect` instead of class lifecycle methods.
 ```
+
+**Structured Categories:** Memories support taxonomy-based categorization for improved retrieval. Available categories: `architecture`, `convention`, `decision`, `debugging`, `workflow`, `pattern`, `reference`, `session`.
 
 ## Live Model Switching
 
@@ -526,35 +556,44 @@ oh-my-claude includes an HTTP proxy that enables **in-conversation model switchi
 
 ```bash
 oh-my-claude cc                    # Auto-start per-session proxy + launch Claude Code
-oh-my-claude cc -- --resume        # Forward args to claude
-oh-my-claude cc -d                 # Enable debug logging
+oh-my-claude cc -r                 # Resume last conversation (OMC shortcut)
+oh-my-claude cc -skip              # Dangerously skip permissions (OMC shortcut)
+oh-my-claude cc -wt                # Isolated git worktree session (OMC shortcut)
+oh-my-claude cc -r -skip           # Combine OMC shortcuts
+oh-my-claude cc -rc                # Remote Control mode (mobile via claude.ai/code)
+oh-my-claude cc -d                 # Enable debug logging (logs to ~/.claude/oh-my-claude/logs/)
 oh-my-claude cc -p ds              # Direct DeepSeek (no proxy, single provider)
 oh-my-claude cc -p km              # Direct Kimi (no proxy, single provider)
 ```
 
-Each `cc` session gets its own proxy instance with isolated state. Multiple sessions can run simultaneously without interference.
+CC session modules use platform-split architecture (`*-unix.ts` / `*-win.ts`) for clean macOS/Linux vs Windows separation.
 
-**Multi-AI Bridge** — spawn CC workers alongside your main session:
+Each `cc` session gets its own proxy instance with isolated state. Multiple sessions can run simultaneously without interference. In debug mode, if the visible proxy pane fails to spawn (e.g., terminal pane limit reached), the session gracefully falls back to a hidden proxy process.
 
-```bash
-oh-my-claude bridge up cc                    # Spawn CC with own proxy session
-oh-my-claude bridge up cc --switch ds        # Auto-switch CC worker to DeepSeek
-oh-my-claude bridge up cc cc:2 cc:3          # Multiple independent CC instances
-oh-my-claude bridge send cc "research task"  # Delegate task and poll for response
-oh-my-claude bridge status                   # Show running bridge workers
-oh-my-claude bridge down all                 # Stop all bridge workers
-```
+**OMC shortcuts** use single dash (`-`) to differentiate from Claude Code's native double-dash flags:
 
-CC bridge workers enable routing team tasks to cheap external models (DeepSeek, ZhiPu, MiniMax) instead of using Opus tokens. Each CC instance has its own proxy session for isolated `switch_model` calls. Also supports `codex`, `opencode`, and `gemini` as bridge workers.
+| Shortcut | Expands to | Description |
+|----------|-----------|-------------|
+| `-r` | `--resume` | Resume last conversation |
+| `-skip` | `--dangerously-skip-permissions` | Skip permission prompts |
+| `-wt` | `--worktree` | Isolated git worktree session |
+| `-rc` | `claude remote-control` | Mobile access via claude.ai/code |
+Codex and OpenCode are native coworker targets. Use `coworker_task(action="send" | "review" | "diff" | "fork" | "approve" | "revert" | "cancel" | "status" | "recent_activity", ...)` for coworker control. OpenCode accepts explicit `agent`, `provider_id`, and `model_id` overrides. Codex accepts native `approval_policy` values and honors `OMC_CODEX_APPROVAL_POLICY`; supported values are `never`, `on-request`, `on-failure`, `untrusted`, and `reject`. The default Codex behavior is `never`. `on-request` is not an always-ask mode; Codex only opens pending approvals when it decides the action needs approval. For sustained multi-turn provider routing, keep using proxy mode via `oh-my-claude cc`.
+
+For Codex specifically, prefer coworker-style delegation: assign the goal, scope, and completion criteria, then let Codex execute autonomously. Avoid step-by-step task scripts unless the user explicitly asks for them.
 
 **Provider shortcuts for `cc -p`:**
 
 | Shortcut | Provider | Endpoint |
 |----------|----------|----------|
 | `ds` / `deepseek` | DeepSeek | api.deepseek.com/anthropic |
-| `zp` / `zhipu` | ZhiPu | open.bigmodel.cn/api/anthropic |
-| `mm` / `minimax` | MiniMax | api.minimaxi.com/anthropic |
+| `zp` / `zhipu` | ZhiPu (CN) | open.bigmodel.cn/api/anthropic |
+| `zai` / `zp-g` | Z.AI (Global) | api.z.ai/api/anthropic |
+| `mm` / `minimax` | MiniMax (Global) | api.minimax.io/anthropic |
+| `mm-cn` / `minimax-cn` | MiniMax (CN) | api.minimaxi.com/anthropic |
 | `km` / `kimi` | Kimi | api.kimi.com/coding |
+| `ali` / `aliyun` | Aliyun | coding.dashscope.aliyuncs.com/apps/anthropic |
+| `ol` / `ollama` | Ollama (local) | localhost:11434 |
 
 > **Windows**: Proxy CLI is fully cross-platform. Health checks use Node's `http` module (no `curl` dependency).
 
@@ -576,11 +615,14 @@ CC bridge workers enable routing team tasks to cheap external models (DeepSeek, 
 | `zp` | zhipu | GLM-5 |
 | `mm` | minimax | MiniMax-M2.5 |
 | `km` | kimi | K2.5 |
+| `ali` | aliyun | qwen3.5-plus |
+| `ali-c` | aliyun | qwen3-coder-plus |
 | `gm` | google | gemini-3-flash |
 | `gm-p` | google | gemini-3-pro |
-| `gpt` | openai | gpt-5.2 |
+| `gpt` | openai | gpt-5.3-codex |
 | `cx` | openai | gpt-5.3-codex |
-| `cp` | copilot | gpt-5.2 |
+| `cp` | copilot | gpt-5.3-codex |
+| `ol` | ollama | *(auto-discovered)* |
 
 **Via CLI** (session ID supports prefix matching):
 ```bash
@@ -603,27 +645,34 @@ switch_model(provider="deepseek", model="deepseek-chat")
 | `switch_status` | Query current proxy switch state |
 | `switch_revert` | Immediately revert to native Claude |
 
-### Agent Delegation Mode
+### Route Directive Auto-Routing
 
-When the proxy is running, agent commands (`/omc-hephaestus`, `/omc-oracle`, `/omc-librarian`, `/omc-navigator`) automatically use **switch+Task** for full tool access:
+The agent generator embeds `[omc-route:provider/model]` directives directly into each agent's prompt text. The proxy extracts this directive at **Priority 1** and routes to the correct provider automatically — no explicit `switch_model` or model-field matching needed.
 
-1. `switch_model(provider, model, requests=-1)` — silent switch
-2. Task tool with matching `subagent_type` — full Claude Code tool access
-3. `switch_revert` — automatic cleanup
+**5-Priority Routing Chain:**
+1. **Directive** — `[omc-route:provider/model]` in prompt text (highest priority)
+2. **Model-driven** — non-Claude model ID in request triggers provider lookup
+3. **Session** — explicit `switch_model` call for the session
+4. **Global** — global proxy switch state
+5. **Passthrough** — default to Anthropic
 
-This gives external models access to Edit, Write, Bash, Glob, and Grep — unlike MCP background tasks which only return text. The switch is silent (no user confirmation) since the user explicitly invoked the agent command.
+All agents run as native Task tool agents with full Claude Code tool access (Edit, Write, Bash, Glob, Grep). Claude-native agents (no directive) pass through to Anthropic as usual.
 
-When proxy is unavailable, commands fall back to MCP `launch_background_task` automatically.
-
-| Agent | Provider/Model |
-|-------|---------------|
-| Hephaestus | openai/gpt-5.3-codex |
-| Oracle | openai/gpt-5.3-codex |
-| Librarian | zhipu/GLM-5 |
-| Navigator | kimi/K2.5 |
-| Analyst | deepseek/deepseek-chat |
-| Document-Writer | minimax/MiniMax-M2.5 |
-| Frontend-UI-UX | google/gemini-3-pro |
+| Agent | Model | Routing |
+|-------|-------|---------|
+| Oracle | claude-sonnet-4-6 | Passthrough (Claude native) |
+| Analyst | qwen3.5-plus | Directive → Aliyun |
+| Librarian | glm-5 | Directive → ZhiPu |
+| Navigator | kimi-for-coding | Directive → Kimi |
+| Hephaestus | kimi-for-coding | Directive → Kimi |
+| Document-Writer | MiniMax-M2.5 | Directive → MiniMax |
+| Frontend-UI-UX | gemini-3-pro | Directive → Google |
+| @kimi | kimi-for-coding | Directive → Kimi |
+| @mm-cn | MiniMax-M2.5 | Directive → MiniMax CN |
+| @deepseek | deepseek-chat | Directive → DeepSeek |
+| @deepseek-r | deepseek-reasoner | Directive → DeepSeek |
+| @qwen | qwen3.5-plus | Directive → Aliyun |
+| @zhipu | glm-5 | Directive → ZhiPu |
 
 ### Safety Features
 
@@ -657,7 +706,7 @@ oh-my-claude menubar --build                      # Build release app
 
 **Prerequisites**: [Rust](https://rustup.rs/) and [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) are required for building.
 
-The menubar app displays all active sessions, their current models, and allows one-click model switching — same data as `proxy sessions` but with a visual interface.
+The menubar app displays all active sessions, their current models, and allows one-click model switching — same data as `proxy sessions` but with a visual interface. Includes a per-session memory model picker for choosing which AI provider handles memory operations.
 
 ## Terminal Configuration
 
@@ -687,39 +736,39 @@ oh-my-claude tmux-config --show          # Preview without writing
 
 ## Agent Workflows
 
-oh-my-claude provides two types of agents:
+All 11 agents are unified as native Task tool agents. They use route directive auto-routing via `[omc-route:provider/model]` embedded in their prompts.
 
 ### Claude Code Built-in Agents (Task Tool)
 
-These agents run via Claude Code's native Task tool. **Model selection is controlled by Claude Code internally** - we cannot change which model is used.
+These agents run via Claude Code's native Task tool on the Claude subscription model.
 
 | Agent | Role | Invocation |
 |-------|------|------------|
 | **Sisyphus** | Primary orchestrator | `/omc-sisyphus` |
-| **Claude-Reviewer** | Code review, QA | `/omc-reviewer` |
-| **Claude-Scout** | Fast exploration | `/omc-scout` |
+| **Claude-Reviewer** | Code review, QA | `Task(subagent_type="claude-reviewer")` |
+| **Claude-Scout** | Fast exploration | `Task(subagent_type="claude-scout")` |
 | **Prometheus** | Strategic planning | `/omc-plan` |
 | **Explore** | Codebase search | `Task(subagent_type="Explore")` |
 
-### MCP Background Agents (External APIs)
+### Task Agents (Route Directive Auto-Routed)
 
-These agents run via oh-my-claude's MCP server using external API providers. **We control model selection** via configuration.
+All task agents run via Claude Code's Task tool. Each agent's prompt contains an `[omc-route:provider/model]` directive that the proxy extracts at Priority 1 for automatic provider routing — no manual `switch_model` needed.
 
-| Agent | Provider | Model | Role |
-|-------|----------|-------|------|
-| **Oracle** | OpenAI | gpt-5.2 | Deep reasoning |
-| **Analyst** | DeepSeek | deepseek-chat | Quick code analysis |
-| **Librarian** | ZhiPu | GLM-5 | External research |
-| **Frontend-UI-UX** | Google | gemini-3-pro | Visual/UI design |
-| **Document-Writer** | MiniMax | MiniMax-M2.5 | Documentation |
-| **Navigator** | Kimi | K2.5 | Visual-to-code & multi-step tasks |
-| **Hephaestus** | OpenAI | gpt-5.3-codex | Code forge specialist |
+| Agent | Model | Provider (directive-routed) | Role |
+|-------|-------|---------------------------|------|
+| **Oracle** | claude-sonnet-4-6 | Anthropic (passthrough) | Deep reasoning |
+| **Analyst** | qwen3.5-plus | Aliyun | Quick code analysis |
+| **Librarian** | glm-5 | ZhiPu | External research |
+| **Frontend-UI-UX** | gemini-3-pro | Google | Visual/UI design |
+| **Document-Writer** | MiniMax-M2.5 | MiniMax | Documentation |
+| **Navigator** | kimi-for-coding | Kimi | Visual-to-code & multi-step tasks |
+| **Hephaestus** | kimi-for-coding | Kimi | Code forge specialist |
 
-**Invocation:** `launch_background_task(agent="oracle", prompt="...")` or `execute_agent(agent="oracle", prompt="...")`
+**Invocation:** `Task(subagent_type="analyst")` or use `@analyst` in prompts. The proxy auto-routes based on the embedded route directive.
 
 **Direct Model Access:** `execute_with_model(provider="deepseek", model="deepseek-reasoner", prompt="...")` — bypasses agent routing for token-efficient direct model calls.
 
-> **Proxy routing:** When the proxy is running, MCP agents route through it automatically — enabling OAuth providers (OpenAI, Google, Copilot) without API keys. Fallback chain: proxy → direct API → Claude passthrough → Claude Code Task tool. Without proxy, only API-key providers (DeepSeek, ZhiPu, MiniMax, Kimi) work directly.
+> **5-Priority Routing Chain:** directive(1) → model-driven(2) → session(3) → global(4) → passthrough(5). Route directives embedded in agent prompts take highest priority, followed by model-ID auto-routing, then explicit session/global switches.
 
 ## Official MCP Servers
 
@@ -840,15 +889,30 @@ Configuration file: `~/.claude/oh-my-claude.json`
       "base_url": "https://open.bigmodel.cn/api/anthropic",
       "api_key_env": "ZHIPU_API_KEY"
     },
+    "zai": {
+      "type": "anthropic-compatible",
+      "base_url": "https://api.z.ai/api/anthropic",
+      "api_key_env": "ZAI_API_KEY"
+    },
     "minimax": {
       "type": "anthropic-compatible",
-      "base_url": "https://api.minimaxi.com/anthropic",
+      "base_url": "https://api.minimax.io/anthropic",
       "api_key_env": "MINIMAX_API_KEY"
+    },
+    "minimax-cn": {
+      "type": "anthropic-compatible",
+      "base_url": "https://api.minimaxi.com/anthropic",
+      "api_key_env": "MINIMAX_CN_API_KEY"
     },
     "kimi": {
       "type": "anthropic-compatible",
       "base_url": "https://api.kimi.com/coding",
       "api_key_env": "KIMI_API_KEY"
+    },
+    "aliyun": {
+      "type": "anthropic-compatible",
+      "base_url": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+      "api_key_env": "ALIYUN_API_KEY"
     },
     "google": {
       "type": "google-oauth",
@@ -865,8 +929,8 @@ Configuration file: `~/.claude/oh-my-claude.json`
   },
   "agents": {
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
-    "oracle": { "provider": "openai", "model": "gpt-5.2" },
-    "hephaestus": { "provider": "openai", "model": "gpt-5.3-codex" },
+    "oracle": { "provider": "aliyun", "model": "qwen3.5-plus" },
+    "hephaestus": { "provider": "kimi", "model": "K2.5" },
     "librarian": { "provider": "zhipu", "model": "GLM-5" }
   },
   "concurrency": {

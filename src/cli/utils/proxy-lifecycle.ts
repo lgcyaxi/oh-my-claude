@@ -1,45 +1,100 @@
 /**
  * Shared proxy lifecycle management
  *
- * Two modes:
- * - `ensureProxyRunning()` — shared daemon for `oh-my-claude proxy start`
- * - `spawnSessionProxy()` — per-session child process for `oh-my-claude cc`
+ * Provides per-session proxy spawning for `oh-my-claude cc`:
+ * - `spawnSessionProxy()` — per-session child process (dies with CC session)
+ * - `spawnDetachedProxy()` — per-session detached daemon (for terminal window mode)
+ * - `findFreePorts()` — allocate dynamic ports for a session
  */
 
-import { spawn, type ChildProcess, type StdioOptions } from "node:child_process";
-import { existsSync, writeFileSync, openSync } from "node:fs";
-import { join } from "node:path";
-import { createServer } from "node:net";
-import { PROXY_SCRIPT, PID_FILE, INSTALL_DIR } from "./paths";
-import { checkHealth } from "./health";
-
-export interface StartProxyResult {
-  pid: number | undefined;
-  started: boolean;
-}
+import {
+	spawn,
+	type ChildProcess,
+	type StdioOptions,
+} from 'node:child_process';
+import { existsSync, openSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { createServer } from 'node:net';
+import { PROXY_SCRIPT, INSTALL_DIR } from './paths';
+import { checkHealth } from './health';
+import { resolveBunPath } from './bun';
 
 /**
  * Find an available TCP port by binding to port 0.
  */
 function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = createServer();
-    srv.listen(0, () => {
-      const addr = srv.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
-      srv.close(() => resolve(port));
-    });
-    srv.on("error", reject);
-  });
+	return new Promise((resolve, reject) => {
+		const srv = createServer();
+		srv.listen(0, () => {
+			const addr = srv.address();
+			const port = typeof addr === 'object' && addr ? addr.port : 0;
+			srv.close(() => resolve(port));
+		});
+		srv.on('error', reject);
+	});
 }
 
 /**
  * Find two available TCP ports for proxy + control.
  */
-export async function findFreePorts(): Promise<{ port: number; controlPort: number }> {
-  const port = await findFreePort();
-  const controlPort = await findFreePort();
-  return { port, controlPort };
+export async function findFreePorts(): Promise<{
+	port: number;
+	controlPort: number;
+}> {
+	const port = await findFreePort();
+	const controlPort = await findFreePort();
+	return { port, controlPort };
+}
+
+/** Options shared by both spawn functions */
+interface ProxySpawnOptions {
+	port: number;
+	controlPort: number;
+	debug?: boolean;
+	sessionId?: string;
+	/** Pre-switch provider (config name or alias, resolved by proxy server) */
+	provider?: string;
+	/** Pre-switch model ID */
+	model?: string;
+}
+
+/** Build CLI args for the proxy server process */
+function buildProxyArgs(options: ProxySpawnOptions): string[] {
+	const args = [
+		'run',
+		PROXY_SCRIPT,
+		'--port',
+		String(options.port),
+		'--control-port',
+		String(options.controlPort),
+	];
+	if (options.provider && options.model) {
+		args.push('--provider', options.provider, '--model', options.model);
+	}
+	return args;
+}
+
+/** Health check: defaults to 200ms intervals, 15 attempts = 3s total */
+export async function waitForHealth(
+	controlPort: number,
+	attempts = 15,
+	delayMs = 200,
+): Promise<{ healthy: boolean; health?: Record<string, unknown> }> {
+	let healthy = false;
+	let health: Record<string, unknown> | undefined;
+	for (let i = 0; i < attempts; i++) {
+		await new Promise((resolve) => setTimeout(resolve, delayMs));
+		try {
+			health = await checkHealth(String(controlPort));
+			if (health?.status === 'ok') {
+				healthy = true;
+				break;
+			}
+		} catch {
+			// Keep waiting
+		}
+	}
+	return { healthy, health };
 }
 
 /**
@@ -48,53 +103,40 @@ export async function findFreePorts(): Promise<{ port: number; controlPort: numb
  *
  * @returns The child process and health info, or null if proxy script missing
  */
-export async function spawnSessionProxy(options: {
-  port: number;
-  controlPort: number;
-  debug?: boolean;
-  sessionId?: string;
-}): Promise<{ child: ChildProcess; healthy: boolean; health?: Record<string, unknown>; logFile?: string } | null> {
-  const { port, controlPort, debug, sessionId } = options;
+export async function spawnSessionProxy(options: ProxySpawnOptions): Promise<{
+	child: ChildProcess;
+	healthy: boolean;
+	health?: Record<string, unknown>;
+	logFile?: string;
+} | null> {
+	const { port, controlPort, debug, sessionId } = options;
 
-  if (!existsSync(PROXY_SCRIPT)) {
-    return null;
-  }
+	if (!existsSync(PROXY_SCRIPT)) {
+		return null;
+	}
 
-  // Debug mode: write proxy stderr to a log file
-  let stdio: StdioOptions = ["ignore", "ignore", "ignore"];
-  let logFile: string | undefined;
+	let stdio: StdioOptions = ['ignore', 'ignore', 'ignore'];
+	let logFile: string | undefined;
 
-  if (debug) {
-    const logName = sessionId ? `proxy-${sessionId}.log` : `proxy-${Date.now()}.log`;
-    logFile = join(INSTALL_DIR, logName);
-    const fd = openSync(logFile, "w");
-    stdio = ["ignore", fd, fd]; // stdout + stderr → log file
-  }
+	if (debug) {
+		const logName = sessionId
+			? `proxy-${sessionId}.log`
+			: `proxy-${Date.now()}.log`;
+		const logsDir = join(INSTALL_DIR, 'logs');
+		mkdirSync(logsDir, { recursive: true });
+		logFile = join(logsDir, logName);
+		const fd = openSync(logFile, 'w');
+		stdio = ['ignore', fd, fd];
+	}
 
-  // Spawn as attached child process — dies with parent
-  const child = spawn("bun", ["run", PROXY_SCRIPT, "--port", String(port), "--control-port", String(controlPort)], {
-    stdio,
-    env: { ...process.env },
-    windowsHide: true,
-  });
+	const child = spawn(resolveBunPath(), buildProxyArgs(options), {
+		stdio,
+		env: { ...process.env },
+		windowsHide: true,
+	});
 
-  // Wait for proxy to become healthy (up to 3s)
-  let healthy = false;
-  let health: Record<string, unknown> | undefined;
-  for (let i = 0; i < 6; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    try {
-      health = await checkHealth(String(controlPort));
-      if (health?.status === "ok") {
-        healthy = true;
-        break;
-      }
-    } catch {
-      // Keep waiting
-    }
-  }
-
-  return { child, healthy, health, logFile };
+	const { healthy, health } = await waitForHealth(controlPort);
+	return { child, healthy, health, logFile };
 }
 
 /**
@@ -103,109 +145,43 @@ export async function spawnSessionProxy(options: {
  *
  * @returns PID, health status, and optional log file path, or null if proxy script missing
  */
-export async function spawnDetachedProxy(options: {
-  port: number;
-  controlPort: number;
-  debug?: boolean;
-  sessionId: string;
-}): Promise<{ pid: number; healthy: boolean; logFile?: string } | null> {
-  const { port, controlPort, debug, sessionId } = options;
+export async function spawnDetachedProxy(
+	options: ProxySpawnOptions & { sessionId: string },
+): Promise<{ pid: number; healthy: boolean; logFile?: string } | null> {
+	const { controlPort, debug, sessionId } = options;
 
-  if (!existsSync(PROXY_SCRIPT)) {
-    return null;
-  }
+	if (!existsSync(PROXY_SCRIPT)) {
+		return null;
+	}
 
-  let stdio: StdioOptions = ["ignore", "ignore", "ignore"];
-  let logFile: string | undefined;
+	let stdio: StdioOptions = ['ignore', 'ignore', 'ignore'];
+	let logFile: string | undefined;
 
-  if (debug) {
-    logFile = join(INSTALL_DIR, `proxy-${sessionId}.log`);
-    const fd = openSync(logFile, "w");
-    stdio = ["ignore", fd, fd];
-  }
+	if (debug) {
+		const logsDir = join(INSTALL_DIR, 'logs');
+		mkdirSync(logsDir, { recursive: true });
+		logFile = join(logsDir, `proxy-${sessionId}.log`);
+		const fd = openSync(logFile, 'w');
+		stdio = ['ignore', fd, fd];
+	}
 
-  const child = spawn("bun", ["run", PROXY_SCRIPT, "--port", String(port), "--control-port", String(controlPort)], {
-    detached: true,
-    stdio,
-    env: { ...process.env },
-    windowsHide: true,
-  });
-  child.unref();
+	// On Windows, detached: true creates a new process group which may flash
+	// a console window. Use windowsHide: true WITHOUT detached to keep it hidden.
+	// The proxy still outlives the parent because stdio is disconnected + unref'd.
+	const isWindows = process.platform === 'win32';
+	const child = spawn(resolveBunPath(), buildProxyArgs(options), {
+		detached: !isWindows,
+		stdio,
+		env: { ...process.env },
+		windowsHide: true,
+	});
+	child.unref();
 
-  const pid = child.pid;
-  if (!pid) {
-    return null;
-  }
+	const pid = child.pid;
+	if (!pid) {
+		return null;
+	}
 
-  // Wait for proxy to become healthy (up to 3s)
-  let healthy = false;
-  for (let i = 0; i < 6; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    try {
-      const health = await checkHealth(String(controlPort));
-      if (health?.status === "ok") {
-        healthy = true;
-        break;
-      }
-    } catch {
-      // Keep waiting
-    }
-  }
-
-  return { pid, healthy, logFile };
-}
-
-/**
- * Ensure proxy is running as a shared daemon. Used by `oh-my-claude proxy start`.
- *
- * @returns Whether the proxy is running and the PID (if newly started)
- */
-export async function ensureProxyRunning(options: {
-  port: string;
-  controlPort: string;
-}): Promise<{ alreadyRunning: boolean; started: boolean; pid?: number }> {
-  const { port, controlPort } = options;
-
-  // Check if already running
-  try {
-    const parsed = await checkHealth(controlPort);
-    if (parsed.status === "ok") {
-      return { alreadyRunning: true, started: true };
-    }
-  } catch {
-    // Not running
-  }
-
-  // Check proxy script exists
-  if (!existsSync(PROXY_SCRIPT)) {
-    return { alreadyRunning: false, started: false };
-  }
-
-  // Spawn daemon
-  const child = spawn("bun", ["run", PROXY_SCRIPT, "--port", port, "--control-port", controlPort], {
-    detached: true,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: { ...process.env },
-    windowsHide: true,
-  });
-  child.unref();
-
-  if (child.pid) {
-    try { writeFileSync(PID_FILE, String(child.pid), "utf-8"); } catch {}
-  }
-
-  // Wait for health (up to 3s)
-  for (let i = 0; i < 6; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    try {
-      const parsed = await checkHealth(controlPort);
-      if (parsed.status === "ok") {
-        return { alreadyRunning: false, started: true, pid: child.pid };
-      }
-    } catch {
-      // Keep waiting
-    }
-  }
-
-  return { alreadyRunning: false, started: false, pid: child.pid };
+	const { healthy } = await waitForHealth(controlPort);
+	return { pid, healthy, logFile };
 }

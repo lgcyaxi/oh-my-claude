@@ -1,0 +1,240 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$comment": "Single source of truth for oh-my-claude providers, models, and agent defaults. Edit this file to add/remove models — no menubar rebuild needed. Installed to ~/.claude/oh-my-claude/models-registry.json",
+	"providers": [
+		{
+			"name": "deepseek",
+			"label": "DeepSeek",
+			"models": [
+				{ "id": "deepseek-reasoner", "label": "DeepSeek Reasoner" },
+				{ "id": "deepseek-chat", "label": "DeepSeek Chat" }
+			]
+		},
+		{
+			"name": "zhipu",
+			"label": "ZhiPu",
+			"models": [{ "id": "glm-5", "label": "ZhiPu GLM-5" }]
+		},
+		{
+			"name": "zai",
+			"label": "Z.AI",
+			"models": [{ "id": "glm-5", "label": "GLM-5 (Z.AI)" }]
+		},
+		{
+			"name": "minimax",
+			"label": "MiniMax",
+			"models": [{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5" }]
+		},
+		{
+			"name": "minimax-cn",
+			"label": "MiniMax CN",
+			"models": [{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5 (CN)" }]
+		},
+		{
+			"name": "kimi",
+			"label": "Kimi",
+			"models": [{ "id": "kimi-for-coding", "label": "Kimi K2.5" }]
+		},
+		{
+			"name": "aliyun",
+			"label": "Aliyun Coding Plan",
+			"models": [
+				{
+					"id": "qwen3.5-plus",
+					"label": "Qwen 3.5 Plus",
+					"note": "supports vision"
+				},
+				{ "id": "qwen3-coder-plus", "label": "Qwen 3 Coder Plus" },
+				{ "id": "qwen3-coder-next", "label": "Qwen 3 Coder Next" },
+				{ "id": "qwen3-max-2026-01-23", "label": "Qwen 3 Max" },
+				{ "id": "glm-4.7", "label": "GLM 4.7" },
+				{
+					"id": "glm-5-ay",
+					"realId": "glm-5",
+					"label": "GLM-5 (Aliyun)"
+				},
+				{
+					"id": "kimi-k2.5",
+					"label": "Kimi K2.5 (Aliyun)",
+					"note": "supports vision"
+				},
+				{
+					"id": "MiniMax-M2.5-ay",
+					"realId": "MiniMax-M2.5",
+					"label": "MiniMax M2.5 (Aliyun)"
+				}
+			]
+		},
+		{
+			"name": "ollama",
+			"label": "Ollama",
+			"models": []
+		},
+		{
+			"name": "openai",
+			"label": "OpenAI",
+			"models": [{ "id": "gpt-5.3-codex", "label": "GPT-5.3 Codex" }]
+		}
+	],
+	"crossProviderAliases": {
+		"$comment": "Maps model IDs to alternative providers that serve the same model. Used by loader.ts to route through a hub provider (e.g. Aliyun) when the primary provider is not configured. Note: aliyun-specific aliases use suffixed IDs (glm-5-ay, MiniMax-M2.5-ay) to avoid collisions in the /model picker.",
+		"kimi-for-coding": [{ "provider": "aliyun", "model": "kimi-k2.5" }]
+	},
+	"agents": {
+		"Sisyphus": {
+			"provider": "claude",
+			"model": "claude-opus-4-6",
+			"description": "Primary orchestrator — plans, delegates, tracks progress"
+		},
+		"claude-reviewer": {
+			"provider": "claude",
+			"model": "claude-sonnet-4-6",
+			"temperature": 0.1,
+			"description": "Code review and QA specialist"
+		},
+		"claude-scout": {
+			"provider": "claude",
+			"model": "claude-haiku-4-5",
+			"temperature": 0.3,
+			"description": "Fast codebase exploration"
+		},
+		"oracle": {
+			"provider": "aliyun",
+			"model": "qwen3.5-plus",
+			"temperature": 0.1,
+			"description": "Deep reasoning, architecture, debugging",
+			"fallback": { "provider": "deepseek", "model": "deepseek-reasoner" }
+		},
+		"analyst": {
+			"provider": "deepseek",
+			"model": "deepseek-chat",
+			"temperature": 0.1,
+			"description": "Quick code analysis and pattern review",
+			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+		},
+		"librarian": {
+			"provider": "zhipu",
+			"model": "glm-5",
+			"temperature": 0.3,
+			"description": "External docs, library research, remote codebases",
+			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+		},
+		"document-writer": {
+			"provider": "minimax-cn",
+			"model": "MiniMax-M2.5",
+			"temperature": 0.5,
+			"description": "Technical documentation, READMEs, API docs",
+			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+		},
+		"navigator": {
+			"provider": "kimi",
+			"model": "kimi-for-coding",
+			"temperature": 0.3,
+			"description": "Visual-to-code, multimodal, document processing",
+			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+		},
+		"hephaestus": {
+			"provider": "kimi",
+			"model": "kimi-for-coding",
+			"temperature": 0.3,
+			"description": "Deep implementation, complex refactoring, code forge",
+			"fallback": { "provider": "deepseek", "model": "deepseek-chat" }
+		},
+		"ui-designer": {
+			"provider": "kimi",
+			"model": "kimi-for-coding",
+			"temperature": 0.3,
+			"description": "Visual design and UI implementation",
+			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+		},
+		"kimi": {
+			"provider": "kimi",
+			"model": "kimi-for-coding",
+			"temperature": 0.3,
+			"description": "Provider agent: general-purpose via Kimi K2.5",
+			"agentType": "provider"
+		},
+		"mm-cn": {
+			"provider": "minimax-cn",
+			"model": "MiniMax-M2.5",
+			"temperature": 0.5,
+			"description": "Provider agent: general-purpose via MiniMax CN",
+			"agentType": "provider"
+		},
+		"deepseek": {
+			"provider": "deepseek",
+			"model": "deepseek-chat",
+			"temperature": 0.3,
+			"description": "Provider agent: general-purpose via DeepSeek Chat",
+			"agentType": "provider"
+		},
+		"deepseek-r": {
+			"provider": "deepseek",
+			"model": "deepseek-reasoner",
+			"temperature": 0.1,
+			"description": "Provider agent: deep reasoning via DeepSeek Reasoner",
+			"agentType": "provider"
+		},
+		"qwen": {
+			"provider": "aliyun",
+			"model": "qwen3.5-plus",
+			"temperature": 0.3,
+			"description": "Provider agent: general-purpose via Qwen 3.5 Plus",
+			"agentType": "provider"
+		},
+		"zhipu": {
+			"provider": "zhipu",
+			"model": "glm-5",
+			"temperature": 0.3,
+			"description": "Provider agent: general-purpose via ZhiPu GLM-5",
+			"agentType": "provider"
+		}
+	},
+	"categories": {
+		"quick-scout": {
+			"provider": "claude",
+			"model": "claude-haiku-4-5",
+			"temperature": 0.3
+		},
+		"review": {
+			"provider": "claude",
+			"model": "claude-sonnet-4-6",
+			"temperature": 0.1
+		},
+		"most-capable": {
+			"provider": "claude",
+			"model": "claude-opus-4-6",
+			"temperature": 0.1
+		},
+		"visual-engineering": {
+			"provider": "kimi",
+			"model": "kimi-for-coding",
+			"temperature": 0.7
+		},
+		"ultrabrain": {
+			"provider": "aliyun",
+			"model": "qwen3.5-plus",
+			"temperature": 0.1
+		},
+		"deep-coding": {
+			"provider": "kimi",
+			"model": "kimi-for-coding",
+			"temperature": 0.3
+		},
+		"quick": {
+			"provider": "deepseek",
+			"model": "deepseek-chat",
+			"temperature": 0.3
+		},
+		"writing": {
+			"provider": "minimax-cn",
+			"model": "MiniMax-M2.5",
+			"temperature": 0.5
+		},
+		"visual-execution": {
+			"provider": "kimi",
+			"model": "kimi-for-coding",
+			"temperature": 0.3
+		}
+	}
+}

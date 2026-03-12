@@ -1,5 +1,5 @@
 use reqwest::Client;
-use crate::types::{HealthResponse, StatusResponse, SwitchRequest, SwitchResponse};
+use crate::types::{HealthResponse, StatusResponse, SwitchRequest, SwitchResponse, ProviderInfo, MemoryModelConfig, SetMemoryModelRequest};
 
 /// HTTP client for communicating with per-session proxy control APIs
 pub struct ProxyClient {
@@ -47,6 +47,33 @@ impl ProxyClient {
         resp.json().await.map_err(|e| e.to_string())
     }
 
+    /// GET /providers on a control port — returns providers configured in *this* proxy's environment
+    pub async fn get_providers(&self, control_port: u16) -> Result<Vec<ProviderInfo>, String> {
+        let url = format!("http://localhost:{}/providers", control_port);
+        let resp = self.client.get(&url).send().await.map_err(|e| e.to_string())?;
+        let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        // Response shape: { providers: [{ name, label?, models: [{ id, label }] }] }
+        let providers = body.get("providers")
+            .and_then(|p| p.as_array())
+            .map(|arr| {
+                arr.iter().filter_map(|p| {
+                    let name = p.get("name")?.as_str()?.to_string();
+                    let models = p.get("models")
+                        .and_then(|m| m.as_array())
+                        .map(|ms| ms.iter().filter_map(|m| {
+                            Some(crate::types::ModelInfo {
+                                id: m.get("id")?.as_str()?.to_string(),
+                                label: m.get("label")?.as_str()?.to_string(),
+                            })
+                        }).collect())
+                        .unwrap_or_default();
+                    Some(ProviderInfo { name, models })
+                }).collect()
+            })
+            .unwrap_or_default();
+        Ok(providers)
+    }
+
     /// POST /revert?session=ID on a control port
     pub async fn revert_model(
         &self,
@@ -55,6 +82,29 @@ impl ProxyClient {
     ) -> Result<SwitchResponse, String> {
         let url = format!("http://localhost:{}/revert?session={}", control_port, session_id);
         let resp = self.client.post(&url).send().await.map_err(|e| e.to_string())?;
+        resp.json().await.map_err(|e| e.to_string())
+    }
+
+    /// GET /internal/memory-config on a control port
+    pub async fn get_memory_config(&self, control_port: u16) -> Result<MemoryModelConfig, String> {
+        let url = format!("http://localhost:{}/internal/memory-config", control_port);
+        let resp = self.client.get(&url).send().await.map_err(|e| e.to_string())?;
+        resp.json().await.map_err(|e| e.to_string())
+    }
+
+    /// POST /internal/memory-config on a control port
+    pub async fn set_memory_config(
+        &self,
+        control_port: u16,
+        provider: Option<&str>,
+        model: Option<&str>,
+    ) -> Result<MemoryModelConfig, String> {
+        let url = format!("http://localhost:{}/internal/memory-config", control_port);
+        let body = SetMemoryModelRequest {
+            provider: provider.map(|s| s.to_string()),
+            model: model.map(|s| s.to_string()),
+        };
+        let resp = self.client.post(&url).json(&body).send().await.map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 }
