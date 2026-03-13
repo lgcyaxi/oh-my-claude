@@ -10,6 +10,8 @@
  *   Reasoner model requires thinking blocks in every assistant message.
  * - Kimi: strips thinking blocks and unsupported content types from
  *   conversation history (needed when switching mid-session via omc-switch).
+ * - OpenRouter: truncates metadata.user_id, strips thinking blocks,
+ *   caps tool definitions (free/small models can't handle 90+ tools).
  */
 
 import {
@@ -18,6 +20,7 @@ import {
 	stripUnsupportedContentTypes,
 } from './types';
 import { sanitizeDeepSeekChat, sanitizeDeepSeekReasoner } from './deepseek';
+import { sanitizeOpenRouter } from './openrouter';
 
 /**
  * Sanitize a request body for the target provider.
@@ -56,27 +59,6 @@ export function sanitizeRequestBody(
 			// (ZhiPu, MiniMax, Aliyun) accept the Anthropic message format.
 			// The anthropic-beta header is stripped in the handler.
 			return;
-	}
-}
-
-/** OpenRouter enforces a 128-char limit on metadata.user_id */
-const OPENROUTER_USER_ID_MAX = 128;
-
-/**
- * Sanitize for OpenRouter's Anthropic-compatible endpoint.
- *
- * OpenRouter validates metadata.user_id ≤ 128 chars, but Claude Code sends
- * a longer identifier. Truncate to stay within the limit.
- */
-function sanitizeOpenRouter(body: Record<string, unknown>): void {
-	const metadata = body.metadata as Record<string, unknown> | undefined;
-	if (metadata && typeof metadata.user_id === 'string') {
-		if (metadata.user_id.length > OPENROUTER_USER_ID_MAX) {
-			metadata.user_id = metadata.user_id.slice(0, OPENROUTER_USER_ID_MAX);
-			console.error(
-				`[sanitize:openrouter] truncated metadata.user_id to ${OPENROUTER_USER_ID_MAX} chars`,
-			);
-		}
 	}
 }
 

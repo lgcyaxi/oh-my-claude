@@ -2,6 +2,20 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.1-beta.4](changelog/v2.2.1-beta.md) - 2026-03-13
+
+### Highlights
+
+- **OpenRouter Sanitization & Conversation Stability** — Multiple fixes to prevent conversation breakage when using OpenRouter's free models:
+  - **Thinking Block Stripping** — Removes `<thinking>` blocks to prevent parsing errors on non-Anthropic models
+  - **Tool Definition Capping** — Limits tools to 64 entries to prevent "request too large" errors (Claude Code + MCP sends 90+ tools)
+  - **Content Type Filtering** — Strips unsupported content types like `tool_reference`
+  - These fixes address issues where switching to hunter-alpha would corrupt conversations even after reverting to Claude
+
+### Bug Fixes
+
+- **Duplicate Provider Prefix in Proxy Logs** — Fixed log lines showing `openrouter/openrouter/hunter-alpha` instead of `openrouter/hunter-alpha` with new `displayModel()` helper
+
 ## [2.2.1-beta.3](changelog/v2.2.1-beta.md) - 2026-03-13
 
 ### Bug Fixes

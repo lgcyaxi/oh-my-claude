@@ -23,6 +23,7 @@ import {
 import { recordSessionProviderRequest } from '../state/session';
 import { handlePassthrough } from './passthrough';
 import { RESPONSES_API_PROVIDERS, trackProviderRequest } from './stats';
+import { displayModel } from './display';
 
 export async function handleSwitched(
 	req: Request,
@@ -69,14 +70,14 @@ export async function handleSwitched(
 			targetUrl = `${baseUrl}/responses`;
 
 			console.error(
-				`[proxy #${reqId}]${sessionTag} → ${provider}/${effectiveModel} (switched/responses-api) /responses`,
+				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, effectiveModel)} (switched/responses-api) /responses`,
 			);
 		} else if (openAIFormat) {
 			forwardBody = convertAnthropicToOpenAI(body, effectiveModel);
 			targetUrl = `${baseUrl}/chat/completions`;
 
 			console.error(
-				`[proxy #${reqId}]${sessionTag} → ${provider}/${effectiveModel} (switched/openai-fmt) /chat/completions`,
+				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, effectiveModel)} (switched/openai-fmt) /chat/completions`,
 			);
 		} else {
 			body.model = effectiveModel;
@@ -89,7 +90,7 @@ export async function handleSwitched(
 			const modelNote =
 				effectiveModel !== model ? ` (user: ${effectiveModel})` : '';
 			console.error(
-				`[proxy #${reqId}]${sessionTag} → ${provider}/${effectiveModel} (switched${modelNote}) /v1/messages`,
+				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, effectiveModel)} (switched${modelNote}) /v1/messages`,
 			);
 		}
 

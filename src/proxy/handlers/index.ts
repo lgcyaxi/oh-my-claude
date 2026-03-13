@@ -29,6 +29,7 @@ import { handleSwitched } from './switched';
 import { handleDirectiveRoute } from './directive';
 import { loadConfig, isProviderConfigured } from '../../shared/config';
 import type { ProxySwitchState } from '../state/types';
+import { displayModel } from './display';
 
 // Re-export all handler functions for consumers
 export { handlePassthrough } from './passthrough';
@@ -122,7 +123,7 @@ export async function handleMessages(
 					'unknown';
 
 				console.error(
-					`[proxy #${reqId}]${sessionTag} Auto-routing: ${requestModel} → ${provider}/${model}`,
+					`[proxy #${reqId}]${sessionTag} Auto-routing: ${requestModel} → ${displayModel(provider, model)}`,
 				);
 
 				return await handleDirectiveRoute(
