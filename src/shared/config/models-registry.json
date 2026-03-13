@@ -66,6 +66,22 @@
 			]
 		},
 		{
+			"name": "openrouter",
+			"label": "OpenRouter",
+			"models": [
+				{
+					"id": "openrouter/hunter-alpha",
+					"label": "Hunter Alpha (free)",
+					"note": "1T params, 1M context, agentic"
+				},
+				{
+					"id": "nvidia/nemotron-3-super-120b-a12b:free",
+					"label": "Nemotron 3 Super (free)",
+					"note": "120B hybrid MoE, 1M context"
+				}
+			]
+		},
+		{
 			"name": "ollama",
 			"label": "Ollama",
 			"models": []

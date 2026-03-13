@@ -70,6 +70,13 @@ const PROVIDER_INFO_ENTRIES: Record<string, ProviderInfo> = {
 		baseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
 		apiKeyEnv: 'ALIYUN_API_KEY',
 	},
+	openrouter: {
+		provider: 'openrouter',
+		defaultModel: 'openrouter/hunter-alpha',
+		name: 'OpenRouter',
+		baseUrl: 'https://openrouter.ai/api/v1',
+		apiKeyEnv: 'OPENROUTER_API_KEY',
+	},
 	ollama: {
 		provider: 'ollama',
 		defaultModel: '',
@@ -106,6 +113,9 @@ const ALIAS_MAP: Record<string, AliasTarget> = {
 	ay: { provider: 'aliyun', model: 'qwen3.5-plus' },
 	ali: { provider: 'aliyun', model: 'qwen3.5-plus' },
 	aliyun: { provider: 'aliyun', model: 'qwen3.5-plus' },
+	// OpenRouter (multi-model gateway, free tier available)
+	or: { provider: 'openrouter', model: 'openrouter/hunter-alpha' },
+	openrouter: { provider: 'openrouter', model: 'openrouter/hunter-alpha' },
 	// Ollama (model must be specified separately)
 	ol: { provider: 'ollama', model: '' },
 	ollama: { provider: 'ollama', model: '' },

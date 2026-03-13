@@ -4,11 +4,11 @@
 
 Multi-provider MCP server for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with specialized agent workflows.
 
-Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun, Ollama) via Anthropic-compatible APIs while leveraging Claude Code's native capabilities.
+Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun, Ollama, OpenRouter) via Anthropic-compatible APIs while leveraging Claude Code's native capabilities.
 
 ## Features
 
-- **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun
+- **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun, OpenRouter
 - **OAuth Authentication** - One-command login for OpenAI Codex, MiniMax, Kimi, and Aliyun — no API keys needed
 - **Concurrent Background Tasks** - Run multiple agents in parallel with configurable limits
 - **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Hephaestus, Librarian, etc.)
@@ -69,6 +69,9 @@ export KIMI_API_KEY=your-kimi-api-key
 
 # Aliyun Coding Plan (Qwen models)
 export ALIYUN_API_KEY=your-aliyun-api-key
+
+# OpenRouter (free models: hunter-alpha, nemotron-3-super)
+export OPENROUTER_API_KEY=your-openrouter-api-key
 
 # Ollama (local, no API key needed — auto-discovered)
 # export OLLAMA_HOST=http://localhost:11434  # default, only set if non-standard
@@ -580,6 +583,7 @@ For Codex specifically, prefer coworker-style delegation: assign the goal, scope
 | `mm-cn` / `minimax-cn` | MiniMax (CN) | api.minimaxi.com/anthropic |
 | `km` / `kimi` | Kimi | api.kimi.com/coding |
 | `ali` / `aliyun` | Aliyun | coding.dashscope.aliyuncs.com/apps/anthropic |
+| `or` / `openrouter` | OpenRouter | openrouter.ai/api/v1 |
 | `ol` / `ollama` | Ollama (local) | localhost:11434 |
 
 > **Windows**: Proxy CLI is fully cross-platform. Health checks use Node's `http` module (no `curl` dependency).
@@ -606,6 +610,7 @@ For Codex specifically, prefer coworker-style delegation: assign the goal, scope
 | `qc` | aliyun | qwen3-coder-plus |
 | `qn` | aliyun | qwen3-coder-next |
 | `g4` | aliyun | glm-4.7 |
+| `or` | openrouter | openrouter/hunter-alpha |
 | `ol` | ollama | *(auto-discovered)* |
 
 **Via CLI** (session ID supports prefix matching):

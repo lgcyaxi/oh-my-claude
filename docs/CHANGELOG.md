@@ -2,6 +2,14 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.1-beta.1](changelog/v2.2.1-beta.md) - 2026-03-12
+
+### Highlights
+
+- **OpenRouter Provider** — Added OpenRouter as a new provider with two free models:
+  - `openrouter/hunter-alpha` — Hunter Alpha (free, 1T params, 1M context, agentic)
+  - `nvidia/nemotron-3-super-120b-a12b:free` — Nemotron 3 Super (free, 120B hybrid MoE, 1M context)
+
 ## [2.2.0](changelog/v2.2.0.md) - 2026-03-12
 
 ### Highlights
