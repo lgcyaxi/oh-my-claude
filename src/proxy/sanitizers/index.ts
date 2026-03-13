@@ -47,11 +47,36 @@ export function sanitizeRequestBody(
 			sanitizeAnthropicCompatible(body, 'kimi');
 			return;
 
+		case 'openrouter':
+			sanitizeOpenRouter(body);
+			return;
+
 		default:
 			// No body sanitization needed — most Anthropic-compatible providers
 			// (ZhiPu, MiniMax, Aliyun) accept the Anthropic message format.
 			// The anthropic-beta header is stripped in the handler.
 			return;
+	}
+}
+
+/** OpenRouter enforces a 128-char limit on metadata.user_id */
+const OPENROUTER_USER_ID_MAX = 128;
+
+/**
+ * Sanitize for OpenRouter's Anthropic-compatible endpoint.
+ *
+ * OpenRouter validates metadata.user_id ≤ 128 chars, but Claude Code sends
+ * a longer identifier. Truncate to stay within the limit.
+ */
+function sanitizeOpenRouter(body: Record<string, unknown>): void {
+	const metadata = body.metadata as Record<string, unknown> | undefined;
+	if (metadata && typeof metadata.user_id === 'string') {
+		if (metadata.user_id.length > OPENROUTER_USER_ID_MAX) {
+			metadata.user_id = metadata.user_id.slice(0, OPENROUTER_USER_ID_MAX);
+			console.error(
+				`[sanitize:openrouter] truncated metadata.user_id to ${OPENROUTER_USER_ID_MAX} chars`,
+			);
+		}
 	}
 }
 

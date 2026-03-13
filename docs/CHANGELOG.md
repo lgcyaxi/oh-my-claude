@@ -2,6 +2,12 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.1-beta.3](changelog/v2.2.1-beta.md) - 2026-03-13
+
+### Bug Fixes
+
+- **OpenRouter 400 Error on metadata.user_id** — Truncated `metadata.user_id` to 128 chars to comply with OpenRouter's limit, fixing `400 "Too big: expected string to have <=128 characters"` errors
+
 ## [2.2.1-beta.2](changelog/v2.2.1-beta.md) - 2026-03-13
 
 ### Highlights
