@@ -583,7 +583,7 @@ For Codex specifically, prefer coworker-style delegation: assign the goal, scope
 | `mm-cn` / `minimax-cn` | MiniMax (CN) | api.minimaxi.com/anthropic |
 | `km` / `kimi` | Kimi | api.kimi.com/coding |
 | `ali` / `aliyun` | Aliyun | coding.dashscope.aliyuncs.com/apps/anthropic |
-| `or` / `openrouter` | OpenRouter | openrouter.ai/api/v1 |
+| `or` / `openrouter` | OpenRouter | openrouter.ai/api |
 | `ol` / `ollama` | Ollama (local) | localhost:11434 |
 
 > **Windows**: Proxy CLI is fully cross-platform. Health checks use Node's `http` module (no `curl` dependency).

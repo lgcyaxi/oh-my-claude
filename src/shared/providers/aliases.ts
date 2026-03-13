@@ -74,7 +74,7 @@ const PROVIDER_INFO_ENTRIES: Record<string, ProviderInfo> = {
 		provider: 'openrouter',
 		defaultModel: 'openrouter/hunter-alpha',
 		name: 'OpenRouter',
-		baseUrl: 'https://openrouter.ai/api/v1',
+		baseUrl: 'https://openrouter.ai/api',
 		apiKeyEnv: 'OPENROUTER_API_KEY',
 	},
 	ollama: {

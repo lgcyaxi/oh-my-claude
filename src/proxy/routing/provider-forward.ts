@@ -32,7 +32,11 @@ export async function forwardToProvider(
 			headers: new Headers(req.headers),
 		});
 		cleanReq.headers.delete('anthropic-beta');
-		return forwardToUpstream(cleanReq, targetUrl, apiKey, body);
+
+		// OpenRouter's Anthropic-compatible endpoint requires Bearer auth
+		// (x-api-key forces "anthropic" provider, which excludes free models)
+		const useBearerAuth = provider === 'openrouter';
+		return forwardToUpstream(cleanReq, targetUrl, apiKey, body, false, undefined, useBearerAuth);
 	}
 
 	// OpenAI-format: use Bearer token auth

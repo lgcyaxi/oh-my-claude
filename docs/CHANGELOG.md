@@ -2,6 +2,15 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.1-beta.2](changelog/v2.2.1-beta.md) - 2026-03-13
+
+### Highlights
+
+- **OpenRouter Native Anthropic API** — Switched OpenRouter from OpenAI-compatible to Anthropic-compatible format:
+  - Uses Anthropic Messages API (`/api/messages`) with thinking blocks, SSE streaming, proper stop_reason
+  - Bearer token auth (`Authorization: Bearer`) enables routing to all providers including "stealth" (free models like hunter-alpha)
+  - Previous `x-api-key` header forced routing to only "anthropic" provider, excluding free models
+
 ## [2.2.1-beta.1](changelog/v2.2.1-beta.md) - 2026-03-12
 
 ### Highlights
