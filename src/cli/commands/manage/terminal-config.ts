@@ -171,6 +171,12 @@ local config = wezterm.config_builder()
 -- ─── Default Shell (Windows only) ───────────────────────────────────
 -- Priority: zsh (if installed in Git Bash) > Git Bash > PowerShell.
 if wezterm.target_triple:find('windows') then
+  local function file_exists(path)
+    local f = io.open(path, 'r')
+    if f then f:close(); return true end
+    return false
+  end
+
   local function find_git_bash()
     -- Check common install locations
     local candidates = {
@@ -180,23 +186,35 @@ if wezterm.target_triple:find('windows') then
       (os.getenv('ProgramFiles') or '') .. '/Git/bin/bash.exe',
       'D:/Program Files/Git/bin/bash.exe',
       'D:/Git/bin/bash.exe',
+      'D:/Applications/Git/bin/bash.exe',
     }
     for _, path in ipairs(candidates) do
-      local f = io.open(path, 'r')
-      if f then f:close(); return path end
+      if file_exists(path) then return path end
     end
-    -- Try 'where git' to find git.exe, then derive bash.exe path
+    -- Try 'where git' to find git.exe, then derive bash.exe path.
+    -- Read ALL lines (not just first) since git.exe may be in mingw64/bin/ or cmd/.
     local h = io.popen('where git 2>nul')
     if h then
-      local git_path = h:read('*l')
+      local output = h:read('*a')
       h:close()
-      if git_path then
-        -- git.exe is typically at .../Git/cmd/git.exe → bash is at .../Git/bin/bash.exe
-        local git_dir = git_path:match('(.+)[/\\\\\\\\]cmd[/\\\\\\\\]git%.exe$')
+      for git_path in (output or ''):gmatch('[^\\r\\n]+') do
+        -- Strategy 1: .../Git/cmd/git.exe → .../Git/bin/bash.exe
+        local git_dir = git_path:match('(.+)[/\\\\]cmd[/\\\\]git%.exe$')
         if git_dir then
           local bash = git_dir .. '/bin/bash.exe'
-          local f = io.open(bash, 'r')
-          if f then f:close(); return bash end
+          if file_exists(bash) then return bash end
+        end
+        -- Strategy 2: .../Git/mingw64/bin/git.exe → .../Git/bin/bash.exe
+        local git_root = git_path:match('(.+)[/\\\\]mingw64[/\\\\]bin[/\\\\]git%.exe$')
+        if git_root then
+          local bash = git_root .. '/bin/bash.exe'
+          if file_exists(bash) then return bash end
+        end
+        -- Strategy 3: .../Git/usr/bin/git.exe → .../Git/bin/bash.exe (MSYS2 layout)
+        local usr_root = git_path:match('(.+)[/\\\\]usr[/\\\\]bin[/\\\\]git%.exe$')
+        if usr_root then
+          local bash = usr_root .. '/bin/bash.exe'
+          if file_exists(bash) then return bash end
         end
       end
     end
@@ -217,8 +235,7 @@ if wezterm.target_triple:find('windows') then
     }
     local zsh = nil
     for _, zpath in ipairs(zsh_candidates) do
-      local zf = io.open(zpath, 'r')
-      if zf then zf:close(); zsh = zpath; break end
+      if file_exists(zpath) then zsh = zpath; break end
     end
     if zsh then
       -- Launch zsh via bash login shell, same as Windows Terminal setup:
@@ -228,7 +245,9 @@ if wezterm.target_triple:find('windows') then
       config.default_prog = { bash, '--login', '-i' }
     end
   else
-    config.default_prog = { 'pwsh.exe' }
+    -- Fallback: prefer pwsh.exe (PowerShell Core) > powershell.exe (Windows PowerShell)
+    local shell = file_exists('C:/Program Files/PowerShell/7/pwsh.exe') and 'pwsh.exe' or 'powershell.exe'
+    config.default_prog = { shell }
   end
 end
 

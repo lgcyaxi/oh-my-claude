@@ -10,6 +10,11 @@ All notable changes to oh-my-claude are documented here.
   - `openrouter/hunter-alpha` — Hunter Alpha (free, 1T params, 1M context, agentic)
   - `nvidia/nemotron-3-super-120b-a12b:free` — Nemotron 3 Super (free, 120B hybrid MoE, 1M context)
 
+### Bug Fixes
+
+- **OpenRouter Duplicate Prefix in Menubar Tray** — Fixed session header showing `openrouter/openrouter/hunter-alpha` instead of `openrouter/hunter-alpha`
+- **WezTerm New Tab Crash (find_git_bash Fix)** — Fixed broken `find_git_bash()` Lua function on Windows: now reads all `where git` output lines, adds 3 derivation strategies (cmd/, mingw64/, usr/), supports non-standard Git paths like `D:\Applications\Git\`, and falls back to `powershell.exe` instead of `pwsh.exe`
+
 ## [2.2.0](changelog/v2.2.0.md) - 2026-03-12
 
 ### Highlights
