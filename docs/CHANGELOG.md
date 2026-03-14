@@ -16,6 +16,8 @@ All notable changes to oh-my-claude are documented here.
 
 - **Duplicate Provider Prefix in Proxy Logs** — Fixed log lines showing `openrouter/openrouter/hunter-alpha` instead of `openrouter/hunter-alpha` with new `displayModel()` helper
 
+- **Statusline Context Window Detection for 1M Models** — Fixed statusline showing `200k` instead of `1M` for Opus 4.6 with extended context by detecting `[1m]` suffix in model IDs
+
 ## [2.2.1-beta.3](changelog/v2.2.1-beta.md) - 2026-03-13
 
 ### Bug Fixes
