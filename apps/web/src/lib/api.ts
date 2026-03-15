@@ -1,0 +1,148 @@
+/**
+ * HTTP client for oh-my-claude control API
+ *
+ * In dev mode, Vite proxies /health, /status, etc. to localhost:18911.
+ * In production, the SPA is served from the same origin as the control API.
+ */
+
+const TIMEOUT = 5000;
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const baseUrl = import.meta.env.DEV ? '' : '';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT);
+
+  try {
+    const res = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        ...init?.headers,
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+    }
+
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* ── Health & Status ── */
+
+export interface HealthResponse {
+  status: string;
+  uptime: number;
+  uptimeHuman: string;
+  requestCount: number;
+  activeSessions: number;
+}
+
+/** /status returns the switch state directly (not nested in .state) */
+export interface StatusResponse {
+  switched: boolean;
+  provider?: string;
+  model?: string;
+  switchedAt?: number;
+  sessionId: string | null;
+}
+
+export interface Session {
+  sessionId: string;
+  switched: boolean;
+  provider?: string;
+  model?: string;
+}
+
+export const getHealth = () => request<HealthResponse>('/health');
+export const getStatus = (sessionId?: string) =>
+  request<StatusResponse>(`/status${sessionId ? `?session=${sessionId}` : ''}`);
+export const getSessions = () => request<{ sessions: Session[]; count: number }>('/sessions');
+export const getUsage = () => request<{ providers: Record<string, number> }>('/usage');
+
+/* ── Providers & Models ── */
+
+export interface ModelEntry {
+  id: string;
+  label: string;
+  note?: string;
+  realId?: string;
+}
+
+export interface ProviderInfo {
+  name: string;
+  label: string;
+  models: ModelEntry[];
+}
+
+export const getProviders = () =>
+  request<{ providers: ProviderInfo[] }>('/providers');
+export const getModelsForProvider = (provider: string) =>
+  request<{ provider: string; models: ModelEntry[] }>(`/models?provider=${provider}`);
+
+/* ── Switch ── */
+
+export const switchModel = (provider: string, model: string, sessionId?: string) =>
+  request<{ ok: boolean }>(`/switch${sessionId ? `?session=${sessionId}` : ''}`, {
+    method: 'POST',
+    body: JSON.stringify({ provider, model }),
+  });
+
+export const revertSwitch = (sessionId?: string) =>
+  request<{ ok: boolean }>(`/revert${sessionId ? `?session=${sessionId}` : ''}`, {
+    method: 'POST',
+  });
+
+/* ── Registry CRUD ── */
+
+export interface RegistryProvider {
+  name: string;
+  label: string;
+  models: ModelEntry[];
+}
+
+export interface RegistryData {
+  providers: RegistryProvider[];
+  agents?: Record<string, unknown>;
+  categories?: Record<string, unknown>;
+}
+
+export const getRegistry = () => request<RegistryData>('/api/registry');
+
+export const addModel = (providerName: string, model: ModelEntry) =>
+  request<{ ok: boolean }>(`/api/registry/providers/${providerName}/models`, {
+    method: 'POST',
+    body: JSON.stringify(model),
+  });
+
+export const updateModels = (providerName: string, models: ModelEntry[]) =>
+  request<{ ok: boolean }>(`/api/registry/providers/${providerName}/models`, {
+    method: 'PUT',
+    body: JSON.stringify({ models }),
+  });
+
+export const deleteModel = (providerName: string, modelId: string) =>
+  request<{ ok: boolean }>(
+    `/api/registry/providers/${providerName}/models/${encodeURIComponent(modelId)}`,
+    { method: 'DELETE' },
+  );
+
+/* ── Config ── */
+
+export interface ProviderConfig {
+  name: string;
+  label?: string;
+  type: string;
+  baseUrl?: string;
+  envVar?: string;
+  isConfigured: boolean;
+  modelCount: number;
+}
+
+export const getConfigProviders = () =>
+  request<{ providers: ProviderConfig[] }>('/api/config/providers');

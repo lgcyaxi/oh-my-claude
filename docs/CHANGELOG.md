@@ -2,6 +2,15 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.1-beta.5](changelog/v2.2.1-beta.md) - 2026-03-15
+
+### Highlights
+
+- **Web Dashboard** — Manage your proxy, models, and providers from a browser at `localhost:18911/web/`:
+  - **Models Registry Editor** — Add/edit/delete models without manually editing JSON (e.g., add GLM-5-Turbo in seconds)
+  - **Live Model Switch** — One-click provider/model switching with real-time status
+  - **Provider Dashboard** — See all configured providers, their status, and model counts at a glance
+
 ## [2.2.1-beta.4](changelog/v2.2.1-beta.md) - 2026-03-13
 
 ### Highlights

@@ -21,7 +21,10 @@ import {
 import { handleProviders, handleModels } from './providers';
 import { handleResponse, handleStream } from './response';
 import { handleInternalComplete, handleMemoryConfig } from './internal';
+import { handleRegistryRequest } from './registry';
+import { handleConfigRequest } from './config';
 import { jsonResponse } from './helpers';
+import { serveWebAsset } from './web-static';
 
 // Re-export registerShutdown for server.ts
 export { registerShutdown } from './switch';
@@ -33,12 +36,34 @@ export async function handleControl(req: Request): Promise<Response> {
 
 	const corsHeaders = {
 		'access-control-allow-origin': '*',
-		'access-control-allow-methods': 'GET, POST, OPTIONS',
+		'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
 		'access-control-allow-headers': 'content-type',
 	};
 
 	if (req.method === 'OPTIONS') {
 		return new Response(null, { status: 204, headers: corsHeaders });
+	}
+
+	// Serve web dashboard SPA
+	if (path === '/web' || path === '/web/') {
+		return serveWebAsset('index.html');
+	}
+	if (path.startsWith('/web/')) {
+		return serveWebAsset(path.slice(5));
+	}
+	// Root redirect to dashboard
+	if (path === '/') {
+		return Response.redirect(new URL('/web/', req.url).toString(), 302);
+	}
+
+	// Registry CRUD API
+	if (path.startsWith('/api/registry')) {
+		return handleRegistryRequest(req, path, corsHeaders);
+	}
+
+	// Config API
+	if (path.startsWith('/api/config')) {
+		return handleConfigRequest(req, path, corsHeaders);
 	}
 
 	const sessionTag = sessionId
