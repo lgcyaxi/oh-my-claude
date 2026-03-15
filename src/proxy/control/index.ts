@@ -23,6 +23,7 @@ import { handleResponse, handleStream } from './response';
 import { handleInternalComplete, handleMemoryConfig } from './internal';
 import { handleRegistryRequest } from './registry';
 import { handleConfigRequest } from './config';
+import { handleInstancesRequest } from './instances';
 import { jsonResponse } from './helpers';
 import { serveWebAsset } from './web-static';
 
@@ -59,6 +60,11 @@ export async function handleControl(req: Request): Promise<Response> {
 	// Registry CRUD API
 	if (path.startsWith('/api/registry')) {
 		return handleRegistryRequest(req, path, corsHeaders);
+	}
+
+	// Instances aggregation API
+	if (path === '/api/instances') {
+		return handleInstancesRequest(req, corsHeaders);
 	}
 
 	// Config API

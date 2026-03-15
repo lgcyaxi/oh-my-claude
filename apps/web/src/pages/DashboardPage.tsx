@@ -4,18 +4,20 @@ import StatusBadge from '../components/StatusBadge';
 import {
   getHealth,
   getStatus,
-  getSessions,
   getProviders,
+  getInstances,
   type HealthResponse,
   type StatusResponse,
-  type Session,
   type ProviderInfo,
+  type ProxyInstance,
+  type InstancesSummary,
 } from '../lib/api';
 
 export default function DashboardPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [instances, setInstances] = useState<ProxyInstance[]>([]);
+  const [summary, setSummary] = useState<InstancesSummary | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,17 +26,18 @@ export default function DashboardPage() {
 
     async function refresh() {
       try {
-        const [h, st, se, pr] = await Promise.all([
+        const [h, st, pr, inst] = await Promise.all([
           getHealth(),
           getStatus(),
-          getSessions(),
           getProviders(),
+          getInstances().catch(() => ({ instances: [], summary: { registered: 0, alive: 0, totalSessions: 0, totalRequests: 0 } })),
         ]);
         if (!active) return;
         setHealth(h);
         setStatus(st);
-        setSessions(se.sessions ?? []);
         setProviders(pr.providers ?? []);
+        setInstances(inst.instances ?? []);
+        setSummary(inst.summary ?? null);
         setError(null);
       } catch (err) {
         if (!active) return;
@@ -62,11 +65,11 @@ export default function DashboardPage() {
 
       {/* Status Cards */}
       <div className="grid grid-cols-3 gap-4">
-        {/* Proxy Health */}
+        {/* Dashboard Proxy */}
         <div className="bg-bg-secondary border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-text-tertiary uppercase tracking-wider">
-              Proxy
+              Dashboard
             </span>
             <StatusBadge
               variant={health ? 'success' : 'neutral'}
@@ -78,11 +81,11 @@ export default function DashboardPage() {
             {health?.uptimeHuman ?? '--'}
           </div>
           <div className="text-xs text-text-tertiary mt-1">
-            {health ? `${health.requestCount} requests` : 'No data'}
+            Control server on :18911
           </div>
         </div>
 
-        {/* Current Mode */}
+        {/* Current Mode (this proxy's status) */}
         <div className="bg-bg-secondary border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-text-tertiary uppercase tracking-wider">
@@ -106,19 +109,73 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* Active Sessions */}
+        {/* Active Sessions (from per-session proxies) */}
         <div className="bg-bg-secondary border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-text-tertiary uppercase tracking-wider">
-              Sessions
+              Active Sessions
             </span>
           </div>
           <div className="text-2xl font-semibold font-mono">
-            {sessions.length}
+            {summary?.alive ?? 0}
           </div>
-          <div className="text-xs text-text-tertiary mt-1">active proxy sessions</div>
+          <div className="text-xs text-text-tertiary mt-1">
+            {(summary?.totalRequests ?? 0) > 0
+              ? `${summary!.totalRequests} total requests`
+              : 'cc sessions with proxy'}
+          </div>
         </div>
       </div>
+
+      {/* Active Sessions — each per-session proxy = 1 session */}
+      {instances.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-text-secondary mb-3">
+            Active Sessions
+          </h2>
+          <div className="bg-bg-secondary border border-border rounded-lg divide-y divide-border">
+            {instances.map((inst) => {
+              const session = inst.sessions[0];
+              const isSwitched = session?.switched ?? !!inst.provider;
+              const provider = session?.provider ?? inst.provider;
+              const model = session?.model ?? inst.model;
+
+              return (
+                <div key={inst.controlPort} className="px-4 py-3 flex items-center gap-3">
+                  <StatusBadge
+                    variant={!inst.alive ? 'danger' : isSwitched ? 'warning' : 'success'}
+                    label={!inst.alive ? 'Dead' : isSwitched ? 'Switched' : 'Passthrough'}
+                    pulse={inst.alive}
+                  />
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className="text-sm font-medium truncate">
+                      {isSwitched
+                        ? `${provider}/${model}`
+                        : 'Anthropic (native)'}
+                    </span>
+                    <span className="text-[10px] text-text-tertiary">
+                      {inst.health?.uptimeHuman ?? '?'} uptime
+                      {' · '}{inst.health?.requestCount ?? 0} reqs
+                      {' · '}PID {inst.pid}
+                    </span>
+                  </div>
+                  {session?.sessionId && (
+                    <span className="text-[10px] font-mono text-text-tertiary">
+                      {session.sessionId}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {instances.length === 0 && !error && (
+        <div className="text-sm text-text-tertiary text-center py-6 bg-bg-secondary border border-border rounded-lg">
+          No active cc sessions. Start one with <code className="text-text-secondary">omc cc</code>
+        </div>
+      )}
 
       {/* Providers Grid */}
       <div>
@@ -153,33 +210,6 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
-
-      {/* Active Sessions List */}
-      {sessions.length > 0 && (
-        <div>
-          <h2 className="text-sm font-medium text-text-secondary mb-3">
-            Active Sessions
-          </h2>
-          <div className="bg-bg-secondary border border-border rounded-lg divide-y divide-border">
-            {sessions.map((s) => (
-              <div key={s.sessionId} className="px-4 py-3 flex items-center gap-3">
-                <StatusBadge
-                  variant={s.switched ? 'warning' : 'success'}
-                  label={s.switched ? 'Switched' : 'Passthrough'}
-                />
-                <span className="text-xs font-mono text-text-secondary truncate flex-1">
-                  {s.sessionId}
-                </span>
-                {s.provider && (
-                  <span className="text-xs text-text-tertiary">
-                    {s.provider}/{s.model}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

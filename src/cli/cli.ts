@@ -28,7 +28,7 @@ import { registerManageCommand } from "./commands/manage/manage";
 // system
 import { registerMenubarCommand } from "./commands/system/menubar";
 
-const VERSION = "2.2.1-beta.4";
+const VERSION = "2.2.1-beta.6";
 
 // When invoked as `omc` with no args: show version + hint (brief, not full help).
 // When invoked as `oh-my-claude` with no args: Commander default (show help).

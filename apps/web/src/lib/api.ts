@@ -146,3 +146,41 @@ export interface ProviderConfig {
 
 export const getConfigProviders = () =>
   request<{ providers: ProviderConfig[] }>('/api/config/providers');
+
+/* ── Instances (aggregation) ── */
+
+export interface ProxyInstanceSession {
+  sessionId: string;
+  switched: boolean;
+  provider?: string;
+  model?: string;
+  lastActivity: number;
+}
+
+export interface ProxyInstance {
+  sessionId: string;
+  port: number;
+  controlPort: number;
+  pid: number;
+  startedAt: string;
+  alive: boolean;
+  provider?: string;
+  model?: string;
+  health?: {
+    uptime: number;
+    uptimeHuman: string;
+    requestCount: number;
+    activeSessions: number;
+  };
+  sessions: ProxyInstanceSession[];
+}
+
+export interface InstancesSummary {
+  registered: number;
+  alive: number;
+  totalSessions: number;
+  totalRequests: number;
+}
+
+export const getInstances = () =>
+  request<{ instances: ProxyInstance[]; summary: InstancesSummary }>('/api/instances');

@@ -718,6 +718,7 @@ Access a browser-based dashboard at `http://localhost:18911/web/` when the proxy
 - **Manage models** — Add, edit, or remove models from any provider (no more editing JSON by hand)
 - **Switch models** — One-click provider/model switching with live status updates
 - **Monitor proxy** — See proxy health, uptime, request count, and active sessions
+- **Session aggregation** — Dashboard shows real-time sessions from all running `omc cc` instances with uptime, request count, and provider/model info
 - **View providers** — Check which providers are configured, their API key status, and model counts
 
 **How to access:**

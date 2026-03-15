@@ -2,7 +2,7 @@
 
 All notable changes to oh-my-claude are documented here.
 
-## [2.2.1-beta.5](changelog/v2.2.1-beta.md) - 2026-03-15
+## [2.2.1-beta.6](changelog/v2.2.1-beta.md) - 2026-03-15
 
 ### Highlights
 
@@ -10,6 +10,7 @@ All notable changes to oh-my-claude are documented here.
   - **Models Registry Editor** — Add/edit/delete models without manually editing JSON (e.g., add GLM-5-Turbo in seconds)
   - **Live Model Switch** — One-click provider/model switching with real-time status
   - **Provider Dashboard** — See all configured providers, their status, and model counts at a glance
+  - **Session Aggregation** — Dashboard aggregates real-time sessions from all running `omc cc` instances, showing uptime, request count, and provider/model info
 
 ## [2.2.1-beta.4](changelog/v2.2.1-beta.md) - 2026-03-13
 
