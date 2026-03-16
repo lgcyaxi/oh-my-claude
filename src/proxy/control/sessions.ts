@@ -67,9 +67,59 @@ interface ContentBlock {
 
 /* ── Helpers ── */
 
-/** Decode folder name back to project path */
-function folderToPath(folder: string): string {
-	return folder.replace(/--/g, '/').replace(/^([A-Z])-/, '$1:/');
+/** Check if a path looks like a valid absolute path (not a mangled folder name) */
+function looksLikeValidPath(p: string): boolean {
+	// Windows: D:\... or C:\...
+	if (/^[A-Z]:\\/.test(p)) return true;
+	// Unix: /home/... or /Users/...
+	if (p.startsWith('/')) return true;
+	return false;
+}
+
+/**
+ * Extract real project path from the first JSONL file's `cwd` field.
+ * Folder names like "D--Github-blog" are ambiguous (can't distinguish
+ * path separators from literal hyphens), so we read the actual cwd.
+ */
+async function resolveProjectPath(folder: string): Promise<string> {
+	const dirPath = join(PROJECTS_DIR, folder);
+	try {
+		const files = await readdir(dirPath);
+		const jsonlFiles = files.filter((f) => f.endsWith('.jsonl'));
+		if (jsonlFiles.length === 0) return folder;
+
+		// Try up to 5 JSONL files to find a cwd (some may be empty stubs)
+		for (const jsonl of jsonlFiles.slice(0, 5)) {
+			const rl = createInterface({
+				input: createReadStream(join(dirPath, jsonl), {
+					encoding: 'utf-8',
+				}),
+				crlfDelay: Infinity,
+			});
+
+			let linesRead = 0;
+			for await (const line of rl) {
+				if (!line.trim()) continue;
+				linesRead++;
+				try {
+					const entry = JSON.parse(line) as ConversationEntry;
+					if (entry.cwd) {
+						rl.close();
+						return entry.cwd;
+					}
+				} catch {
+					// skip
+				}
+				if (linesRead >= 10) {
+					rl.close();
+					break;
+				}
+			}
+		}
+	} catch {
+		// fallback
+	}
+	return folder;
 }
 
 /** Read and parse sessions-index.json for a project folder */
@@ -305,12 +355,14 @@ async function handleListProjects(
 			const jsonlFiles = await scanJsonlFiles(entry.name);
 			if (jsonlFiles.length === 0) continue;
 
-			// Get project path from index or decode from folder name
+			// Get project path — prefer JSONL cwd (reliable) over index (may have bad paths)
 			const index = await readSessionIndex(entry.name);
+			const candidatePath =
+				index?.originalPath ?? index?.entries[0]?.projectPath;
 			const projectPath =
-				index?.originalPath ??
-				index?.entries[0]?.projectPath ??
-				folderToPath(entry.name);
+				candidatePath && looksLikeValidPath(candidatePath)
+					? candidatePath
+					: (await resolveProjectPath(entry.name));
 
 			// Use most recent mtime from JSONL files
 			const latestMtime = jsonlFiles.reduce(
@@ -446,10 +498,12 @@ async function handleListSessions(
 			new Date(b.modified).getTime() - new Date(a.modified).getTime(),
 	);
 
+	const candidatePath =
+		index?.originalPath ?? index?.entries[0]?.projectPath;
 	const projectPath =
-		index?.originalPath ??
-		index?.entries[0]?.projectPath ??
-		folderToPath(folder);
+		candidatePath && looksLikeValidPath(candidatePath)
+			? candidatePath
+			: (await resolveProjectPath(folder));
 
 	return jsonResponse(
 		{ folder, projectPath, sessions },
@@ -464,15 +518,16 @@ async function handleGetConversation(
 	corsHeaders: Record<string, string>,
 ): Promise<Response> {
 	const filePath = join(PROJECTS_DIR, folder, `${sessionId}.jsonl`);
-	const entries = await parseConversation(filePath);
 
-	if (entries.length === 0) {
+	if (!existsSync(filePath)) {
 		return jsonResponse(
-			{ error: 'Session not found or empty' },
+			{ error: 'Session not found' },
 			404,
 			corsHeaders,
 		);
 	}
+
+	const entries = await parseConversation(filePath);
 
 	// Get metadata from index if available
 	const index = await readSessionIndex(folder);
@@ -551,7 +606,7 @@ async function handleGetSessionMeta(
 			created: meta.created,
 			modified: meta.modified,
 			gitBranch: meta.gitBranch,
-			projectPath: folderToPath(folder),
+			projectPath: await resolveProjectPath(folder),
 			isSidechain: false,
 		},
 		200,
@@ -622,7 +677,7 @@ async function handleRenameSession(
 				created: meta?.created ?? fileMtime.toISOString(),
 				modified: fileMtime.toISOString(),
 				gitBranch: meta?.gitBranch ?? '',
-				projectPath: index.originalPath ?? folderToPath(folder),
+				projectPath: index.originalPath ?? await resolveProjectPath(folder),
 				isSidechain: false,
 			});
 		}
@@ -643,7 +698,7 @@ async function handleRenameSession(
 					created: meta?.created ?? fileMtime.toISOString(),
 					modified: fileMtime.toISOString(),
 					gitBranch: meta?.gitBranch ?? '',
-					projectPath: folderToPath(folder),
+					projectPath: await resolveProjectPath(folder),
 					isSidechain: false,
 				},
 			],

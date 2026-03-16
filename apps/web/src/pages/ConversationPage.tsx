@@ -100,6 +100,11 @@ export default function ConversationPage() {
 
       {/* Messages */}
       <div className="space-y-3 pb-8">
+        {entries.length === 0 && (
+          <div className="text-sm text-text-tertiary text-center py-12 bg-bg-secondary border border-border rounded-lg">
+            Empty session — no conversation messages found
+          </div>
+        )}
         {entries.map((entry) => (
           <MessageBubble key={entry.uuid} entry={entry} />
         ))}
