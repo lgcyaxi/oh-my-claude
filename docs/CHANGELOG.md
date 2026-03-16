@@ -2,6 +2,15 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.1-beta.7](changelog/v2.2.1-beta.md) - 2026-03-16
+
+### Highlights
+
+- **Session Browser** — Browse and review Claude Code conversation history from the web dashboard at `localhost:18911/web/sessions`:
+  - Project sidebar with session counts, search/filter, conversation viewer with collapsible thinking/tool blocks
+  - Two-layer data: JSONL file scanning + sessions-index.json enrichment for fast listing (~0.2s for 125 sessions)
+- **Standalone Dashboard** — `oh-my-claude proxy dashboard` starts a lightweight control-only server on port 18911 (no proxy port). Auto-starts on first `omc cc`.
+
 ## [2.2.1-beta.6](changelog/v2.2.1-beta.md) - 2026-03-15
 
 ### Highlights

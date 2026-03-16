@@ -24,6 +24,7 @@ import { handleInternalComplete, handleMemoryConfig } from './internal';
 import { handleRegistryRequest } from './registry';
 import { handleConfigRequest } from './config';
 import { handleInstancesRequest } from './instances';
+import { handleSessionsRequest } from './sessions';
 import { jsonResponse } from './helpers';
 import { serveWebAsset } from './web-static';
 
@@ -70,6 +71,11 @@ export async function handleControl(req: Request): Promise<Response> {
 	// Config API
 	if (path.startsWith('/api/config')) {
 		return handleConfigRequest(req, path, corsHeaders);
+	}
+
+	// Sessions API (browse conversation history)
+	if (path.startsWith('/api/sessions')) {
+		return handleSessionsRequest(req, path, corsHeaders);
 	}
 
 	const sessionTag = sessionId
@@ -145,6 +151,7 @@ export async function handleControl(req: Request): Promise<Response> {
 							'/stop',
 							'/internal/complete',
 							'/internal/memory-config',
+						'/api/sessions',
 						],
 						hint: 'Add ?session=ID for session-scoped operations',
 					},

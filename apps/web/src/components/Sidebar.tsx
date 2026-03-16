@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: DashboardIcon },
+  { to: '/sessions', label: 'Sessions', icon: SessionsIcon },
   { to: '/models', label: 'Models', icon: ModelsIcon },
   { to: '/providers', label: 'Providers', icon: ProvidersIcon },
   { to: '/switch', label: 'Switch', icon: SwitchIcon },
@@ -83,6 +84,14 @@ function ProvidersIcon({ active: _ }: { active: boolean }) {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
       <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
       <path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function SessionsIcon({ active: _ }: { active: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
+      <path d="M3 3h10v2H3zM3 7h10v2H3zM3 11h7v2H3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

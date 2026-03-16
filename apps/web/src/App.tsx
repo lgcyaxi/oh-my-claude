@@ -5,6 +5,8 @@ import DashboardPage from './pages/DashboardPage';
 import ModelsPage from './pages/ModelsPage';
 import ProvidersPage from './pages/ProvidersPage';
 import SwitchPage from './pages/SwitchPage';
+import SessionsPage from './pages/SessionsPage';
+import ConversationPage from './pages/ConversationPage';
 
 export default function App() {
   return (
@@ -14,6 +16,8 @@ export default function App() {
         <main className="flex-1 overflow-y-auto p-6">
           <Routes>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/sessions" element={<SessionsPage />} />
+            <Route path="/sessions/:folder/:id" element={<ConversationPage />} />
             <Route path="/models" element={<ModelsPage />} />
             <Route path="/providers" element={<ProvidersPage />} />
             <Route path="/switch" element={<SwitchPage />} />

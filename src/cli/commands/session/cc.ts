@@ -22,7 +22,7 @@ import type { Command } from 'commander';
 import { execSync, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createFormatters } from '../../utils/colors';
-import { findFreePorts } from '../../utils/proxy-lifecycle';
+import { findFreePorts, ensureDashboard } from '../../utils/proxy-lifecycle';
 import {
 	readProxyRegistry,
 	unregisterProxySession,
@@ -294,6 +294,12 @@ Examples:
 		} catch {
 			console.log(fail('Failed to allocate ports for session proxy.'));
 			process.exit(1);
+		}
+
+		// Auto-start dashboard server on port 18911 if not running
+		const dashboardUrl = await ensureDashboard();
+		if (dashboardUrl) {
+			console.log(dimText(`  Dashboard: ${dashboardUrl}`));
 		}
 
 		const debug = !!options.debug || debugMode;

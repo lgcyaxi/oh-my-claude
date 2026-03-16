@@ -184,3 +184,70 @@ export interface InstancesSummary {
 
 export const getInstances = () =>
   request<{ instances: ProxyInstance[]; summary: InstancesSummary }>('/api/instances');
+
+/* ── Claude Code Sessions ── */
+
+export interface ProjectEntry {
+  folder: string;
+  projectPath: string;
+  sessionCount: number;
+  lastModified: string | null;
+}
+
+export interface SessionEntry {
+  sessionId: string;
+  firstPrompt: string;
+  summary: string;
+  messageCount: number;
+  created: string;
+  modified: string;
+  gitBranch: string;
+  isSidechain: boolean;
+}
+
+export interface ContentBlock {
+  type: string;
+  text?: string;
+  thinking?: string;
+  name?: string;
+  input?: unknown;
+  id?: string;
+  content?: string | ContentBlock[];
+  tool_use_id?: string;
+}
+
+export interface ConversationEntry {
+  type: string;
+  uuid: string;
+  timestamp: string;
+  message?: {
+    role: string;
+    content: string | ContentBlock[];
+    model?: string;
+  };
+}
+
+export interface SessionMeta {
+  summary: string;
+  firstPrompt: string;
+  messageCount: number;
+  created: string;
+  modified: string;
+  gitBranch: string;
+}
+
+export const getProjects = () =>
+  request<{ projects: ProjectEntry[] }>('/api/sessions');
+
+export const getProjectSessions = (folder: string) =>
+  request<{ folder: string; projectPath: string; sessions: SessionEntry[] }>(
+    `/api/sessions/${encodeURIComponent(folder)}`,
+  );
+
+export const getConversation = (folder: string, sessionId: string) =>
+  request<{
+    sessionId: string;
+    folder: string;
+    meta: SessionMeta | null;
+    entries: ConversationEntry[];
+  }>(`/api/sessions/${encodeURIComponent(folder)}/${sessionId}`);

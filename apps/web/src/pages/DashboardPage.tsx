@@ -3,11 +3,9 @@ import { Link } from 'react-router-dom';
 import StatusBadge from '../components/StatusBadge';
 import {
   getHealth,
-  getStatus,
   getProviders,
   getInstances,
   type HealthResponse,
-  type StatusResponse,
   type ProviderInfo,
   type ProxyInstance,
   type InstancesSummary,
@@ -15,7 +13,6 @@ import {
 
 export default function DashboardPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [status, setStatus] = useState<StatusResponse | null>(null);
   const [instances, setInstances] = useState<ProxyInstance[]>([]);
   const [summary, setSummary] = useState<InstancesSummary | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -26,15 +23,13 @@ export default function DashboardPage() {
 
     async function refresh() {
       try {
-        const [h, st, pr, inst] = await Promise.all([
+        const [h, pr, inst] = await Promise.all([
           getHealth(),
-          getStatus(),
           getProviders(),
           getInstances().catch(() => ({ instances: [], summary: { registered: 0, alive: 0, totalSessions: 0, totalRequests: 0 } })),
         ]);
         if (!active) return;
         setHealth(h);
-        setStatus(st);
         setProviders(pr.providers ?? []);
         setInstances(inst.instances ?? []);
         setSummary(inst.summary ?? null);
@@ -85,36 +80,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Current Mode (this proxy's status) */}
+        {/* Active Proxies — per-session proxy instances */}
         <div className="bg-bg-secondary border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-text-tertiary uppercase tracking-wider">
-              Mode
+              Active Proxies
             </span>
-            <StatusBadge
-              variant={status?.switched ? 'warning' : 'success'}
-              label={status?.switched ? 'Switched' : 'Passthrough'}
-            />
-          </div>
-          <div className="text-lg font-semibold truncate">
-            {status?.switched
-              ? `${status.provider}/${status.model}`
-              : 'Anthropic'}
-          </div>
-          <Link
-            to="/switch"
-            className="text-xs text-accent hover:text-accent-hover mt-1 inline-block"
-          >
-            Change model →
-          </Link>
-        </div>
-
-        {/* Active Sessions (from per-session proxies) */}
-        <div className="bg-bg-secondary border border-border rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-text-tertiary uppercase tracking-wider">
-              Active Sessions
-            </span>
+            {(summary?.alive ?? 0) > 0 && (
+              <StatusBadge variant="success" label={`${summary!.alive} alive`} pulse />
+            )}
           </div>
           <div className="text-2xl font-semibold font-mono">
             {summary?.alive ?? 0}
@@ -124,6 +98,24 @@ export default function DashboardPage() {
               ? `${summary!.totalRequests} total requests`
               : 'cc sessions with proxy'}
           </div>
+        </div>
+
+        {/* Session History */}
+        <div className="bg-bg-secondary border border-border rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs text-text-tertiary uppercase tracking-wider">
+              History
+            </span>
+          </div>
+          <div className="text-lg font-semibold">
+            Browse Sessions
+          </div>
+          <Link
+            to="/sessions"
+            className="text-xs text-accent hover:text-accent-hover mt-1 inline-block"
+          >
+            View conversations →
+          </Link>
         </div>
       </div>
 

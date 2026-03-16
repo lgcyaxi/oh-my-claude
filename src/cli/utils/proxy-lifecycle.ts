@@ -18,6 +18,7 @@ import { createServer } from 'node:net';
 import { PROXY_SCRIPT, INSTALL_DIR } from './paths';
 import { checkHealth } from './health';
 import { resolveBunPath } from './bun';
+import { startDashboard, isRunning } from '../../proxy/daemon';
 
 /**
  * Find an available TCP port by binding to port 0.
@@ -184,4 +185,38 @@ export async function spawnDetachedProxy(
 
 	const { healthy } = await waitForHealth(controlPort);
 	return { pid, healthy, logFile };
+}
+
+/**
+ * Ensure the dashboard server is running on the default port (18911).
+ * Auto-starts it as a daemon if not already running.
+ *
+ * @returns The dashboard URL, or null if it couldn't be started
+ */
+export async function ensureDashboard(): Promise<string | null> {
+	const DASHBOARD_CONTROL_PORT = 18911;
+
+	// Check if already running (PID file check)
+	if (isRunning()) {
+		return `http://localhost:${DASHBOARD_CONTROL_PORT}/web/`;
+	}
+
+	// Also check if port is reachable (covers case where PID file is stale
+	// but something else is listening)
+	try {
+		const health = await checkHealth(String(DASHBOARD_CONTROL_PORT));
+		if (health?.status === 'ok') {
+			return `http://localhost:${DASHBOARD_CONTROL_PORT}/web/`;
+		}
+	} catch {
+		// Not running
+	}
+
+	// Start the dashboard-only server (no proxy port needed)
+	try {
+		await startDashboard({ port: DASHBOARD_CONTROL_PORT });
+		return `http://localhost:${DASHBOARD_CONTROL_PORT}/web/`;
+	} catch {
+		return null;
+	}
 }

@@ -8,6 +8,7 @@
 import type { Command } from "commander";
 import { createFormatters } from "../../utils/colors";
 import { readProxyRegistry, cleanupStaleEntries, type ProxySessionEntry } from "../../../proxy/registry";
+import { startDashboard, stopDaemon, isRunning, getPid } from "../../../proxy/daemon";
 
 /**
  * Extract session ID from ANTHROPIC_BASE_URL.
@@ -426,6 +427,46 @@ export function registerProxyCommand(program: Command) {
       } catch {
         console.log(fail("Failed to connect to proxy control API"));
         console.log(dimText("Make sure you're running within 'oh-my-claude cc' session"));
+        process.exit(1);
+      }
+    });
+
+  // Dashboard subcommand — start/stop persistent web dashboard on port 18911
+  proxyCmd
+    .command("dashboard")
+    .alias("web")
+    .description("Start persistent web dashboard on http://localhost:18911/web/")
+    .option("--stop", "Stop the running dashboard server")
+    .option("--port <port>", "Control port (default: 18911)", "18911")
+    .action(async (opts: { stop?: boolean; port?: string }) => {
+      const { c, ok, fail, dimText } = createFormatters();
+      const controlPort = parseInt(opts.port ?? "18911", 10);
+
+      if (opts.stop) {
+        if (stopDaemon()) {
+          console.log(ok("Dashboard stopped"));
+        } else {
+          console.log(dimText("Dashboard is not running"));
+        }
+        return;
+      }
+
+      // Check if already running
+      if (isRunning()) {
+        const pid = getPid();
+        console.log(ok(`Dashboard already running (PID ${pid})`));
+        console.log(`  ${c.cyan}http://localhost:${controlPort}/web/${c.reset}`);
+        return;
+      }
+
+      // Start the dashboard-only server (no proxy port)
+      try {
+        const result = await startDashboard({ port: controlPort });
+        console.log(ok(`Dashboard started (PID ${result.pid})`));
+        console.log(`  ${c.cyan}http://localhost:${result.port}/web/${c.reset}`);
+        console.log(dimText("\nStop with: oh-my-claude proxy dashboard --stop"));
+      } catch (error) {
+        console.log(fail(`Failed to start dashboard: ${error instanceof Error ? error.message : String(error)}`));
         process.exit(1);
       }
     });
