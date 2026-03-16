@@ -12,13 +12,13 @@
  *
  * Usage:
  *   bun run src/proxy/dashboard.ts
- *   bun run src/proxy/dashboard.ts --port 18911
+ *   bun run src/proxy/dashboard.ts --port 18920
  */
 
 import { handleControl } from './control';
 import { registerShutdown } from './control/switch';
 
-const DEFAULT_PORT = 18911;
+const DEFAULT_PORT = 18920;
 
 function parsePort(): number {
 	const args = process.argv.slice(2);

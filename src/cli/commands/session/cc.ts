@@ -296,7 +296,7 @@ Examples:
 			process.exit(1);
 		}
 
-		// Auto-start dashboard server on port 18911 if not running
+		// Auto-start dashboard server on port 18920 if not running
 		const dashboardUrl = await ensureDashboard();
 		if (dashboardUrl) {
 			console.log(dimText(`  Dashboard: ${dashboardUrl}`));

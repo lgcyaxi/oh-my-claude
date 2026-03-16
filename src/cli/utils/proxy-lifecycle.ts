@@ -188,13 +188,13 @@ export async function spawnDetachedProxy(
 }
 
 /**
- * Ensure the dashboard server is running on the default port (18911).
+ * Ensure the dashboard server is running on port 18920.
  * Auto-starts it as a daemon if not already running.
  *
  * @returns The dashboard URL, or null if it couldn't be started
  */
 export async function ensureDashboard(): Promise<string | null> {
-	const DASHBOARD_CONTROL_PORT = 18911;
+	const DASHBOARD_CONTROL_PORT = 18920;
 
 	// Check if already running (PID file check)
 	if (isRunning()) {

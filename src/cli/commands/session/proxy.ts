@@ -431,16 +431,16 @@ export function registerProxyCommand(program: Command) {
       }
     });
 
-  // Dashboard subcommand — start/stop persistent web dashboard on port 18911
+  // Dashboard subcommand — start/stop persistent web dashboard on port 18920
   proxyCmd
     .command("dashboard")
     .alias("web")
-    .description("Start persistent web dashboard on http://localhost:18911/web/")
+    .description("Start persistent web dashboard on http://localhost:18920/web/")
     .option("--stop", "Stop the running dashboard server")
-    .option("--port <port>", "Control port (default: 18911)", "18911")
+    .option("--port <port>", "Control port (default: 18920)", "18920")
     .action(async (opts: { stop?: boolean; port?: string }) => {
       const { c, ok, fail, dimText } = createFormatters();
-      const controlPort = parseInt(opts.port ?? "18911", 10);
+      const controlPort = parseInt(opts.port ?? "18920", 10);
 
       if (opts.stop) {
         if (stopDaemon()) {

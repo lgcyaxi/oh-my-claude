@@ -119,7 +119,7 @@ export async function startDashboard(options?: {
 	port?: number;
 	foreground?: boolean;
 }): Promise<{ pid: number; port: number }> {
-	const port = options?.port ?? 18911;
+	const port = options?.port ?? 18920;
 
 	// Check if already running
 	if (isRunning()) {

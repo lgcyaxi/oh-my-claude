@@ -151,11 +151,12 @@ export default function DashboardPage() {
                       {' · '}PID {inst.pid}
                     </span>
                   </div>
-                  {session?.sessionId && (
-                    <span className="text-[10px] font-mono text-text-tertiary">
-                      {session.sessionId}
-                    </span>
-                  )}
+                  <Link
+                    to="/switch"
+                    className="text-[10px] text-accent hover:text-accent-hover shrink-0"
+                  >
+                    Switch →
+                  </Link>
                 </div>
               );
             })}

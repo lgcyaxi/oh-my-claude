@@ -98,6 +98,22 @@ export const revertSwitch = (sessionId?: string) =>
     method: 'POST',
   });
 
+/* ── Instance Control (forward to per-session proxy) ── */
+
+export const switchInstanceModel = (controlPort: number, provider: string, model: string) =>
+  request<{ ok: boolean }>(`/api/instances/${controlPort}/switch`, {
+    method: 'POST',
+    body: JSON.stringify({ provider, model }),
+  });
+
+export const revertInstance = (controlPort: number) =>
+  request<{ ok: boolean }>(`/api/instances/${controlPort}/revert`, {
+    method: 'POST',
+  });
+
+export const getInstanceStatus = (controlPort: number) =>
+  request<StatusResponse>(`/api/instances/${controlPort}/status`);
+
 /* ── Registry CRUD ── */
 
 export interface RegistryProvider {

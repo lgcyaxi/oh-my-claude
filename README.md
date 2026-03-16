@@ -712,33 +712,31 @@ The menubar app displays all active sessions, their current models, and allows o
 
 ## Web Dashboard
 
-Access a browser-based dashboard at `http://localhost:18911/web/` when the proxy is running.
+Standalone dashboard at `http://localhost:18920/web/` — auto-starts with `omc cc`, or start manually:
+
+```bash
+omc proxy dashboard       # Start dashboard on port 18920
+omc proxy dashboard --stop  # Stop dashboard
+```
 
 **What you can do:**
+- **Browse sessions** — View all Claude Code conversation history across projects, with search/filter and chat-style conversation viewer
+- **Switch models per session** — Select any active proxy session, switch its model independently
 - **Manage models** — Add, edit, or remove models from any provider (no more editing JSON by hand)
-- **Switch models** — One-click provider/model switching with live status updates
-- **Monitor proxy** — See proxy health, uptime, request count, and active sessions
-- **Session aggregation** — Dashboard shows real-time sessions from all running `omc cc` instances with uptime, request count, and provider/model info
+- **Monitor proxies** — See active proxy sessions with health, uptime, and request count
 - **View providers** — Check which providers are configured, their API key status, and model counts
-
-**How to access:**
-```bash
-omc cc          # Starts proxy automatically
-# Open http://localhost:18911/web/
-```
 
 <details>
 <summary>Technical details</summary>
 
 - React 19 + Vite + Tailwind CSS SPA, built to `dist/proxy/web/`
-- Served directly from the proxy control server (port 18911) — no extra infrastructure
-- Backend API: `/api/registry` (models CRUD), `/api/config` (provider status)
-- Sidebar navigation with 4 pages: Dashboard, Models, Providers, Switch
-- Designed to scale — v2 will add session management (browse/review/archive conversations)
+- Standalone dashboard server (`dashboard.ts`, port 18920) — control-only, no proxy port
+- Auto-starts when first `omc cc` session launches
+- Per-session model switching via forwarding API (`/api/instances/:controlPort/switch`)
+- Session browser reads JSONL files directly with `sessions-index.json` enrichment
+- Sidebar navigation: Dashboard, Sessions, Models, Providers, Switch
 
 </details>
-
-> **Note**: Screenshots will be added once the UI design is finalized.
 
 ## Terminal Configuration
 

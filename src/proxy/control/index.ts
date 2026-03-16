@@ -31,6 +31,32 @@ import { serveWebAsset } from './web-static';
 // Re-export registerShutdown for server.ts
 export { registerShutdown } from './switch';
 
+/** Forward a request to a per-session proxy's control port */
+async function forwardToInstance(
+	req: Request,
+	controlPort: number,
+	path: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	try {
+		const targetUrl = `http://localhost:${controlPort}${path}`;
+		const resp = await fetch(targetUrl, {
+			method: req.method,
+			headers: { 'content-type': 'application/json' },
+			body: req.method === 'POST' ? await req.text() : undefined,
+			signal: AbortSignal.timeout(5000),
+		});
+		const data = await resp.json();
+		return jsonResponse(data, resp.status, corsHeaders);
+	} catch {
+		return jsonResponse(
+			{ error: `Instance on port ${controlPort} unreachable` },
+			502,
+			corsHeaders,
+		);
+	}
+}
+
 export async function handleControl(req: Request): Promise<Response> {
 	const url = new URL(req.url);
 	const path = url.pathname;
@@ -66,6 +92,13 @@ export async function handleControl(req: Request): Promise<Response> {
 	// Instances aggregation API
 	if (path === '/api/instances') {
 		return handleInstancesRequest(req, corsHeaders);
+	}
+
+	// Instance control forwarding: /api/instances/:controlPort/(switch|revert|status)
+	const instanceMatch = path.match(/^\/api\/instances\/(\d+)\/(switch|revert|status)$/);
+	if (instanceMatch) {
+		const [, targetPort, action] = instanceMatch;
+		return forwardToInstance(req, Number(targetPort), `/${action}`, corsHeaders);
 	}
 
 	// Config API
