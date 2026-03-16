@@ -6,6 +6,7 @@ import {
   renameSession,
   deleteSession,
   cleanupEmptySessions,
+  deleteProject,
   type ProjectEntry,
   type SessionEntry,
 } from '../lib/api';
@@ -21,6 +22,7 @@ export default function SessionsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState<string | null>(null);
 
   // Load projects
   useEffect(() => {
@@ -87,6 +89,19 @@ export default function SessionsPage() {
       await deleteSession(selectedFolder, sessionId);
       setConfirmDelete(null);
       reloadSessions();
+    } catch { /* ignore */ }
+  }
+
+  async function handleDeleteProject(folder: string) {
+    try {
+      await deleteProject(folder);
+      setConfirmDeleteProject(null);
+      if (selectedFolder === folder) {
+        setSelectedFolder(null);
+        setSessions([]);
+      }
+      // Reload projects
+      getProjects().then((data) => setProjects(data.projects));
     } catch { /* ignore */ }
   }
 
@@ -158,23 +173,63 @@ export default function SessionsPage() {
         </div>
         <div className="flex-1 overflow-y-auto">
           {projects.map((p) => (
-            <button
+            <div
               key={p.folder}
-              onClick={() => setSelectedFolder(p.folder)}
-              className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-border/50 ${
+              className={`group border-b border-border/50 ${
                 selectedFolder === p.folder
-                  ? 'bg-accent-muted text-accent-hover font-medium'
-                  : 'text-text-secondary hover:bg-bg-hover'
+                  ? 'bg-accent-muted'
+                  : 'hover:bg-bg-hover'
               }`}
             >
-              <div className="truncate font-medium text-[13px]">
-                {shortenPath(p.projectPath)}
-              </div>
-              <div className="text-[10px] text-text-tertiary mt-0.5">
-                {p.sessionCount} session{p.sessionCount !== 1 ? 's' : ''}
-                {p.lastModified && ` · ${formatDate(p.lastModified)}`}
-              </div>
-            </button>
+              {confirmDeleteProject === p.folder ? (
+                <div className="px-3 py-2">
+                  <div className="text-[11px] text-danger mb-1.5">Delete this project?</div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => handleDeleteProject(p.folder)}
+                      className="px-2 py-0.5 text-[10px] bg-danger text-white rounded"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteProject(null)}
+                      className="px-2 py-0.5 text-[10px] border border-border text-text-secondary rounded"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center">
+                  <button
+                    onClick={() => setSelectedFolder(p.folder)}
+                    className={`flex-1 text-left px-3 py-2 text-sm transition-colors ${
+                      selectedFolder === p.folder
+                        ? 'text-accent-hover font-medium'
+                        : 'text-text-secondary'
+                    }`}
+                  >
+                    <div className="truncate font-medium text-[13px]">
+                      {shortenPath(p.projectPath)}
+                    </div>
+                    <div className="text-[10px] text-text-tertiary mt-0.5">
+                      {p.sessionCount} session{p.sessionCount !== 1 ? 's' : ''}
+                      {p.lastModified && ` · ${formatDate(p.lastModified)}`}
+                    </div>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmDeleteProject(p.folder);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 mr-1 text-text-tertiary hover:text-danger text-[10px] transition-all"
+                    title="Remove project"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
           ))}
           {projects.length === 0 && (
             <div className="px-3 py-4 text-xs text-text-tertiary text-center">

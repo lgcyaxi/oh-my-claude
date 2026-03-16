@@ -309,6 +309,11 @@ export async function handleSessionsRequest(
 		return handleListSessions(folder, corsHeaders);
 	}
 
+	// DELETE /api/sessions/:folder — remove project folder (only if no real sessions)
+	if (req.method === 'DELETE' && parts.length === 1) {
+		return handleDeleteProject(folder, corsHeaders);
+	}
+
 	// DELETE /api/sessions/:folder/empty — bulk delete empty stub sessions
 	if (req.method === 'DELETE' && parts.length === 2 && parts[1] === 'empty') {
 		return handleCleanupEmpty(folder, corsHeaders);
@@ -840,4 +845,27 @@ async function handleCleanupEmpty(
 		200,
 		corsHeaders,
 	);
+}
+
+/** DELETE /api/sessions/:folder — remove entire project folder */
+async function handleDeleteProject(
+	folder: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	const dirPath = join(PROJECTS_DIR, folder);
+
+	if (!existsSync(dirPath)) {
+		return jsonResponse({ error: 'Project not found' }, 404, corsHeaders);
+	}
+
+	try {
+		await rm(dirPath, { recursive: true });
+		return jsonResponse({ ok: true, folder }, 200, corsHeaders);
+	} catch (error) {
+		return jsonResponse(
+			{ error: `Failed to delete project: ${error}` },
+			500,
+			corsHeaders,
+		);
+	}
 }

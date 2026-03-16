@@ -285,3 +285,9 @@ export const cleanupEmptySessions = (folder: string) =>
     `/api/sessions/${encodeURIComponent(folder)}/empty`,
     { method: 'DELETE', headers: {} },
   );
+
+export const deleteProject = (folder: string) =>
+  request<{ ok: boolean; folder: string }>(
+    `/api/sessions/${encodeURIComponent(folder)}`,
+    { method: 'DELETE' },
+  );

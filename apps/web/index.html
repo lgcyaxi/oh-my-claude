@@ -10,6 +10,11 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Apply saved theme before paint to prevent flash
+      const t = localStorage.getItem('omc-theme');
+      if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    </script>
   </head>
   <body class="bg-bg-primary text-text-primary font-sans antialiased">
     <div id="root"></div>
