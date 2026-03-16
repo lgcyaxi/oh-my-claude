@@ -10,6 +10,7 @@ All notable changes to oh-my-claude are documented here.
   - Project sidebar with session counts, search/filter, conversation viewer with collapsible thinking/tool blocks
   - Two-layer data: JSONL file scanning + sessions-index.json enrichment for fast listing (~0.2s for 125 sessions)
 - **Standalone Dashboard** — `oh-my-claude proxy dashboard` starts a control-only server on port 18920 (no proxy port, separate from proxy defaults). Auto-starts on first `omc cc`.
+- **Session Rename & Delete** — Edit Claude Code's own session data: rename summaries (persists to `sessions-index.json`), delete sessions permanently (removes JSONL + directory)
 - **Per-Session Model Switch** — Switch page lists all active proxy sessions and controls each independently via forwarding API
 
 ## [2.2.1-beta.6](changelog/v2.2.1-beta.md) - 2026-03-15

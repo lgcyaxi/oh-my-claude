@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import {
   getProjects,
   getProjectSessions,
+  renameSession,
+  deleteSession,
   type ProjectEntry,
   type SessionEntry,
 } from '../lib/api';
@@ -15,6 +17,9 @@ export default function SessionsPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   // Load projects
   useEffect(() => {
@@ -38,6 +43,16 @@ export default function SessionsPage() {
   }, []);
 
   // Load sessions when project changes
+  function reloadSessions() {
+    if (!selectedFolder) return;
+    getProjectSessions(selectedFolder)
+      .then((data) => {
+        setSessions(data.sessions);
+        setProjectPath(data.projectPath);
+      })
+      .catch(() => setSessions([]));
+  }
+
   useEffect(() => {
     if (!selectedFolder) return;
     let active = true;
@@ -55,6 +70,24 @@ export default function SessionsPage() {
       });
     return () => { active = false; };
   }, [selectedFolder]);
+
+  async function handleRename(sessionId: string) {
+    if (!selectedFolder || !editValue.trim()) return;
+    try {
+      await renameSession(selectedFolder, sessionId, editValue.trim());
+      setEditingId(null);
+      reloadSessions();
+    } catch { /* ignore */ }
+  }
+
+  async function handleDelete(sessionId: string) {
+    if (!selectedFolder) return;
+    try {
+      await deleteSession(selectedFolder, sessionId);
+      setConfirmDelete(null);
+      reloadSessions();
+    } catch { /* ignore */ }
+  }
 
   const filtered = sessions.filter((s) => {
     if (!search) return true;
@@ -165,39 +198,106 @@ export default function SessionsPage() {
         {/* Session List */}
         <div className="flex-1 overflow-y-auto space-y-1">
           {filtered.map((s) => (
-            <Link
+            <div
               key={s.sessionId}
-              to={`/sessions/${encodeURIComponent(selectedFolder!)}/${s.sessionId}`}
-              className="block px-4 py-3 rounded-lg border border-border bg-bg-secondary hover:border-border-strong transition-colors"
+              className="group px-4 py-3 rounded-lg border border-border bg-bg-secondary hover:border-border-strong transition-colors"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate">
-                    {s.summary || s.firstPrompt || 'Untitled session'}
+              {/* Delete confirmation */}
+              {confirmDelete === s.sessionId ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-danger">Delete this session permanently?</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleDelete(s.sessionId)}
+                      className="px-3 py-1 text-xs bg-danger text-white rounded hover:bg-danger/80"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(null)}
+                      className="px-3 py-1 text-xs border border-border text-text-secondary rounded hover:bg-bg-hover"
+                    >
+                      Cancel
+                    </button>
                   </div>
-                  {s.summary && s.firstPrompt && s.firstPrompt !== 'No prompt' && (
-                    <div className="text-xs text-text-tertiary mt-0.5 truncate">
-                      {s.firstPrompt.slice(0, 120)}
-                    </div>
-                  )}
                 </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-[11px] text-text-tertiary">
-                    {formatDate(s.modified)}
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <Link
+                      to={`/sessions/${encodeURIComponent(selectedFolder!)}/${s.sessionId}`}
+                      className="min-w-0 flex-1"
+                    >
+                      {/* Inline rename */}
+                      {editingId === s.sessionId ? (
+                        <input
+                          autoFocus
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); handleRename(s.sessionId); }
+                            if (e.key === 'Escape') setEditingId(null);
+                          }}
+                          onBlur={() => handleRename(s.sessionId)}
+                          onClick={(e) => e.preventDefault()}
+                          className="w-full text-sm font-medium bg-bg-tertiary border border-accent rounded px-1.5 py-0.5 outline-none text-text-primary"
+                        />
+                      ) : (
+                        <div className="text-sm font-medium truncate">
+                          {s.summary || s.firstPrompt || 'Untitled session'}
+                        </div>
+                      )}
+                      {editingId !== s.sessionId && s.summary && s.firstPrompt && s.firstPrompt !== 'No prompt' && (
+                        <div className="text-xs text-text-tertiary mt-0.5 truncate">
+                          {s.firstPrompt.slice(0, 120)}
+                        </div>
+                      )}
+                    </Link>
+                    <div className="shrink-0 flex items-start gap-2">
+                      <div className="text-right">
+                        <div className="text-[11px] text-text-tertiary">
+                          {formatDate(s.modified)}
+                        </div>
+                        {s.messageCount > 0 && (
+                          <div className="text-[10px] text-text-tertiary mt-0.5">
+                            {s.messageCount} msg{s.messageCount !== 1 ? 's' : ''}
+                          </div>
+                        )}
+                      </div>
+                      {/* Action buttons */}
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setEditingId(s.sessionId);
+                            setEditValue(s.summary || s.firstPrompt || '');
+                          }}
+                          title="Rename"
+                          className="p-1 text-text-tertiary hover:text-text-primary text-[10px]"
+                        >
+                          ✏
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setConfirmDelete(s.sessionId);
+                          }}
+                          title="Delete"
+                          className="p-1 text-text-tertiary hover:text-danger text-[10px]"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  {s.messageCount > 0 && (
-                    <div className="text-[10px] text-text-tertiary mt-0.5">
-                      {s.messageCount} msg{s.messageCount !== 1 ? 's' : ''}
-                    </div>
+                  {s.gitBranch && (
+                    <span className="inline-block mt-1.5 px-1.5 py-0.5 text-[10px] rounded bg-accent-muted text-accent font-mono">
+                      {s.gitBranch}
+                    </span>
                   )}
-                </div>
-              </div>
-              {s.gitBranch && (
-                <span className="inline-block mt-1.5 px-1.5 py-0.5 text-[10px] rounded bg-accent-muted text-accent font-mono">
-                  {s.gitBranch}
-                </span>
+                </>
               )}
-            </Link>
+            </div>
           ))}
 
           {filtered.length === 0 && sessions.length > 0 && (

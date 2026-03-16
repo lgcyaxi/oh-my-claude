@@ -9,9 +9,10 @@
  * so we scan JSONL files directly and enrich with index data when available.
  */
 
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat, writeFile, unlink, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { existsSync } from 'node:fs';
 import { jsonResponse } from './helpers';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -243,12 +244,8 @@ export async function handleSessionsRequest(
 	// Strip /api/sessions prefix
 	const subpath = path.replace(/^\/api\/sessions/, '') || '/';
 
-	if (req.method !== 'GET') {
-		return jsonResponse({ error: 'Method not allowed' }, 405, corsHeaders);
-	}
-
 	// GET /api/sessions — list all projects
-	if (subpath === '/' || subpath === '') {
+	if (req.method === 'GET' && (subpath === '/' || subpath === '')) {
 		return handleListProjects(corsHeaders);
 	}
 
@@ -258,8 +255,7 @@ export async function handleSessionsRequest(
 	if (!folder)
 		return jsonResponse({ error: 'Not found' }, 404, corsHeaders);
 
-	if (parts.length === 1) {
-		// GET /api/sessions/:folder — list sessions for project
+	if (req.method === 'GET' && parts.length === 1) {
 		return handleListSessions(folder, corsHeaders);
 	}
 
@@ -267,14 +263,22 @@ export async function handleSessionsRequest(
 	if (!sessionId)
 		return jsonResponse({ error: 'Not found' }, 404, corsHeaders);
 
-	if (parts.length === 2) {
-		// GET /api/sessions/:folder/:id — full conversation
+	if (req.method === 'GET' && parts.length === 2) {
 		return handleGetConversation(folder, sessionId, corsHeaders);
 	}
 
-	if (parts.length === 3 && parts[2] === 'meta') {
-		// GET /api/sessions/:folder/:id/meta — metadata only
+	if (req.method === 'GET' && parts.length === 3 && parts[2] === 'meta') {
 		return handleGetSessionMeta(folder, sessionId, corsHeaders);
+	}
+
+	// PATCH /api/sessions/:folder/:id — rename session (update summary)
+	if (req.method === 'PATCH' && parts.length === 2) {
+		return handleRenameSession(req, folder, sessionId, corsHeaders);
+	}
+
+	// DELETE /api/sessions/:folder/:id — delete session
+	if (req.method === 'DELETE' && parts.length === 2) {
+		return handleDeleteSession(folder, sessionId, corsHeaders);
 	}
 
 	return jsonResponse({ error: 'Not found' }, 404, corsHeaders);
@@ -553,4 +557,163 @@ async function handleGetSessionMeta(
 		200,
 		corsHeaders,
 	);
+}
+
+/** PATCH /api/sessions/:folder/:id — rename session (update summary) */
+async function handleRenameSession(
+	req: Request,
+	folder: string,
+	sessionId: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	let body: { summary?: string };
+	try {
+		body = (await req.json()) as { summary?: string };
+	} catch {
+		return jsonResponse({ error: 'Invalid JSON body' }, 400, corsHeaders);
+	}
+
+	if (!body.summary || typeof body.summary !== 'string') {
+		return jsonResponse(
+			{ error: 'Missing or invalid "summary" field' },
+			400,
+			corsHeaders,
+		);
+	}
+
+	const newSummary = body.summary.trim();
+	if (!newSummary) {
+		return jsonResponse(
+			{ error: 'Summary cannot be empty' },
+			400,
+			corsHeaders,
+		);
+	}
+
+	// Verify session JSONL exists
+	const jsonlPath = join(PROJECTS_DIR, folder, `${sessionId}.jsonl`);
+	if (!existsSync(jsonlPath)) {
+		return jsonResponse(
+			{ error: 'Session not found' },
+			404,
+			corsHeaders,
+		);
+	}
+
+	// Update sessions-index.json
+	const indexPath = join(PROJECTS_DIR, folder, 'sessions-index.json');
+
+	try {
+		const raw = await readFile(indexPath, 'utf-8');
+		const index = JSON.parse(raw) as SessionIndex;
+		const entry = index.entries.find((e) => e.sessionId === sessionId);
+
+		if (entry) {
+			entry.summary = newSummary;
+		} else {
+			// Session not in index — add a minimal entry
+			const fileMtime = (await stat(jsonlPath)).mtime;
+			const meta = await extractQuickMeta(jsonlPath, fileMtime);
+			index.entries.push({
+				sessionId,
+				firstPrompt: meta?.firstPrompt ?? '',
+				summary: newSummary,
+				messageCount: meta?.messageCount ?? 0,
+				created: meta?.created ?? fileMtime.toISOString(),
+				modified: fileMtime.toISOString(),
+				gitBranch: meta?.gitBranch ?? '',
+				projectPath: index.originalPath ?? folderToPath(folder),
+				isSidechain: false,
+			});
+		}
+
+		await writeFile(indexPath, JSON.stringify(index, null, 2), 'utf-8');
+	} catch {
+		// No index file — create one with this single entry
+		const fileMtime = (await stat(jsonlPath)).mtime;
+		const meta = await extractQuickMeta(jsonlPath, fileMtime);
+		const newIndex: SessionIndex = {
+			version: 1,
+			entries: [
+				{
+					sessionId,
+					firstPrompt: meta?.firstPrompt ?? '',
+					summary: newSummary,
+					messageCount: meta?.messageCount ?? 0,
+					created: meta?.created ?? fileMtime.toISOString(),
+					modified: fileMtime.toISOString(),
+					gitBranch: meta?.gitBranch ?? '',
+					projectPath: folderToPath(folder),
+					isSidechain: false,
+				},
+			],
+		};
+		await writeFile(
+			indexPath,
+			JSON.stringify(newIndex, null, 2),
+			'utf-8',
+		);
+	}
+
+	return jsonResponse(
+		{ ok: true, sessionId, summary: newSummary },
+		200,
+		corsHeaders,
+	);
+}
+
+/** DELETE /api/sessions/:folder/:id — delete session JSONL and remove from index */
+async function handleDeleteSession(
+	folder: string,
+	sessionId: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	const jsonlPath = join(PROJECTS_DIR, folder, `${sessionId}.jsonl`);
+	const sessionDir = join(PROJECTS_DIR, folder, sessionId);
+
+	if (!existsSync(jsonlPath)) {
+		return jsonResponse({ error: 'Session not found' }, 404, corsHeaders);
+	}
+
+	// Remove JSONL file
+	try {
+		await unlink(jsonlPath);
+	} catch (error) {
+		return jsonResponse(
+			{ error: `Failed to delete: ${error}` },
+			500,
+			corsHeaders,
+		);
+	}
+
+	// Remove session directory (subagents, etc.) if it exists
+	if (existsSync(sessionDir)) {
+		try {
+			await rm(sessionDir, { recursive: true });
+		} catch {
+			// Non-critical
+		}
+	}
+
+	// Remove from sessions-index.json if present
+	try {
+		const indexPath = join(PROJECTS_DIR, folder, 'sessions-index.json');
+		const raw = await readFile(indexPath, 'utf-8');
+		const index = JSON.parse(raw) as SessionIndex;
+		const before = index.entries.length;
+		index.entries = index.entries.filter(
+			(e) => e.sessionId !== sessionId,
+		);
+		if (index.entries.length < before) {
+			await writeFile(
+				indexPath,
+				JSON.stringify(index, null, 2),
+				'utf-8',
+			);
+		}
+	} catch {
+		// No index or parse error — JSONL already deleted, good enough
+	}
+
+	return jsonResponse({ ok: true, sessionId }, 200, corsHeaders);
 }

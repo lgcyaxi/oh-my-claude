@@ -267,3 +267,15 @@ export const getConversation = (folder: string, sessionId: string) =>
     meta: SessionMeta | null;
     entries: ConversationEntry[];
   }>(`/api/sessions/${encodeURIComponent(folder)}/${sessionId}`);
+
+export const renameSession = (folder: string, sessionId: string, summary: string) =>
+  request<{ ok: boolean; sessionId: string; summary: string }>(
+    `/api/sessions/${encodeURIComponent(folder)}/${sessionId}`,
+    { method: 'PATCH', body: JSON.stringify({ summary }) },
+  );
+
+export const deleteSession = (folder: string, sessionId: string) =>
+  request<{ ok: boolean; sessionId: string }>(
+    `/api/sessions/${encodeURIComponent(folder)}/${sessionId}`,
+    { method: 'DELETE' },
+  );
