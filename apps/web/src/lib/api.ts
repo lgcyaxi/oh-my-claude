@@ -279,3 +279,9 @@ export const deleteSession = (folder: string, sessionId: string) =>
     `/api/sessions/${encodeURIComponent(folder)}/${sessionId}`,
     { method: 'DELETE' },
   );
+
+export const cleanupEmptySessions = (folder: string) =>
+  request<{ ok: boolean; deleted: number; sessionIds: string[] }>(
+    `/api/sessions/${encodeURIComponent(folder)}/empty`,
+    { method: 'DELETE', headers: {} },
+  );

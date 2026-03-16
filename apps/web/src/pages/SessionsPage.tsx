@@ -5,6 +5,7 @@ import {
   getProjectSessions,
   renameSession,
   deleteSession,
+  cleanupEmptySessions,
   type ProjectEntry,
   type SessionEntry,
 } from '../lib/api';
@@ -86,6 +87,16 @@ export default function SessionsPage() {
       await deleteSession(selectedFolder, sessionId);
       setConfirmDelete(null);
       reloadSessions();
+    } catch { /* ignore */ }
+  }
+
+  const emptyCount = sessions.filter((s) => !s.firstPrompt && !s.summary).length;
+
+  async function handleCleanup() {
+    if (!selectedFolder) return;
+    try {
+      const result = await cleanupEmptySessions(selectedFolder);
+      if (result.deleted > 0) reloadSessions();
     } catch { /* ignore */ }
   }
 
@@ -184,15 +195,24 @@ export default function SessionsPage() {
           )}
         </div>
 
-        {/* Search */}
-        <div className="mb-3">
+        {/* Search + Cleanup */}
+        <div className="mb-3 flex gap-2">
           <input
             type="text"
             placeholder="Filter sessions..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full px-3 py-1.5 text-sm rounded border border-border bg-bg-secondary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent"
+            className="flex-1 px-3 py-1.5 text-sm rounded border border-border bg-bg-secondary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent"
           />
+          {emptyCount > 0 && (
+            <button
+              onClick={handleCleanup}
+              className="shrink-0 px-3 py-1.5 text-xs border border-border text-text-tertiary rounded hover:text-danger hover:border-danger/50 transition-colors"
+              title={`Delete ${emptyCount} empty stub session${emptyCount !== 1 ? 's' : ''}`}
+            >
+              Clean {emptyCount} empty
+            </button>
+          )}
         </div>
 
         {/* Session List */}

@@ -309,6 +309,11 @@ export async function handleSessionsRequest(
 		return handleListSessions(folder, corsHeaders);
 	}
 
+	// DELETE /api/sessions/:folder/empty — bulk delete empty stub sessions
+	if (req.method === 'DELETE' && parts.length === 2 && parts[1] === 'empty') {
+		return handleCleanupEmpty(folder, corsHeaders);
+	}
+
 	const sessionId = parts[1] ?? '';
 	if (!sessionId)
 		return jsonResponse({ error: 'Not found' }, 404, corsHeaders);
@@ -469,7 +474,7 @@ async function handleListSessions(
 				sessions.push({
 					sessionId: file.sessionId,
 					firstPrompt: meta.firstPrompt,
-					summary: '', // no summary without index
+					summary: '',
 					messageCount: meta.messageCount,
 					created: meta.created,
 					modified: meta.modified,
@@ -477,7 +482,7 @@ async function handleListSessions(
 					isSidechain: false,
 				});
 			} else {
-				// File exists but couldn't extract — show with mtime
+				// File exists but couldn't extract metadata
 				sessions.push({
 					sessionId: file.sessionId,
 					firstPrompt: '',
@@ -771,4 +776,68 @@ async function handleDeleteSession(
 	}
 
 	return jsonResponse({ ok: true, sessionId }, 200, corsHeaders);
+}
+
+/** DELETE /api/sessions/:folder/empty — bulk delete empty stub sessions */
+async function handleCleanupEmpty(
+	folder: string,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	const jsonlFiles = await scanJsonlFiles(folder);
+	const deleted: string[] = [];
+
+	for (const file of jsonlFiles) {
+		const meta = await extractQuickMeta(file.filePath, file.mtime);
+		// Empty = no firstPrompt found in first 30 lines
+		if (!meta || !meta.firstPrompt) {
+			try {
+				await unlink(file.filePath);
+				// Also remove session directory if exists
+				const sessionDir = join(
+					PROJECTS_DIR,
+					folder,
+					file.sessionId,
+				);
+				if (existsSync(sessionDir)) {
+					await rm(sessionDir, { recursive: true });
+				}
+				deleted.push(file.sessionId);
+			} catch {
+				// skip failures
+			}
+		}
+	}
+
+	// Clean up sessions-index.json
+	if (deleted.length > 0) {
+		try {
+			const indexPath = join(
+				PROJECTS_DIR,
+				folder,
+				'sessions-index.json',
+			);
+			const raw = await readFile(indexPath, 'utf-8');
+			const index = JSON.parse(raw) as SessionIndex;
+			const deletedSet = new Set(deleted);
+			const before = index.entries.length;
+			index.entries = index.entries.filter(
+				(e) => !deletedSet.has(e.sessionId),
+			);
+			if (index.entries.length < before) {
+				await writeFile(
+					indexPath,
+					JSON.stringify(index, null, 2),
+					'utf-8',
+				);
+			}
+		} catch {
+			// No index — fine
+		}
+	}
+
+	return jsonResponse(
+		{ ok: true, deleted: deleted.length, sessionIds: deleted },
+		200,
+		corsHeaders,
+	);
 }
