@@ -12,8 +12,9 @@ import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 
 const INSTALL_DIR = join(homedir(), '.claude', 'oh-my-claude');
-const PID_FILE = join(INSTALL_DIR, 'proxy.pid');
+const PID_FILE = join(INSTALL_DIR, 'dashboard.pid');
 const SERVER_SCRIPT = join(INSTALL_DIR, 'dist', 'proxy', 'server.js');
+const DASHBOARD_SCRIPT = join(INSTALL_DIR, 'dist', 'proxy', 'dashboard.js');
 
 /** Check if a process is running */
 function isProcessRunning(pid: number): boolean {
@@ -80,7 +81,7 @@ export async function startDaemon(options?: {
 	}
 
 	// Spawn the proxy server
-	const args = [];
+	const args = ['run', SERVER_SCRIPT];
 	if (options?.port) {
 		args.push('--port', String(options.port));
 	}
@@ -88,7 +89,7 @@ export async function startDaemon(options?: {
 		args.push('--control-port', String(options.controlPort));
 	}
 
-	const proc = spawn('bun', [SERVER_SCRIPT, ...args], {
+	const proc = spawn('bun', args, {
 		detached: true,
 		stdio: options?.foreground ? 'inherit' : 'ignore',
 		windowsHide: true,
@@ -111,6 +112,79 @@ export async function startDaemon(options?: {
 	writeFileSync(PID_FILE, String(pid));
 
 	return { pid, port, controlPort };
+}
+
+/** Start the dashboard-only server (no proxy port) */
+export async function startDashboard(options?: {
+	port?: number;
+	foreground?: boolean;
+}): Promise<{ pid: number; port: number }> {
+	const port = options?.port ?? 18920;
+
+	// Check if already running
+	if (isRunning()) {
+		const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim());
+		if (isProcessRunning(pid)) {
+			return { pid, port };
+		}
+		unlinkSync(PID_FILE);
+	}
+
+	const script = existsSync(DASHBOARD_SCRIPT)
+		? DASHBOARD_SCRIPT
+		: SERVER_SCRIPT; // fallback to full server if dashboard not built
+
+	if (!existsSync(script)) {
+		throw new Error(
+			`Dashboard not found at ${script}\nRun 'oh-my-claude install' first.`,
+		);
+	}
+
+	try {
+		execSync('bun --version', { stdio: 'pipe' });
+	} catch {
+		throw new Error(
+			'Bun runtime not found. Please install Bun: https://bun.sh',
+		);
+	}
+
+	const args = [script, '--port', String(port)];
+
+	// On Windows, detached: true flashes a console window.
+	// Use windowsHide + unref instead.
+	const isWindows = process.platform === 'win32';
+	const proc = spawn('bun', args, {
+		detached: !isWindows,
+		stdio: options?.foreground ? 'inherit' : 'ignore',
+		windowsHide: true,
+	});
+
+	const pid = proc.pid;
+	if (pid === undefined) {
+		throw new Error('Failed to get process PID');
+	}
+
+	if (options?.foreground) {
+		return { pid, port };
+	}
+
+	proc.unref();
+	writeFileSync(PID_FILE, String(pid));
+
+	// Wait for the server to be ready
+	for (let i = 0; i < 15; i++) {
+		await new Promise((r) => setTimeout(r, 200));
+		try {
+			const resp = await fetch(`http://localhost:${port}/health`, {
+				signal: AbortSignal.timeout(500),
+			});
+			if (resp.ok) return { pid, port };
+		} catch {
+			// Keep waiting
+		}
+	}
+
+	return { pid, port };
 }
 
 /** Stop the proxy daemon */

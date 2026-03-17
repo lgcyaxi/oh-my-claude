@@ -24,6 +24,7 @@ import {
 import { recordSessionProviderRequest } from '../state/session';
 import { handlePassthrough } from './passthrough';
 import { RESPONSES_API_PROVIDERS, trackProviderRequest } from './stats';
+import { displayModel } from './display';
 
 export async function handleDirectiveRoute(
 	req: Request,
@@ -38,7 +39,7 @@ export async function handleDirectiveRoute(
 	const config = loadConfig();
 	if (!isProviderConfigured(config, provider)) {
 		console.error(
-			`[proxy #${reqId}]${sessionTag} Route directive → ${provider}/${model} but provider not configured, ` +
+			`[proxy #${reqId}]${sessionTag} Route directive → ${displayModel(provider, model)} but provider not configured, ` +
 				`falling back to passthrough`,
 		);
 		return await handlePassthrough(req, reqId, bodyText, sessionTag);
@@ -63,14 +64,14 @@ export async function handleDirectiveRoute(
 			targetUrl = `${baseUrl}/responses`;
 
 			console.error(
-				`[proxy #${reqId}]${sessionTag} → ${provider}/${model} (directive/responses-api) /responses`,
+				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, model)} (directive/responses-api) /responses`,
 			);
 		} else if (openAIFormat) {
 			forwardBody = convertAnthropicToOpenAI(parsedBody, model);
 			targetUrl = `${baseUrl}/chat/completions`;
 
 			console.error(
-				`[proxy #${reqId}]${sessionTag} → ${provider}/${model} (directive/openai-fmt) /chat/completions`,
+				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, model)} (directive/openai-fmt) /chat/completions`,
 			);
 		} else {
 			const body = parsedBody;
@@ -82,7 +83,7 @@ export async function handleDirectiveRoute(
 			targetUrl = `${baseUrl}/v1/messages${url.search}`;
 
 			console.error(
-				`[proxy #${reqId}]${sessionTag} → ${provider}/${model} (directive) /v1/messages`,
+				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, model)} (directive) /v1/messages`,
 			);
 		}
 
@@ -135,7 +136,7 @@ export async function handleDirectiveRoute(
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		console.error(
-			`[proxy #${reqId}]${sessionTag} Route directive ${provider}/${model} failed: ${message}, ` +
+			`[proxy #${reqId}]${sessionTag} Route directive ${displayModel(provider, model)} failed: ${message}, ` +
 				`falling back to passthrough`,
 		);
 		return await handlePassthrough(req, reqId, bodyText, sessionTag);

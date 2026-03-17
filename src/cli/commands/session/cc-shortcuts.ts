@@ -10,8 +10,8 @@ import { createFormatters } from "../../utils/colors";
 const OMC_SHORTCUTS: Record<string, string[]> = {
   "-r":    ["--resume"],
   "-skip": ["--dangerously-skip-permissions"],
-  "-a":    ["--enable-auto-mode"],
-  "-auto": ["--enable-auto-mode"],
+  "-a":    ["--permission-mode", "auto"],
+  "-auto": ["--permission-mode", "auto"],
   // -wt is handled specially in expandShortcuts (not a simple mapping)
 };
 

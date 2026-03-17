@@ -456,6 +456,59 @@ function getNodeExecutable(): string {
 }
 
 /**
+ * Sync MCP server entry to ~/.claude.json (Claude Code's native config).
+ *
+ * Claude Code reads MCP servers from BOTH ~/.claude/settings.json and ~/.claude.json.
+ * When ~/.claude.json has its own `mcpServers` section, it takes precedence and entries
+ * from settings.json may be ignored. To ensure oh-my-claude is always discovered,
+ * we mirror the MCP entry to ~/.claude.json when it has a mcpServers section.
+ */
+function syncMcpToClaudeJson(
+	name: string,
+	config: { command: string; args?: string[]; env?: Record<string, string> },
+	force = false,
+): void {
+	const claudeJsonPath = join(homedir(), '.claude.json');
+
+	try {
+		if (!existsSync(claudeJsonPath)) return;
+		const raw = readFileSync(claudeJsonPath, 'utf-8');
+		const data = JSON.parse(raw);
+
+		// Only sync if ~/.claude.json has a top-level mcpServers section
+		if (!data.mcpServers || typeof data.mcpServers !== 'object') return;
+
+		// Skip if already present (unless force)
+		if (data.mcpServers[name] && !force) return;
+
+		data.mcpServers[name] = config;
+		writeFileSync(claudeJsonPath, JSON.stringify(data, null, 2) + '\n');
+	} catch {
+		// Non-critical — settings.json is the primary config
+	}
+}
+
+/**
+ * Remove MCP server entry from ~/.claude.json
+ */
+function removeMcpFromClaudeJson(name: string): void {
+	const claudeJsonPath = join(homedir(), '.claude.json');
+
+	try {
+		if (!existsSync(claudeJsonPath)) return;
+		const raw = readFileSync(claudeJsonPath, 'utf-8');
+		const data = JSON.parse(raw);
+
+		if (!data.mcpServers?.[name]) return;
+
+		delete data.mcpServers[name];
+		writeFileSync(claudeJsonPath, JSON.stringify(data, null, 2) + '\n');
+	} catch {
+		// Non-critical
+	}
+}
+
+/**
  * Install oh-my-claude MCP server using claude mcp add CLI
  */
 export function installMcpServer(serverPath: string, force = false): boolean {
@@ -476,6 +529,9 @@ export function installMcpServer(serverPath: string, force = false): boolean {
 	// Check if already installed
 	const existing = settings?.mcpServers?.['oh-my-claude'];
 	if (existing && !force) {
+		// Even if already in settings.json, ensure it's also in ~/.claude.json
+		// (Claude Code may only read MCP servers from there when it has its own mcpServers section)
+		syncMcpToClaudeJson('oh-my-claude', existing as { command: string; args?: string[] });
 		return true;
 	}
 
@@ -484,12 +540,15 @@ export function installMcpServer(serverPath: string, force = false): boolean {
 		removeMcpServer(settings, 'oh-my-claude');
 	}
 
-	const result = addMcpServer(settings, 'oh-my-claude', {
-		command: nodePath,
-		args: [serverPath],
-	});
+	const mcpConfig = { command: nodePath, args: [serverPath] };
+	const result = addMcpServer(settings, 'oh-my-claude', mcpConfig);
 	// Save even if addMcpServer returned false (we may have removed a stale entry)
 	saveSettings(settings);
+
+	// Mirror to ~/.claude.json for Claude Code compatibility
+	// When ~/.claude.json has its own mcpServers, entries only in settings.json may be ignored
+	syncMcpToClaudeJson('oh-my-claude', mcpConfig, force);
+
 	return result;
 }
 
@@ -536,6 +595,10 @@ export function uninstallFromSettings(): {
 			saveSettings(settingsAgain);
 		}
 	}
+
+	// Also remove from ~/.claude.json
+	removeMcpFromClaudeJson('oh-my-claude');
+	removeMcpFromClaudeJson('oh-my-claude-background');
 
 	return { removedHooks, removedMcp };
 }

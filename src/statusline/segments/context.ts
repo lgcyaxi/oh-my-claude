@@ -145,12 +145,29 @@ function parseTranscript(transcriptPath: string): RawUsage | null {
 }
 
 /**
- * Get context window limit for a model
+ * Parse explicit context window suffix from model ID.
+ * Claude Code appends [1m], [200k], etc. to signal the actual context window.
+ * Returns the parsed size in tokens, or null if no suffix found.
+ */
+function parseContextSuffix(modelId: string): number | null {
+	const match = modelId.match(/\[(\d+(?:\.\d+)?)(k|m)\]/i);
+	if (!match?.[1] || !match[2]) return null;
+	const value = parseFloat(match[1]);
+	const unit = match[2].toLowerCase();
+	return unit === 'm' ? value * 1_000_000 : value * 1_000;
+}
+
+/**
+ * Get context window limit for a model.
+ * Priority: explicit suffix (e.g. [1m]) > pattern match > default.
  */
 function getContextLimit(modelId: string): number {
-	const lower = modelId.toLowerCase();
+	// 1. Check for explicit context suffix first (e.g. claude-opus-4-6[1m])
+	const fromSuffix = parseContextSuffix(modelId);
+	if (fromSuffix) return fromSuffix;
 
-	// Check for pattern matches
+	// 2. Fall back to pattern-based lookup
+	const lower = modelId.toLowerCase();
 	for (const [pattern, limit] of Object.entries(CONTEXT_WINDOWS)) {
 		if (pattern !== 'default' && lower.includes(pattern)) {
 			return limit;

@@ -34,6 +34,7 @@ export interface ChatCompletionResponse {
   model: string;
   choices: ChatCompletionChoice[];
   usage?: ChatCompletionUsage;
+  thinking?: string;  // Thinking/reasoning content from thinking-capable models
 }
 
 export interface ProviderClient {

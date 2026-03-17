@@ -1,13 +1,16 @@
 {
   "name": "@lgcyaxi/oh-my-claude",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
   "type": "module",
+  "workspaces": [
+    "apps/web"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "README.md",
-    "dist/cli.js",
+    "dist/cli/",
     "dist/index.js",
     "dist/*.wasm",
     "dist/mcp/",
@@ -30,8 +33,9 @@
     "build:mcp": "bun build src/mcp/server/index.ts --outdir dist/mcp --target node && mv dist/mcp/index.js dist/mcp/server.js && bun run scripts/copy-wasm.ts",
     "build:hooks": "bun build src/hooks/pre-tool-use/comment-checker.ts src/hooks/stop/todo-continuation.ts src/hooks/post-tool-use/task-notification.ts src/hooks/pre-tool-use/task-tracker.ts src/hooks/user-prompt-submit/memory-awareness.ts src/hooks/post-tool-use/session-logger.ts src/hooks/stop/context-memory.ts src/hooks/user-prompt-submit/preference-awareness.ts src/hooks/post-tool-use/post-tool.ts --outdir dist/hooks --entry-naming [name].js --target node",
     "build:statusline": "TS=$(date +%s) && bun build src/statusline/statusline.ts --outdir dist/statusline --target node --define \"__OMC_BUILD_HASH__='$TS'\"",
-    "build:proxy": "bun build src/proxy/server.ts --outdir dist/proxy --target bun",
-    "build:all": "bun run build && bun run build:mcp && bun run build:hooks && bun run build:statusline && bun run build:proxy",
+    "build:proxy": "bun build src/proxy/server.ts src/proxy/dashboard.ts --outdir dist/proxy --target bun",
+    "build:web": "cd apps/web && npx vite build",
+    "build:all": "bun run build && bun run build:mcp && bun run build:hooks && bun run build:statusline && bun run build:proxy && bun run build:web",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:smoke:codex": "CODEX_NO_VIEWER=1 OMC_RUN_CODEX_SMOKE=1 bun test tests/coworker/codex-smoke.test.ts",

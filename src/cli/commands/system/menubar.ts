@@ -8,7 +8,7 @@
  */
 
 import type { Command } from "commander";
-import { existsSync, cpSync, mkdirSync } from "node:fs";
+import { existsSync, cpSync, mkdirSync, statSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execFileSync, execSync } from "node:child_process";
@@ -45,6 +45,47 @@ function resolveBunBinary(): string {
   }
 
   return bunPath;
+}
+
+function resolveCargoBinary(): string {
+  const binaryName = process.platform === "win32" ? "cargo.exe" : "cargo";
+  const candidates: string[] = [];
+
+  const cargoHome = process.env.CARGO_HOME;
+  const homeDir =
+    process.platform === "win32" ? process.env.USERPROFILE : process.env.HOME;
+
+  if (cargoHome) {
+    candidates.push(join(cargoHome, "bin", binaryName));
+  }
+  if (homeDir) {
+    candidates.push(join(homeDir, ".cargo", "bin", binaryName));
+  }
+
+  const lookup = process.platform === "win32" ? "where cargo" : "which cargo";
+  try {
+    const discovered = execSync(lookup, {
+      encoding: "utf-8",
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .trim()
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    candidates.push(...discovered);
+  } catch {
+    // fall through to candidate validation
+  }
+
+  const cargoPath = candidates.find((candidate) => existsSync(candidate));
+  if (!cargoPath) {
+    throw new Error(
+      "Rust toolchain not found (missing 'cargo'). Install rustup from https://rustup.rs and then rerun 'omc menubar --build'.",
+    );
+  }
+
+  return cargoPath;
 }
 
 function resolveTauriScript(menubarDir: string): string {
@@ -103,7 +144,11 @@ export function copyBuiltMenubarBinary(
     throw new Error(`Built menubar binary not found: ${builtExe}`);
   }
 
-  const buildsDir = join(menubarDir, "builds", resolveMenubarPlatformDir(platform, arch));
+  const buildsDir = join(
+    menubarDir,
+    "builds",
+    resolveMenubarPlatformDir(platform, arch),
+  );
   mkdirSync(buildsDir, { recursive: true });
   const copiedExe = join(buildsDir, binaryName);
   cpSync(builtExe, copiedExe);
@@ -113,6 +158,21 @@ export function copyBuiltMenubarBinary(
   }
 
   return copiedExe;
+}
+
+function isLikelyGitLfsPointer(filePath: string): boolean {
+  try {
+    const stat = statSync(filePath);
+    if (!stat.isFile() || stat.size >= 1024) {
+      return false;
+    }
+
+    return readFileSync(filePath, { encoding: "utf-8" })
+      .slice(0, 40)
+      .startsWith("version https://git-lfs");
+  } catch {
+    return false;
+  }
 }
 
 export function resolveMenubarAppPath(
@@ -133,7 +193,7 @@ export function resolveMenubarAppPath(
       join(menubarDir, "src-tauri", "target", "release", "omc-menubar"),
     ];
 
-    return possiblePaths.find((p) => existsSync(p));
+    return possiblePaths.find((p) => existsSync(p) && !isLikelyGitLfsPointer(p));
   }
 
   if (isWindows) {
@@ -143,7 +203,7 @@ export function resolveMenubarAppPath(
       join(menubarDir, "src-tauri", "target", "release", "bundle", "msi", "omc-menubar.exe"),
     ];
 
-    return possiblePaths.find((p) => existsSync(p));
+    return possiblePaths.find((p) => existsSync(p) && !isLikelyGitLfsPointer(p));
   }
 
   const possiblePaths = [
@@ -152,7 +212,7 @@ export function resolveMenubarAppPath(
     join(menubarDir, "src-tauri", "target", "release", "bundle", "appimage", "omc-menubar"),
   ];
 
-  return possiblePaths.find((p) => existsSync(p));
+  return possiblePaths.find((p) => existsSync(p) && !isLikelyGitLfsPointer(p));
 }
 
 export function registerMenubarCommand(program: Command) {
@@ -166,6 +226,7 @@ export function registerMenubarCommand(program: Command) {
 
       const currentDir = dirname(fileURLToPath(import.meta.url));
       const searchPaths = [
+        join(currentDir, "..", "..", "apps", "menubar"),
         join(currentDir, "..", "..", "..", "..", "apps", "menubar"),
         join(currentDir, "..", "..", "..", "apps", "menubar"),
         join(INSTALL_DIR, "apps", "menubar"),
@@ -210,6 +271,7 @@ export function registerMenubarCommand(program: Command) {
       if (options.build) {
         console.log(`${c.bold}Building menubar app...${c.reset}\n`);
         try {
+          resolveCargoBinary();
           runBunCommand(menubarDir, ["run", "build"]);
           runTauriCommand(
             menubarDir,
@@ -242,6 +304,7 @@ export function registerMenubarCommand(program: Command) {
       if (options.dev) {
         console.log(dimText("Running in development mode..."));
         try {
+          resolveCargoBinary();
           runTauriCommand(menubarDir, ["dev"]);
         } catch {
           // Process exited
@@ -278,4 +341,3 @@ export function registerMenubarCommand(program: Command) {
       }
     });
 }
-

@@ -95,8 +95,13 @@ export function createStreamingResponse(
 /**
  * Forward a request to an upstream server and return the response
  *
- * @param passthroughAuth - If true, forwards all original auth headers as-is (OAuth mode)
+ * @param passthroughAuth - If true, forwards all original auth headers as-is (OAuth mode).
+ *   Can also be a boolean to indicate passthrough mode. When explicitly false (default),
+ *   uses x-api-key header.
  * @param rawBodyText - Pre-read body text to avoid double-consuming the request stream
+ * @param useBearerAuth - If true, uses Authorization: Bearer instead of x-api-key.
+ *   Required for providers like OpenRouter whose Anthropic-compatible endpoint
+ *   only routes to non-Anthropic providers with Bearer auth.
  */
 export async function forwardToUpstream(
 	originalRequest: Request,
@@ -105,6 +110,7 @@ export async function forwardToUpstream(
 	bodyOverride?: Record<string, unknown>,
 	passthroughAuth?: boolean,
 	rawBodyText?: string,
+	useBearerAuth?: boolean,
 ): Promise<Response> {
 	// Build forwarded headers
 	const headers = new Headers();
@@ -133,6 +139,10 @@ export async function forwardToUpstream(
 				headers.set(name, value);
 			}
 		}
+	} else if (useBearerAuth) {
+		// Bearer auth mode: use Authorization: Bearer instead of x-api-key
+		// (e.g. OpenRouter's Anthropic skin requires Bearer to route to non-Anthropic providers)
+		headers.set('Authorization', `Bearer ${apiKey}`);
 	} else {
 		// API key mode: set the target API key explicitly
 		headers.set('x-api-key', apiKey);

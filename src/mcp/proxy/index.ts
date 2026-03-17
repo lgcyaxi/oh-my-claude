@@ -190,7 +190,7 @@ export async function handleProxyTool(
 							provider,
 							model,
 							sessionId: cachedSessionId ?? null,
-							message: `All requests will be routed to ${provider}/${model} until manually reverted`,
+							message: `All requests will be routed to ${model.startsWith(`${provider}/`) ? model : `${provider}/${model}`} until manually reverted`,
 						}),
 					},
 				],

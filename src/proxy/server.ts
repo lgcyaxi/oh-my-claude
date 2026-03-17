@@ -41,6 +41,11 @@ import {
 import { initializeAuth } from './auth/auth';
 import { DEFAULT_PROXY_CONFIG } from './state/types';
 import { resolveProviderName } from '../shared/providers/aliases';
+import {
+	registerInstance,
+	deregisterInstance,
+	startHeartbeat,
+} from './state/instance-registry';
 
 interface ParsedArgs {
 	port: number;
@@ -182,6 +187,27 @@ async function main() {
 		console.error('  Debug: ON (verbose logging for all endpoints)');
 	}
 
+	// Register this instance in the shared registry for dashboard discovery
+	// Skip registration for the standalone dashboard proxy (default ports) —
+	// it's the viewer, not a participant. Only per-session proxies register.
+	const isDefaultPorts =
+		port === DEFAULT_PROXY_CONFIG.port &&
+		controlPort === DEFAULT_PROXY_CONFIG.controlPort;
+	const instanceId = `${controlPort}`;
+	let stopHeartbeat: (() => void) | undefined;
+	if (!isDefaultPorts) {
+		registerInstance({
+			sessionId: instanceId,
+			port,
+			controlPort,
+			pid: process.pid,
+			startedAt: new Date().toISOString(),
+			provider: state.switched ? state.provider : undefined,
+			model: state.switched ? state.model : undefined,
+		});
+		stopHeartbeat = startHeartbeat(instanceId);
+	}
+
 	// Periodic cleanup of stale sessions
 	const cleanupTimer = setInterval(
 		cleanupStaleSessions,
@@ -191,6 +217,8 @@ async function main() {
 	// Handle graceful shutdown
 	const shutdown = () => {
 		console.error('\n[proxy] Shutting down...');
+		if (stopHeartbeat) stopHeartbeat();
+		if (!isDefaultPorts) deregisterInstance(instanceId);
 		clearInterval(cleanupTimer);
 		resetSwitchState();
 		proxy.stop();

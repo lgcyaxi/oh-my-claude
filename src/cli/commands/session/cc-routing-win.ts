@@ -6,6 +6,9 @@
  */
 
 import { spawnSync, execSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { resolveWeztermBinary } from '../../utils/terminal-detect';
 import type { TerminalBackend } from './cc-routing';
 
@@ -36,14 +39,23 @@ export function spawnProxySwitchedCC(
 	try {
 		if (terminal === 'wezterm') {
 			const wezterm = resolveWeztermBinary();
-			const switchPart =
-				alias !== 'revert'
-					? `oh-my-claude proxy switch ${alias} 2>nul & `
-					: '';
-			const command = `${switchPart}${claudeCmd}`;
+			// Write a temp .cmd batch file to avoid shell quoting issues
+			// when WezTerm forwards args to cmd.exe
+			const batchLines = [
+				'@echo off',
+				...(alias !== 'revert'
+					? [`oh-my-claude proxy switch ${alias} 2>nul`]
+					: []),
+				claudeCmd,
+			];
+			const batchDir = join(tmpdir(), 'omc-cc');
+			mkdirSync(batchDir, { recursive: true });
+			const batchPath = join(batchDir, `cc-switch-${Date.now()}.cmd`);
+			writeFileSync(batchPath, batchLines.join('\r\n') + '\r\n');
+
 			const result = spawnSync(
 				wezterm,
-				['cli', 'spawn', '--cwd', cwd, '--', 'cmd.exe', '/k', command],
+				['cli', 'spawn', '--cwd', cwd, '--', 'cmd.exe', '/d', '/k', 'call', batchPath],
 				{ stdio: 'ignore', windowsHide: true },
 			);
 			return result.status === 0;

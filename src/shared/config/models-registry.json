@@ -13,7 +13,10 @@
 		{
 			"name": "zhipu",
 			"label": "ZhiPu",
-			"models": [{ "id": "glm-5", "label": "ZhiPu GLM-5" }]
+			"models": [
+				{ "id": "glm-5", "label": "ZhiPu GLM-5" },
+				{ "id": "glm-5-turbo", "label": "ZhiPu GLM-5 Turbo" }
+			]
 		},
 		{
 			"name": "zai",
@@ -62,6 +65,22 @@
 					"id": "MiniMax-M2.5-ay",
 					"realId": "MiniMax-M2.5",
 					"label": "MiniMax M2.5 (Aliyun)"
+				}
+			]
+		},
+		{
+			"name": "openrouter",
+			"label": "OpenRouter",
+			"models": [
+				{
+					"id": "openrouter/hunter-alpha",
+					"label": "Hunter Alpha (free)",
+					"note": "1T params, 1M context, agentic"
+				},
+				{
+					"id": "nvidia/nemotron-3-super-120b-a12b:free",
+					"label": "Nemotron 3 Super (free)",
+					"note": "120B hybrid MoE, 1M context"
 				}
 			]
 		},

@@ -88,8 +88,11 @@ export async function handleSwitch(
 		? `Warning: ${body.provider} API key not set. Requests will fallback to native Claude.`
 		: undefined;
 
+	const displayModel = body.model.startsWith(`${body.provider}/`)
+		? body.model
+		: `${body.provider}/${body.model}`;
 	console.error(
-		`[control]${sessionTag} Switched to ${body.provider}/${body.model}` +
+		`[control]${sessionTag} Switched to ${displayModel}` +
 			(warning ? ` [${warning}]` : ''),
 	);
 

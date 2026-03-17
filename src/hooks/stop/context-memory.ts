@@ -237,7 +237,7 @@ function resolveCanonicalRoot(projectRoot: string): string {
 
 function saveSessionMemory(
 	summary: string,
-	providerUsed: string,
+	_providerUsed: string,
 	trigger: 'checkpoint' | 'session-end',
 	logSizeKB: number,
 	projectCwd?: string,
@@ -281,10 +281,11 @@ function saveSessionMemory(
 			? `Session summary ${dateStr}`
 			: `Context checkpoint ${dateStr} (${logSizeKB}KB log)`;
 
-	const tags =
-		trigger === 'session-end'
-			? `[auto-capture, session-end, ${providerUsed}]`
-			: `[auto-capture, context-threshold, ${providerUsed}]`;
+	// Build tags: use concepts as primary tags (meaningful for recall),
+	// keep trigger type as metadata, drop generic boilerplate
+	const triggerTag = trigger === 'session-end' ? 'session-end' : 'context-checkpoint';
+	const tagList = [triggerTag, ...parsed.concepts];
+	const tags = `[${tagList.join(', ')}]`;
 
 	const frontmatterLines = [
 		'---',
@@ -293,9 +294,6 @@ function saveSessionMemory(
 		`tags: ${tags}`,
 	];
 
-	if (parsed.concepts.length > 0) {
-		frontmatterLines.push(`concepts: [${parsed.concepts.join(', ')}]`);
-	}
 	if (parsed.files.length > 0) {
 		frontmatterLines.push(`files: [${parsed.files.join(', ')}]`);
 	}

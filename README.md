@@ -4,15 +4,17 @@
 
 Multi-provider MCP server for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with specialized agent workflows.
 
-Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun, Ollama) via Anthropic-compatible APIs while leveraging Claude Code's native capabilities.
+Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun, Ollama, OpenRouter) via Anthropic-compatible APIs while leveraging Claude Code's native capabilities.
+
+![oh-my-claude Dashboard](docs/assets/dashboard.png)
 
 ## Features
 
-- **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun
+- **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun, OpenRouter
 - **OAuth Authentication** - One-command login for OpenAI Codex, MiniMax, Kimi, and Aliyun — no API keys needed
 - **Concurrent Background Tasks** - Run multiple agents in parallel with configurable limits
 - **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Hephaestus, Librarian, etc.)
-- **Native Coworker Runtimes** - Codex and OpenCode native execution with unified cross-platform viewer (tmux/WezTerm/Terminal), task cancellation/interrupt, TUI toasts, viewer auto-close, and live status. OpenCode agent selection is resolved from the live `/agent` list, including plugin agents exposed by the server. Plus scoped-diff reviews (focused git diff for specific paths), rich approval metadata (decisionOptions, questions, details), and 9 operations: send, review, diff, fork, approve, revert, cancel, status, recent_activity
+- **Native Coworker Runtimes** - Codex and OpenCode with cross-platform viewer, 9 operations, scoped-diff reviews, and live status
 - **Slash Commands** - Quick actions (`/omcx-commit`, `/omcx-implement`) and agent activation (`/omc-sisyphus`, `/omc-plan`)
 - **Real-Time StatusLine** - Live status bar showing active agents, task progress, and concurrency slots
 - **Planning System** - Strategic planning with Prometheus agent and boulder-state tracking
@@ -70,13 +72,19 @@ export KIMI_API_KEY=your-kimi-api-key
 # Aliyun Coding Plan (Qwen models)
 export ALIYUN_API_KEY=your-aliyun-api-key
 
+# OpenRouter (free models: hunter-alpha, nemotron-3-super)
+export OPENROUTER_API_KEY=your-openrouter-api-key
+
 # Ollama (local, no API key needed — auto-discovered)
 # export OLLAMA_HOST=http://localhost:11434  # default, only set if non-standard
 ```
 
 ### OAuth Authentication (Optional)
 
-For providers that support OAuth, you can authenticate without API keys:
+For providers that support OAuth, you can authenticate without API keys (OpenAI, MiniMax, Kimi, Aliyun).
+
+<details>
+<summary>View OAuth setup commands</summary>
 
 ```bash
 # OpenAI (for Codex coworker)
@@ -97,6 +105,8 @@ oh-my-claude auth list
 ```
 
 Once authenticated, use `/omc-switch ds` (DeepSeek), `/omc-switch g5` (ZhiPu GLM-5), or `/omc-switch km` (Kimi) to route requests through these providers.
+
+</details>
 
 ### Setup Official MCP Servers
 
@@ -132,6 +142,11 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 - [Coworker Smoke Tests](docs/guides/coworker-smoke-tests.md)
 
 ## Slash Commands
+
+oh-my-claude provides slash commands for quick actions (`/omcx-*`) and agent activation (`/omc-*`).
+
+<details>
+<summary>View all slash commands</summary>
 
 ### Agent Commands (`/omc-*`)
 
@@ -188,6 +203,8 @@ Ultrawork mode activates **maximum performance execution** with zero-tolerance c
 - Verifies each step before marking complete
 - Boulder state persistence for session continuity
 
+</details>
+
 ## Real-Time StatusLine
 
 oh-my-claude provides a segment-based statusline that shows rich information directly in Claude Code.
@@ -205,6 +222,9 @@ omc [opus-4.5] [dev*↑2] [oh-my-claude] [45% 89k/200k] [79% 7d:4%] [eng-pro] [�
      │          └─ Git branch (* = dirty, ↑2 = ahead)
      └─ Model name
 ```
+
+<details>
+<summary>View segments, presets, and CLI controls</summary>
 
 ### Segments
 
@@ -287,9 +307,14 @@ npx @lgcyaxi/oh-my-claude statusline toggle context off   # Disable context segm
 
 When you have an existing statusline (like CCometixLine), oh-my-claude automatically creates a wrapper that shows both on separate lines.
 
+</details>
+
 ## Output Styles
 
-oh-my-claude ships with built-in output style presets that customize Claude Code's response behavior.
+oh-my-claude ships with built-in output style presets (engineer-professional, agent, concise-coder, teaching, review) that customize Claude Code's response behavior. Switch with `style set <name>`, create custom styles with `style create <name>`.
+
+<details>
+<summary>View all styles and CLI commands</summary>
 
 ### Built-in Presets
 
@@ -343,9 +368,14 @@ description: My custom output style
 Define your style instructions here...
 ```
 
+</details>
+
 ## Memory System
 
 oh-my-claude includes a markdown-first memory system with semantic search that persists knowledge across sessions. Memories are stored as human-readable `.md` files — git-friendly, human-editable, and always rebuildable. A derivative SQLite index provides FTS5 BM25 search + optional vector similarity for context-efficient recall.
+
+<details>
+<summary>View memory tools, timeline, embeddings, and file format</summary>
 
 ### Storage Scopes
 
@@ -515,27 +545,11 @@ Use `useState` and `useEffect` instead of class lifecycle methods.
 
 **Structured Categories:** Memories support taxonomy-based categorization for improved retrieval. Available categories: `architecture`, `convention`, `decision`, `debugging`, `workflow`, `pattern`, `reference`, `session`.
 
+</details>
+
 ## Live Model Switching
 
 oh-my-claude includes an HTTP proxy that enables **in-conversation model switching** — temporarily route Claude Code's API calls to external providers (DeepSeek, ZhiPu, MiniMax) without losing conversation context.
-
-### How It Works
-
-```
-  Claude Code (speaks Anthropic API)
-       │  ANTHROPIC_BASE_URL=http://localhost:18910
-       ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  oh-my-claude Proxy (localhost:18910)                        │
-  │                                                              │
-  │  switched=false?  → Passthrough to Anthropic                 │
-  │  switched=true?   → Format routing:                          │
-  │    ├─ OpenAI     → Responses API (input/instructions)        │
-  │    └─ DS/ZP/MM/KM/AY → Anthropic /v1/messages (passthrough) │
-  └──────────────────────────────────────────────────────────────┘
-```
-
-**Format conversion**: API-key providers (DeepSeek, ZhiPu, MiniMax, Kimi, Aliyun) use Anthropic-compatible `/v1/messages` — no translation needed. OpenAI uses Responses API format (`input` array + `instructions`).
 
 ### Quick Start
 
@@ -580,6 +594,7 @@ For Codex specifically, prefer coworker-style delegation: assign the goal, scope
 | `mm-cn` / `minimax-cn` | MiniMax (CN) | api.minimaxi.com/anthropic |
 | `km` / `kimi` | Kimi | api.kimi.com/coding |
 | `ali` / `aliyun` | Aliyun | coding.dashscope.aliyuncs.com/apps/anthropic |
+| `or` / `openrouter` | OpenRouter | openrouter.ai/api |
 | `ol` / `ollama` | Ollama (local) | localhost:11434 |
 
 > **Windows**: Proxy CLI is fully cross-platform. Health checks use Node's `http` module (no `curl` dependency).
@@ -592,6 +607,9 @@ For Codex specifically, prefer coworker-style delegation: assign the goal, scope
 /omc-switch zp               # Switch to ZhiPu GLM-5
 /omc-switch revert           # Switch back to native Claude
 ```
+
+<details>
+<summary>View all model shortcuts, routing details, and proxy CLI</summary>
 
 **Shortcut aliases:**
 
@@ -606,6 +624,7 @@ For Codex specifically, prefer coworker-style delegation: assign the goal, scope
 | `qc` | aliyun | qwen3-coder-plus |
 | `qn` | aliyun | qwen3-coder-next |
 | `g4` | aliyun | glm-4.7 |
+| `or` | openrouter | openrouter/hunter-alpha |
 | `ol` | ollama | *(auto-discovered)* |
 
 **Via CLI** (session ID supports prefix matching):
@@ -691,9 +710,46 @@ oh-my-claude menubar --build                      # Build release app
 
 The menubar app displays all active sessions, their current models, and allows one-click model switching — same data as `proxy sessions` but with a visual interface. Includes a per-session memory model picker for choosing which AI provider handles memory operations.
 
+</details>
+
+## Web Dashboard
+
+Standalone dashboard at `http://localhost:18920/web/` — auto-starts with `omc cc`, or start manually:
+
+```bash
+omc proxy dashboard       # Start dashboard on port 18920
+omc proxy dashboard --stop  # Stop dashboard
+```
+
+**What you can do:**
+- **Browse sessions** — View all Claude Code conversation history, rename (manual + AI-powered), delete, cleanup empty stubs
+- **Manage memories** — Browse OMC project memories + CC auto-memory, inline editing, delete
+- **Manage preferences** — View, add (global/project-scoped), delete preference rules
+- **AI tools** — Bulk AI session rename, memory operations (compact/daily/summarize/clear) with two-phase Analyze → Execute flow
+- **Switch models per session** — Select any active proxy session, switch its model independently
+- **Manage models** — Add, edit, or remove models from any provider
+- **Monitor proxies** — See active proxy sessions with health, uptime, and request count
+- **Light/dark theme** — Toggle between dark, light, and auto (system preference) modes
+
+<details>
+<summary>Technical details</summary>
+
+- React 19 + Vite + Tailwind CSS SPA, built to `dist/proxy/web/`
+- Standalone dashboard server (`dashboard.ts`, port 18920) — control-only, no proxy port
+- Auto-starts when first `omc cc` session launches
+- 9 pages: Dashboard, Sessions, OMC Mem, Memory, Models, Providers, Switch, Prefs, Settings
+- Per-session model switching via forwarding API (`/api/instances/:controlPort/switch`)
+- Memory/preferences CRUD APIs with AI-powered operations (compact, daily, summarize, clear)
+- All AI features default to zhipu/glm-5, exclude Anthropic (dashboard runs outside CC)
+
+</details>
+
 ## Terminal Configuration
 
-oh-my-claude provides one-command terminal setup optimized for AI coding sessions.
+oh-my-claude provides one-command terminal setup optimized for AI coding sessions (WezTerm and tmux).
+
+<details>
+<summary>View WezTerm and tmux setup details</summary>
 
 ### WezTerm
 
@@ -717,9 +773,14 @@ oh-my-claude tmux-config --show          # Preview without writing
 
 **Key settings:** 50k scrollback, mouse mode, 256-color, zero escape delay, vi copy mode. Cross-platform clipboard auto-detection: `pbcopy` (macOS), `clip.exe` (Windows/WSL), `xclip`/`xsel` (Linux).
 
+</details>
+
 ## Agent Workflows
 
 All 11 agents are unified as native Task tool agents. They use route directive auto-routing via `[omc-route:provider/model]` embedded in their prompts.
+
+<details>
+<summary>View all agents and routing details</summary>
 
 ### Claude Code Built-in Agents (Task Tool)
 
@@ -753,6 +814,8 @@ All task agents run via Claude Code's Task tool. Each agent's prompt contains an
 
 > **5-Priority Routing Chain:** directive(1) → model-driven(2) → session(3) → global(4) → passthrough(5). Route directives embedded in agent prompts take highest priority, followed by model-ID auto-routing, then explicit session/global switches.
 
+</details>
+
 ## Official MCP Servers
 
 The `setup-mcp` command installs these official MCP servers:
@@ -768,6 +831,9 @@ The `setup-mcp` command installs these official MCP servers:
 
 ## CLI Commands
 
+<details>
+<summary>View full CLI reference</summary>
+
 ```bash
 # Installation
 npx @lgcyaxi/oh-my-claude install              # Install oh-my-claude
@@ -778,6 +844,11 @@ npx @lgcyaxi/oh-my-claude install --skip-mcp   # Skip MCP server setup
 npx @lgcyaxi/oh-my-claude update               # Update to latest version
 npx @lgcyaxi/oh-my-claude update --check       # Check for updates only
 npx @lgcyaxi/oh-my-claude update --force       # Force reinstall latest
+
+# Auto-Update Check (automatic for all commands)
+# The CLI automatically checks for updates and displays a banner if a newer version is available
+# Suppress the check with: NO_UPDATE_CHECK=1 npx @lgcyaxi/oh-my-claude <command>
+# Note: Update check is skipped automatically for `update`, `install`, `uninstall` commands
 
 # Status & Diagnostics
 npx @lgcyaxi/oh-my-claude status               # Check installation status
@@ -849,9 +920,14 @@ npx @lgcyaxi/oh-my-claude menubar --dev            # Run in development mode
 npx @lgcyaxi/oh-my-claude menubar --build          # Build release app
 ```
 
+</details>
+
 ## Configuration
 
 Configuration file: `~/.claude/oh-my-claude.json`
+
+<details>
+<summary>View full configuration example</summary>
 
 ```json
 {
@@ -948,7 +1024,12 @@ Configure memory system behavior:
 | `autoSaveThreshold` | Context % to trigger auto-save (0 = disabled) | `75` |
 | `aiProviderPriority` | Provider order for AI-powered features | `["zhipu", "minimax", "deepseek"]` |
 
+</details>
+
 ## Architecture
+
+<details>
+<summary>View architecture diagram and execution modes</summary>
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -981,7 +1062,12 @@ Configure memory system behavior:
 - **MCP Server (async)**: External API agents run via MCP for parallel background execution
 - **Proxy (intercept)**: HTTP proxy intercepts Claude Code's native API calls for live model switching
 
+</details>
+
 ## Development
+
+<details>
+<summary>View development setup</summary>
 
 ```bash
 # Install dependencies
@@ -1000,7 +1086,12 @@ bun test
 bun run install-local
 ```
 
+</details>
+
 ## Troubleshooting
+
+<details>
+<summary>View common issues and solutions</summary>
 
 ### "Provider not configured"
 
@@ -1026,6 +1117,8 @@ npx @lgcyaxi/oh-my-claude install --force
 ```bash
 npx @lgcyaxi/oh-my-claude doctor --detail
 ```
+
+</details>
 
 ## Contributing
 

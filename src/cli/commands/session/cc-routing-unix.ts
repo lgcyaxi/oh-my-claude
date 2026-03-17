@@ -1,7 +1,7 @@
 /**
  * CC command — Unix routing (macOS/Linux)
  *
- * Terminal detection: $TMUX → tmux list-sessions → macOS Terminal.app fallback
+ * Terminal detection: $TMUX → tmux -V (installed check) → macOS Terminal.app fallback
  * Proxy-switched CC launch: tmux new-window / Terminal.app via osascript
  */
 
@@ -13,7 +13,7 @@ export function detectTerminalBackend(): TerminalBackend {
 	if (process.env.TMUX) return 'tmux';
 
 	try {
-		execSync('tmux list-sessions', { stdio: 'ignore', windowsHide: true });
+		execSync('tmux -V', { stdio: 'ignore', windowsHide: true });
 		return 'tmux';
 	} catch {}
 

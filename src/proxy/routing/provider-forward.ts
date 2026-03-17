@@ -26,13 +26,20 @@ export async function forwardToProvider(
 	providerType?: string,
 ): Promise<Response> {
 	if (!isOpenAIFormat) {
-		// Strip anthropic-beta header for all switched providers — third-party APIs
-		// reject unknown headers like interleaved-thinking-2025-05-14
 		const cleanReq = new Request(req, {
 			headers: new Headers(req.headers),
 		});
-		cleanReq.headers.delete('anthropic-beta');
-		return forwardToUpstream(cleanReq, targetUrl, apiKey, body);
+
+		// Ollama natively supports Anthropic thinking protocol — keep the header.
+		// All other providers reject unknown headers like interleaved-thinking-2025-05-14.
+		if (provider !== 'ollama') {
+			cleanReq.headers.delete('anthropic-beta');
+		}
+
+		// OpenRouter's Anthropic-compatible endpoint requires Bearer auth
+		// (x-api-key forces "anthropic" provider, which excludes free models)
+		const useBearerAuth = provider === 'openrouter';
+		return forwardToUpstream(cleanReq, targetUrl, apiKey, body, false, undefined, useBearerAuth);
 	}
 
 	// OpenAI-format: use Bearer token auth

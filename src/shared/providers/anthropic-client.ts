@@ -31,8 +31,9 @@ interface AnthropicRequest {
 }
 
 interface AnthropicContentBlock {
-  type: "text";
-  text: string;
+  type: "text" | "thinking";
+  text?: string;
+  thinking?: string;
 }
 
 interface AnthropicUsage {
@@ -100,8 +101,13 @@ export class AnthropicCompatibleClient implements ProviderClient {
    */
   private convertResponse(response: AnthropicResponse): ChatCompletionResponse {
     const text = response.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
+      .filter((block) => block.type === "text" && block.text)
+      .map((block) => block.text!)
+      .join("");
+
+    const thinking = response.content
+      .filter((block) => block.type === "thinking" && block.thinking)
+      .map((block) => block.thinking!)
       .join("");
 
     return {
@@ -114,7 +120,7 @@ export class AnthropicCompatibleClient implements ProviderClient {
           index: 0,
           message: {
             role: "assistant",
-            content: text,
+            content: text || thinking,  // fallback to thinking if no text
           },
           finish_reason: response.stop_reason ?? "stop",
         },
@@ -124,6 +130,7 @@ export class AnthropicCompatibleClient implements ProviderClient {
         completion_tokens: response.usage.output_tokens,
         total_tokens: response.usage.input_tokens + response.usage.output_tokens,
       },
+      thinking: thinking || undefined,
     };
   }
 

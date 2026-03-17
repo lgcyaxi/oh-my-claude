@@ -237,11 +237,14 @@ pub async fn refresh_tray(app: &tauri::AppHandle) -> Result<(), String> {
     } else {
         for session in &sessions {
             let current_model = if session.switched {
-                format!(
-                    "{}/{}",
-                    session.provider.as_deref().unwrap_or("?"),
-                    session.model.as_deref().unwrap_or("?"),
-                )
+                let provider = session.provider.as_deref().unwrap_or("?");
+                let model = session.model.as_deref().unwrap_or("?");
+                // Avoid double prefix: model may already contain provider/ (e.g. "openrouter/hunter-alpha")
+                if model.starts_with(&format!("{}/", provider)) {
+                    model.to_string()
+                } else {
+                    format!("{}/{}", provider, model)
+                }
             } else {
                 "Claude (native)".to_string()
             };

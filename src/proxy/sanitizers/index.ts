@@ -10,6 +10,8 @@
  *   Reasoner model requires thinking blocks in every assistant message.
  * - Kimi: strips thinking blocks and unsupported content types from
  *   conversation history (needed when switching mid-session via omc-switch).
+ * - OpenRouter: truncates metadata.user_id, strips thinking blocks,
+ *   caps tool definitions (free/small models can't handle 90+ tools).
  */
 
 import {
@@ -18,6 +20,7 @@ import {
 	stripUnsupportedContentTypes,
 } from './types';
 import { sanitizeDeepSeekChat, sanitizeDeepSeekReasoner } from './deepseek';
+import { sanitizeOpenRouter } from './openrouter';
 
 /**
  * Sanitize a request body for the target provider.
@@ -45,6 +48,15 @@ export function sanitizeRequestBody(
 
 		case 'kimi':
 			sanitizeAnthropicCompatible(body, 'kimi');
+			return;
+
+		case 'ollama':
+			// Ollama supports thinking natively — only strip unsupported content types
+			stripUnsupportedContentTypes(body, true);
+			return;
+
+		case 'openrouter':
+			sanitizeOpenRouter(body);
 			return;
 
 		default:

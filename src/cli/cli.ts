@@ -27,8 +27,10 @@ import { registerToolsCommand } from "./commands/tools/tools";
 import { registerManageCommand } from "./commands/manage/manage";
 // system
 import { registerMenubarCommand } from "./commands/system/menubar";
+// update check
+import { printUpdateBannerIfCached, scheduleUpdateCheck } from "./utils/update-check";
 
-const VERSION = "2.2.0";
+const VERSION = "2.2.1-beta.13";
 
 // When invoked as `omc` with no args: show version + hint (brief, not full help).
 // When invoked as `oh-my-claude` with no args: Commander default (show help).
@@ -66,5 +68,13 @@ registerMenubarCommand(program);     // menubar
 // Group 3: Tools + manage
 registerToolsCommand(program);       // tools + install, mcp, check
 registerManageCommand(program);      // manage (m) + pref, memory, config, statusline, style, ollama, cleanup, tc
+
+// Auto-update check — runs BEFORE parse so async commands don't prevent it
+const subcommand = process.argv[2] ?? '';
+const suppressUpdate = ['update', 'install', 'uninstall'].includes(subcommand) || process.env.NO_UPDATE_CHECK === '1';
+if (!suppressUpdate) {
+  printUpdateBannerIfCached();
+  scheduleUpdateCheck(VERSION);
+}
 
 program.parse();

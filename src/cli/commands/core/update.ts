@@ -121,6 +121,20 @@ export function registerUpdateCommand(program: Command) {
 
 					if (!existsSync(join(globalPkgDir, 'dist', 'cli.js'))) {
 						console.log(
+							`${dimText('Installing workspace dependencies...')}`,
+						);
+						try {
+							execSync('bun install', {
+								cwd: globalPkgDir,
+								stdio: 'inherit',
+								timeout: 120000,
+							});
+						} catch {
+							// bun install may fail on some systems — build will
+							// still succeed if only root deps are needed
+						}
+
+						console.log(
 							`${dimText('Building from source (dist/ not found)...')}`,
 						);
 						try {

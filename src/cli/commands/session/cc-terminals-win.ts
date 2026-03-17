@@ -292,16 +292,24 @@ export function launchInWezterm(
 	const wezterm = resolveWeztermBinaryImpl();
 	const insideWezTerm = !!process.env.WEZTERM_PANE;
 
-	const envParts = [
+	// Write a temp .cmd batch file to avoid shell quoting/escaping issues
+	// when WezTerm forwards args to cmd.exe (especially with && chains).
+	const killProxy = proxyPid
+		? `taskkill /F /PID ${proxyPid} >nul 2>&1\n`
+		: '';
+	const batchLines = [
+		'@echo off',
 		`set ANTHROPIC_BASE_URL=${baseUrl}`,
 		`set OMC_PROXY_CONTROL_PORT=${controlPort}`,
 		'set CLAUDECODE=',
 		...(debug ? ['set OMC_DEBUG=1'] : []),
-	];
-	const killProxy = proxyPid
-		? ` && taskkill /F /PID ${proxyPid} >nul 2>&1`
-		: '';
-	const shellCmd = `${envParts.join(' && ')} && claude${claudeArgsStr}${killProxy}`;
+		`claude${claudeArgsStr}`,
+		killProxy,
+	].filter(Boolean);
+	const batchDir = join(tmpdir(), 'omc-cc');
+	mkdirSync(batchDir, { recursive: true });
+	const batchPath = join(batchDir, `cc-launch-${Date.now()}.cmd`);
+	writeFileSync(batchPath, batchLines.join('\r\n') + '\r\n');
 
 	if (insideWezTerm && isWezTermMuxAvailableImpl()) {
 		try {
@@ -316,7 +324,8 @@ export function launchInWezterm(
 					'cmd.exe',
 					'/d',
 					'/k',
-					shellCmd,
+					'call',
+					batchPath,
 				],
 				{
 					encoding: 'utf-8',
@@ -343,7 +352,8 @@ export function launchInWezterm(
 				'cmd.exe',
 				'/d',
 				'/k',
-				shellCmd,
+				'call',
+				batchPath,
 			],
 			{ detached: true, stdio: 'ignore', windowsHide: true },
 		);

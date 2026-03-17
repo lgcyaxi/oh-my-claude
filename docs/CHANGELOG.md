@@ -2,6 +2,17 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.1](changelog/v2.2.1.md) - 2026-03-16
+
+### Highlights
+
+- **Web Dashboard** — Full-featured React 19 + Vite + Tailwind SPA at `localhost:18920/web/` with 9 pages: sessions, memory, preferences, models, providers, switch, settings — plus AI-powered tools and light/dark theme
+- **OpenRouter Provider** — Free models (Hunter Alpha, Nemotron 3 Super) via native Anthropic-compatible API with sanitization
+- **Ollama Native Thinking** — Extended thinking protocol support with proper thinking block handling and dashboard forwarding
+- **Auto-Update Check** — Non-blocking CLI update notifications with 24-hour cache
+- **Code Splitting** — Modularized proxy control modules (sessions → 6 modules, memory → 8 modules)
+- **12 Bug Fixes** — Dashboard project discovery, MCP discovery on Linux, tmux detection, AI rename, dashboard favicon, menubar build, YAML parsing, statusline 1M context, OpenRouter stability, WezTerm Git Bash
+
 ## [2.2.0](changelog/v2.2.0.md) - 2026-03-12
 
 ### Highlights

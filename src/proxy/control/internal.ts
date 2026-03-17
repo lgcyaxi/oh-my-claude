@@ -264,6 +264,7 @@ export async function handleInternalComplete(
 		return jsonResponse(
 			{
 				content,
+				thinking: response.thinking,
 				model: resolved.model,
 				provider: resolved.provider,
 				usage: response.usage,

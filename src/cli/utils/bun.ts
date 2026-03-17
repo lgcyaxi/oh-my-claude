@@ -10,6 +10,14 @@ export function resolveBunPath(): string {
 	const isWin = process.platform === 'win32';
 	const candidates: string[] = [];
 
+	// Check common Bun install location on Unix
+	if (!isWin) {
+		const home = process.env.HOME;
+		if (home) {
+			candidates.push(join(home, '.bun', 'bin', 'bun'));
+		}
+	}
+
 	if (isWin) {
 		if (process.env.USERPROFILE) {
 			candidates.push(join(process.env.USERPROFILE, '.bun', 'bin', 'bun.exe'));

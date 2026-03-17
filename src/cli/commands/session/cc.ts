@@ -8,7 +8,7 @@
  * OMC Shortcuts (single dash to differentiate from Claude's double-dash flags):
  *   -r         → --resume (resume last conversation)
  *   -skip      → --dangerously-skip-permissions
- *   -a / -auto → --enable-auto-mode (auto accept permissions)
+ *   -a / -auto → --permission-mode auto (auto accept permissions)
  *   -wt        → --worktree (isolated git worktree session)
  *   -rc        → launch `claude remote-control` with proxy (mobile access)
  *   -debug     → enable debug mode (visible proxy + logs)
@@ -22,7 +22,7 @@ import type { Command } from 'commander';
 import { execSync, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createFormatters } from '../../utils/colors';
-import { findFreePorts } from '../../utils/proxy-lifecycle';
+import { findFreePorts, ensureDashboard } from '../../utils/proxy-lifecycle';
 import {
 	readProxyRegistry,
 	unregisterProxySession,
@@ -98,7 +98,7 @@ export function registerCcCommand(program: Command) {
 OMC Shortcuts (single dash):
   -r         Resume last conversation (→ --resume)
   -skip      Dangerously skip permissions (→ --dangerously-skip-permissions)
-  -a / -auto Enable auto mode (→ --enable-auto-mode)
+  -a / -auto Enable auto mode (→ --permission-mode auto)
   -wt        Create git worktree for isolated session (→ --worktree)
   -rc        Launch Remote Control mode (mobile access via claude.ai/code)
   -debug     Enable debug mode (visible proxy + logs)
@@ -294,6 +294,12 @@ Examples:
 		} catch {
 			console.log(fail('Failed to allocate ports for session proxy.'));
 			process.exit(1);
+		}
+
+		// Auto-start dashboard server on port 18920 if not running
+		const dashboardUrl = await ensureDashboard();
+		if (dashboardUrl) {
+			console.log(dimText(`  Dashboard: ${dashboardUrl}`));
 		}
 
 		const debug = !!options.debug || debugMode;

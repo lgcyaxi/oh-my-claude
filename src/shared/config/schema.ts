@@ -221,6 +221,11 @@ export const OhMyClaudeConfigSchema = z.object({
 			base_url: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
 			api_key_env: 'ALIYUN_API_KEY',
 		},
+		openrouter: {
+			type: 'anthropic-compatible',
+			base_url: 'https://openrouter.ai/api',
+			api_key_env: 'OPENROUTER_API_KEY',
+		},
 		ollama: {
 			type: 'anthropic-compatible',
 			base_url: 'http://localhost:11434',

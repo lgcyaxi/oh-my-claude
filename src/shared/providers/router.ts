@@ -57,10 +57,11 @@ function getProviderClient(
 
     case "anthropic-compatible": {
       // Create Anthropic-compatible client from config
+      // Ollama doesn't need a real API key — use "ollama" as dummy
       const apiKey = details.apiKeyEnv ? process.env[details.apiKeyEnv] ?? "" : "";
       client = new AnthropicCompatibleClient(providerName, {
         baseUrl: details.baseUrl ?? "",
-        apiKey,
+        apiKey: apiKey || (providerName === "ollama" ? "ollama" : ""),
       });
       break;
     }
@@ -68,10 +69,11 @@ function getProviderClient(
     case "openai-compatible":
     default: {
       // Create OpenAI-compatible client from config
+      // Ollama doesn't need a real API key — use "ollama" as dummy
       const apiKey = details.apiKeyEnv ? process.env[details.apiKeyEnv] ?? "" : "";
       client = new OpenAICompatibleClient(providerName, {
         baseUrl: details.baseUrl ?? "",
-        apiKey,
+        apiKey: apiKey || (providerName === "ollama" ? "ollama" : ""),
       });
       break;
     }

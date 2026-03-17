@@ -119,6 +119,10 @@ const EXTERNAL_MODEL_DISPLAY: Record<string, string> = {
 	'gpt-5.2': 'GPT-5.2',
 	'gpt-5.3-codex': 'GPT-5.3 Codex',
 	'o3-mini': 'o3-mini',
+	// OpenRouter
+	'openrouter/hunter-alpha': 'Hunter Alpha',
+	'nvidia/nemotron-3-super-120b-a12b:free': 'Nemotron 120B',
+	'openrouter/nvidia/nemotron-3-super-120b-a12b:free': 'Nemotron 120B',
 };
 
 /**
@@ -203,7 +207,9 @@ async function collectModelData(
 			primary: display,
 			metadata: {
 				modelId: switchState.model,
-				displayName: `${switchState.provider}/${switchState.model}`,
+				displayName: switchState.model.startsWith(`${switchState.provider}/`)
+				? switchState.model
+				: `${switchState.provider}/${switchState.model}`,
 				proxySwitched: 'true',
 			},
 			color: 'warning', // Yellow to indicate switched state
