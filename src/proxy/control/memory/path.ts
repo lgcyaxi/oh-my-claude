@@ -35,6 +35,81 @@ export function resolveOmcProjectMemoryPath(id: string): string | null {
 	return join(projectRoot, '.claude', 'mem', subdir, `${noteId}.md`);
 }
 
+/**
+ * Try to extract cwd from a JSONL file by scanning first N lines.
+ * Returns empty string if not found.
+ */
+async function extractCwdFromJsonl(filePath: string): Promise<string> {
+	const rl = createInterface({
+		input: createReadStream(filePath, { encoding: 'utf-8' }),
+		crlfDelay: Infinity,
+	});
+
+	let cwd = '';
+	let lines = 0;
+	for await (const line of rl) {
+		if (!line.trim()) continue;
+		lines++;
+		try {
+			const entry = JSON.parse(line);
+			if (entry.cwd) {
+				cwd = entry.cwd;
+				rl.close();
+				break;
+			}
+		} catch {
+			// skip
+		}
+		if (lines >= 200) {
+			rl.close();
+			break;
+		}
+	}
+	return cwd;
+}
+
+/**
+ * Find a JSONL file in a project directory.
+ * Searches: root-level → UUID subdirectories → UUID/subagents/
+ */
+async function findJsonlFile(projDir: string): Promise<string | null> {
+	const files = await readdir(projDir).catch(() => [] as string[]);
+
+	// Check root-level jsonl files first
+	const rootJsonl = files.find((n: string) => n.endsWith('.jsonl'));
+	if (rootJsonl) return join(projDir, rootJsonl);
+
+	// Check inside UUID subdirectories
+	for (const name of files) {
+		if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) continue;
+		const subDir = join(projDir, name);
+		const subFiles = await readdir(subDir).catch(() => [] as string[]);
+
+		// Direct jsonl in UUID dir
+		const jsonl = subFiles.find((n: string) => n.endsWith('.jsonl'));
+		if (jsonl) return join(subDir, jsonl);
+
+		// Check subagents/ directory (newer Claude Code format)
+		if (subFiles.includes('subagents')) {
+			const agentFiles = await readdir(join(subDir, 'subagents')).catch(() => [] as string[]);
+			const agentJsonl = agentFiles.find((n: string) => n.endsWith('.jsonl'));
+			if (agentJsonl) return join(subDir, 'subagents', agentJsonl);
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Resolve project cwd from a Claude project folder.
+ * Strategy: extract cwd from JSONL session files (reliable, handles dashes in names).
+ */
+async function resolveProjectCwd(projDir: string): Promise<string> {
+	const jsonlPath = await findJsonlFile(projDir);
+	if (!jsonlPath) return '';
+	return extractCwdFromJsonl(jsonlPath);
+}
+
 /** omc project-scoped memory directories: <projectRoot>/.claude/mem/notes/ */
 export async function findOmcProjectMemDirs(): Promise<
 	Array<{ dir: string; projectName: string; projectPath: string }>
@@ -48,42 +123,9 @@ export async function findOmcProjectMemDirs(): Promise<
 		const folders = await readdir(PROJECTS_DIR, { withFileTypes: true });
 		for (const f of folders) {
 			if (!f.isDirectory()) continue;
-			// Read cwd from first JSONL to get project root
 			const projDir = join(PROJECTS_DIR, f.name);
-			const files = await readdir(projDir).catch(() => []);
-			const jsonl = files.find((n: string) => n.endsWith('.jsonl'));
-			if (!jsonl) continue;
 
-			// Extract cwd from JSONL — scan up to 200 lines
-			// (file-history-snapshot entries with cwd:null can dominate first 10+ lines)
-			const rl = createInterface({
-				input: createReadStream(join(projDir, jsonl), {
-					encoding: 'utf-8',
-				}),
-				crlfDelay: Infinity,
-			});
-
-			let cwd = '';
-			let lines = 0;
-			for await (const line of rl) {
-				if (!line.trim()) continue;
-				lines++;
-				try {
-					const entry = JSON.parse(line);
-					if (entry.cwd) {
-						cwd = entry.cwd;
-						rl.close();
-						break;
-					}
-				} catch {
-					// skip
-				}
-				if (lines >= 200) {
-					rl.close();
-					break;
-				}
-			}
-
+			const cwd = await resolveProjectCwd(projDir);
 			if (!cwd) continue;
 
 			const memBaseDir = join(cwd, '.claude', 'mem');
@@ -117,7 +159,12 @@ export function resolveMemoryPath(
 	id: string,
 ): string | null {
 	if (scope === 'global') {
-		return join(GLOBAL_MEMORY_DIR, 'notes', `${id}.md`);
+		// Check notes/ first, then sessions/
+		const notesPath = join(GLOBAL_MEMORY_DIR, 'notes', `${id}.md`);
+		if (existsSync(notesPath)) return notesPath;
+		const sessionsPath = join(GLOBAL_MEMORY_DIR, 'sessions', `${id}.md`);
+		if (existsSync(sessionsPath)) return sessionsPath;
+		return notesPath; // default to notes/ for new files
 	}
 
 	if (scope === 'omc-project') {

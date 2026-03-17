@@ -55,6 +55,66 @@ async function writePrefs(
 	await writeFile(filePath, JSON.stringify(prefs, null, 2), 'utf-8');
 }
 
+/**
+ * Extract cwd from a JSONL file by scanning first N lines.
+ */
+async function extractCwdFromJsonl(filePath: string): Promise<string> {
+	const rl = createInterface({
+		input: createReadStream(filePath, { encoding: 'utf-8' }),
+		crlfDelay: Infinity,
+	});
+
+	let cwd = '';
+	let lines = 0;
+	for await (const line of rl) {
+		if (!line.trim()) continue;
+		lines++;
+		try {
+			const entry = JSON.parse(line);
+			if (entry.cwd) {
+				cwd = entry.cwd;
+				rl.close();
+				break;
+			}
+		} catch {
+			// skip
+		}
+		if (lines >= 200) {
+			rl.close();
+			break;
+		}
+	}
+	return cwd;
+}
+
+/**
+ * Find a JSONL file in a project directory.
+ * Searches: root-level → UUID subdirectories → UUID/subagents/
+ */
+async function findJsonlFile(projDir: string): Promise<string | null> {
+	const files = await readdir(projDir).catch(() => [] as string[]);
+
+	const rootJsonl = files.find((n: string) => n.endsWith('.jsonl'));
+	if (rootJsonl) return join(projDir, rootJsonl);
+
+	for (const name of files) {
+		if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)) continue;
+		const subDir = join(projDir, name);
+		const subFiles = await readdir(subDir).catch(() => [] as string[]);
+
+		const jsonl = subFiles.find((n: string) => n.endsWith('.jsonl'));
+		if (jsonl) return join(subDir, jsonl);
+
+		if (subFiles.includes('subagents')) {
+			const agentFiles = await readdir(join(subDir, 'subagents')).catch(() => [] as string[]);
+			const agentJsonl = agentFiles.find((n: string) => n.endsWith('.jsonl'));
+			if (agentJsonl) return join(subDir, 'subagents', agentJsonl);
+		}
+	}
+
+	return null;
+}
+
 /** Find project roots that have .claude/preferences.json */
 async function findProjectPrefs(): Promise<
 	Array<{ projectName: string; projectPath: string; filePath: string }>
@@ -70,40 +130,13 @@ async function findProjectPrefs(): Promise<
 		for (const f of folders) {
 			if (!f.isDirectory()) continue;
 			const projDir = join(PROJECTS_DIR, f.name);
-			const files = await readdir(projDir).catch(() => []);
-			const jsonl = files.find((n: string) => n.endsWith('.jsonl'));
-			if (!jsonl) continue;
 
-			// Quick extract cwd
-			const rl = createInterface({
-				input: createReadStream(join(projDir, jsonl), {
-					encoding: 'utf-8',
-				}),
-				crlfDelay: Infinity,
-			});
+			const jsonlPath = await findJsonlFile(projDir);
+			if (!jsonlPath) continue;
 
-			let cwd = '';
-			let lines = 0;
-			for await (const line of rl) {
-				if (!line.trim()) continue;
-				lines++;
-				try {
-					const entry = JSON.parse(line);
-					if (entry.cwd) {
-						cwd = entry.cwd;
-						rl.close();
-						break;
-					}
-				} catch {
-					// skip
-				}
-				if (lines >= 200) {
-					rl.close();
-					break;
-				}
-			}
-
+			const cwd = await extractCwdFromJsonl(jsonlPath);
 			if (!cwd) continue;
+
 			const prefsFile = join(cwd, '.claude', 'preferences.json');
 			if (existsSync(prefsFile)) {
 				const segments = cwd.replace(/\\/g, '/').split('/');

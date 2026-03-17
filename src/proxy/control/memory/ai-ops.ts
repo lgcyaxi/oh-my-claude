@@ -29,7 +29,7 @@ export async function callAI(
 				temperature: 0.3,
 				messages: [{ role: 'user', content: prompt }],
 			}),
-			signal: AbortSignal.timeout(60000),
+			signal: AbortSignal.timeout(180000),
 		},
 	);
 

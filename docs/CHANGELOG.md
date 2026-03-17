@@ -2,6 +2,14 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.2](changelog/v2.2.2.md) - 2026-03-17
+
+### Bug Fixes
+
+- **Dashboard Project Discovery** — Complete rewrite of `cwd` resolution: JSONL search now checks root-level, UUID subdirectories, and `subagents/` folders. Removed broken folder name decoding that failed on dashed project names.
+- **Global Memory Delete 404** — Path resolution now checks both `notes/` and `sessions/` subdirectories for global memories
+- **Dashboard AI Operations Timeout** — Increased from 60s to 180s to handle large session memories without aborting
+
 ## [2.2.1](changelog/v2.2.1.md) - 2026-03-16
 
 ### Highlights
