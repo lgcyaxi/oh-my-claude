@@ -54,6 +54,7 @@ function getModelDisplay(model: string): string {
 		'deepseek-reasoner': 'DeepSeek R',
 		'deepseek-chat': 'DeepSeek Chat',
 		// ZhiPu / Z.AI
+		'glm-5.1': 'GLM-5.1',
 		'glm-5': 'GLM-5',
 		'GLM-5': 'GLM-5',
 		'glm-4.7': 'GLM-4.7',

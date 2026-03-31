@@ -239,7 +239,7 @@ pub async fn refresh_tray(app: &tauri::AppHandle) -> Result<(), String> {
             let current_model = if session.switched {
                 let provider = session.provider.as_deref().unwrap_or("?");
                 let model = session.model.as_deref().unwrap_or("?");
-                // Avoid double prefix: model may already contain provider/ (e.g. "openrouter/hunter-alpha")
+                // Avoid double prefix: model may already contain provider/ (e.g. "openrouter/nvidia/...")
                 if model.starts_with(&format!("{}/", provider)) {
                     model.to_string()
                 } else {

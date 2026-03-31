@@ -1,7 +1,6 @@
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { which } from './codex/viewer-utils';
 
 export interface ViewerHandle {
 	attached: boolean;
@@ -26,6 +25,16 @@ function shellQuote(value: string): string {
 function withCwd(command: string, cwd?: string): string {
 	if (!cwd) return command;
 	return `cd ${shellQuote(cwd)} && ${command}`;
+}
+
+function which(command: string): string | null {
+	try {
+		const result = spawnSync('which', [command], { encoding: 'utf-8' });
+		if (result.status === 0 && result.stdout) {
+			return result.stdout.trim();
+		}
+	} catch {}
+	return null;
 }
 
 let cachedNativeBash: string | null | undefined; // undefined = not yet resolved

@@ -74,15 +74,6 @@ const CLI_TOOLS: CliTool[] = [
     installCmd: "npm install -g oh-my-opencode",
   },
   {
-    name: "Codex CLI",
-    value: "codex",
-    description: "OpenAI Codex command-line tool",
-    binary: "codex",
-    installCmd: "npm install -g @openai/codex",
-    fallbackCmd: "pip install openai-codex",
-    fallbackNote: "npm failed, trying pip",
-  },
-  {
     name: "WezTerm",
     value: "wezterm",
     description: "GPU-accelerated terminal multiplexer for split-pane OMC workflows",

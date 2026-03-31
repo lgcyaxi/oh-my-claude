@@ -2,10 +2,26 @@
 
 All notable changes to oh-my-claude are documented here.
 
-## [2.2.2](changelog/v2.2.2.md) - 2026-03-17
+## [2.2.3](changelog/v2.2.3.md) - 2026-03-31
+
+### Highlights
+
+- **Official Codex Plugin** — Replaced ~500+ files of custom Codex ACP with the official `openai/codex-plugin-cc` plugin. Auto-installed during `omc install` with review gate enabled by default.
+- **Dashboard Provider Usage** — Real-time balance/quota display for all configured providers (DeepSeek, ZhiPu, MiniMax, Kimi, Aliyun) with color-coded status cards.
+- **Statusline Auth Visibility** — Provider usage segments now show `!auth` when credentials are expired instead of silently hiding. Loads `~/.zshrc.api` for env var inheritance.
+- **MiniMax M2.7 & GLM-5.1** — New model support across all providers.
+- **Sisyphus Codex Audit** — Mandatory `/codex:rescue` audit before reporting completion when code was changed.
+- **11 Bug Fixes** — EMFILE on Windows, dashboard type filters, doctor embeddings, menubar path, Aliyun auth detection, Kimi API-key fallback, CLI version drift, installer semver sort.
+
+## [2.2.2](changelog/v2.2.2.md) - 2026-03-18
+
+### Features
+
+- **MiniMax M2.7 Model Support** — Added MiniMax-M2.7 across all providers (MiniMax, MiniMax CN, Aliyun). Agent defaults updated to use M2.7 for documentation and writing tasks.
 
 ### Bug Fixes
 
+- **Menubar Search Path Order** — Fixed `omc menubar` failing with "missing tauri.conf.json". Installed version now checked first before source directories.
 - **Dashboard Project Discovery** — Complete rewrite of `cwd` resolution: JSONL search now checks root-level, UUID subdirectories, and `subagents/` folders. Removed broken folder name decoding that failed on dashed project names.
 - **Global Memory Delete 404** — Path resolution now checks both `notes/` and `sessions/` subdirectories for global memories
 - **Dashboard AI Operations Timeout** — Increased from 60s to 180s to handle large session memories without aborting

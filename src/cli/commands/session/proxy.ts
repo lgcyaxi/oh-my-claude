@@ -250,7 +250,8 @@ export function registerProxyCommand(program: Command) {
       const availableModels = [
         { model: "deepseek-reasoner", alias: "ds-r", provider: "deepseek", label: "DeepSeek Reasoner" },
         { model: "deepseek-chat", alias: "ds-c", provider: "deepseek", label: "DeepSeek Chat" },
-        { model: "glm-5", alias: "zp", provider: "zhipu", label: "GLM-5" },
+        { model: "glm-5.1", alias: "zp", provider: "zhipu", label: "GLM-5.1" },
+        { model: "glm-5", alias: "zp5", provider: "zhipu", label: "GLM-5" },
         { model: "MiniMax-M2.5", alias: "mm", provider: "minimax", label: "MiniMax M2.5" },
         { model: "MiniMax-M2.5", alias: "mn", provider: "minimax", label: "MiniMax M2.5" },
         { model: "MiniMax-M2.5", alias: "mm-cn", provider: "minimax-cn", label: "MiniMax M2.5 CN" },

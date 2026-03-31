@@ -225,11 +225,12 @@ export function registerMenubarCommand(program: Command) {
       const { c, ok, fail, dimText } = createFormatters();
 
       const currentDir = dirname(fileURLToPath(import.meta.url));
+      // Search order: installed version first (complete), then source directories (dev)
       const searchPaths = [
+        join(INSTALL_DIR, "apps", "menubar"),
         join(currentDir, "..", "..", "apps", "menubar"),
         join(currentDir, "..", "..", "..", "..", "apps", "menubar"),
         join(currentDir, "..", "..", "..", "apps", "menubar"),
-        join(INSTALL_DIR, "apps", "menubar"),
       ];
 
       let menubarDir: string | null = null;

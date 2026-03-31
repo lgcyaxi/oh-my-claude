@@ -30,7 +30,25 @@ import { registerMenubarCommand } from "./commands/system/menubar";
 // update check
 import { printUpdateBannerIfCached, scheduleUpdateCheck } from "./utils/update-check";
 
-const VERSION = "2.2.1-beta.13";
+// Load version from package.json — single source of truth
+const VERSION = (() => {
+  try {
+    const { join, dirname } = require("node:path");
+    const { readFileSync } = require("node:fs");
+    // Try installed location first (~/.claude/oh-my-claude/package.json)
+    const candidates = [
+      join(dirname(dirname(__dirname)), "package.json"), // dist/cli/cli.js → package.json
+      join(dirname(__dirname), "package.json"), // dist/cli.js → package.json
+    ];
+    for (const p of candidates) {
+      try {
+        const pkg = JSON.parse(readFileSync(p, "utf-8"));
+        if (pkg.version) return pkg.version as string;
+      } catch { /* try next */ }
+    }
+  } catch { /* fallback */ }
+  return "2.2.3"; // fallback if package.json unreadable
+})();
 
 // When invoked as `omc` with no args: show version + hint (brief, not full help).
 // When invoked as `oh-my-claude` with no args: Commander default (show help).

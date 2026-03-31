@@ -30,14 +30,14 @@ const PROVIDER_INFO_ENTRIES: Record<string, ProviderInfo> = {
 	},
 	zhipu: {
 		provider: 'zhipu',
-		defaultModel: 'glm-5',
+		defaultModel: 'glm-5.1',
 		name: 'ZhiPu',
 		baseUrl: 'https://open.bigmodel.cn/api/anthropic',
 		apiKeyEnv: 'ZHIPU_API_KEY',
 	},
 	zai: {
 		provider: 'zai',
-		defaultModel: 'glm-5',
+		defaultModel: 'glm-5.1',
 		name: 'Z.AI',
 		baseUrl: 'https://api.z.ai/api/anthropic',
 		apiKeyEnv: 'ZAI_API_KEY',
@@ -72,7 +72,7 @@ const PROVIDER_INFO_ENTRIES: Record<string, ProviderInfo> = {
 	},
 	openrouter: {
 		provider: 'openrouter',
-		defaultModel: 'openrouter/hunter-alpha',
+		defaultModel: 'nvidia/nemotron-3-super-120b-a12b:free',
 		name: 'OpenRouter',
 		baseUrl: 'https://openrouter.ai/api',
 		apiKeyEnv: 'OPENROUTER_API_KEY',
@@ -94,12 +94,12 @@ const ALIAS_MAP: Record<string, AliasTarget> = {
 	'ds-r': { provider: 'deepseek', model: 'deepseek-reasoner' },
 	'deepseek-reasoner': { provider: 'deepseek', model: 'deepseek-reasoner' },
 	// ZhiPu
-	zp: { provider: 'zhipu', model: 'glm-5' },
-	zhipu: { provider: 'zhipu', model: 'glm-5' },
+	zp: { provider: 'zhipu', model: 'glm-5.1' },
+	zhipu: { provider: 'zhipu', model: 'glm-5.1' },
 	// Z.AI (ZhiPu global)
-	zai: { provider: 'zai', model: 'glm-5' },
-	'zp-g': { provider: 'zai', model: 'glm-5' },
-	'zhipu-global': { provider: 'zai', model: 'glm-5' },
+	zai: { provider: 'zai', model: 'glm-5.1' },
+	'zp-g': { provider: 'zai', model: 'glm-5.1' },
+	'zhipu-global': { provider: 'zai', model: 'glm-5.1' },
 	// MiniMax
 	mm: { provider: 'minimax', model: 'MiniMax-M2.5' },
 	minimax: { provider: 'minimax', model: 'MiniMax-M2.5' },
@@ -114,8 +114,8 @@ const ALIAS_MAP: Record<string, AliasTarget> = {
 	ali: { provider: 'aliyun', model: 'qwen3.5-plus' },
 	aliyun: { provider: 'aliyun', model: 'qwen3.5-plus' },
 	// OpenRouter (multi-model gateway, free tier available)
-	or: { provider: 'openrouter', model: 'openrouter/hunter-alpha' },
-	openrouter: { provider: 'openrouter', model: 'openrouter/hunter-alpha' },
+	or: { provider: 'openrouter', model: 'nvidia/nemotron-3-super-120b-a12b:free' },
+	openrouter: { provider: 'openrouter', model: 'nvidia/nemotron-3-super-120b-a12b:free' },
 	// Ollama (model must be specified separately)
 	ol: { provider: 'ollama', model: '' },
 	ollama: { provider: 'ollama', model: '' },

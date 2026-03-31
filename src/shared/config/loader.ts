@@ -206,7 +206,7 @@ const UNIVERSAL_FALLBACK_CHAIN: { provider: string; model: string }[] = [
   { provider: "minimax-cn", model: "MiniMax-M2.5" },
   { provider: "minimax", model: "MiniMax-M2.5" },
   { provider: "kimi", model: "kimi-for-coding" },
-  { provider: "openrouter", model: "openrouter/hunter-alpha" },
+  { provider: "openrouter", model: "nvidia/nemotron-3-super-120b-a12b:free" },
 ];
 
 /**

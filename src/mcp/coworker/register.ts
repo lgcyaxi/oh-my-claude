@@ -22,7 +22,7 @@ function call(ctx: ToolContext) {
 }
 
 const coworkerTarget = z
-	.enum(['codex', 'opencode'])
+	.literal('opencode')
 	.describe('Coworker target name');
 
 export function registerCoworkerTools(server: McpServer, ctx: ToolContext) {
@@ -50,12 +50,6 @@ export function registerCoworkerTools(server: McpServer, ctx: ToolContext) {
 				agent: z.string().optional(),
 				provider_id: z.string().optional(),
 				model_id: z.string().optional(),
-				approval_policy: z
-					.string()
-					.optional()
-					.describe(
-						'Optional Codex approval policy override. Accepted values: never, on-request, on-failure, untrusted, reject.',
-					),
 				review_target: z
 					.enum([
 						'uncommittedChanges',

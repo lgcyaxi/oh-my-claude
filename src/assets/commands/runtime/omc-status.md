@@ -33,7 +33,7 @@ For each coworker, surface:
 - `approvalPolicy` reports the actual effective policy, not just the raw caller input
 - pending approvals, if any
   - include decision options
-  - include question ids/options when the approval is a Codex `request_user_input`
+  - include question ids/options when the approval is a `request_user_input`
   - include structured details when available (command, cwd, proposed policy amendments, permission options)
 - `lastActivityAt`
 
@@ -65,6 +65,6 @@ Tip: /omc-switch to see available models
 ```
 
 If no proxy: suggest `omc cc` to start a session.  
-If no coworkers: suggest `/omc-codex` or `/omc-opencode`.  
+If no coworkers: suggest `/codex:rescue` or `/omc-opencode`.  
 If MCP is unavailable after a long-running timeout: suggest opening a fresh
 Claude Code session first, then fall back to `oh-my-claude doctor`.

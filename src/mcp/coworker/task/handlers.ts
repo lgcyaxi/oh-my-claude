@@ -1,10 +1,6 @@
 import type { CallToolResult } from '../../shared/types';
 
 import {
-	buildScopedCodexReviewPrompt,
-	recommendCodexReviewTimeout,
-} from '../review-helpers';
-import {
 	buildReviewTarget,
 	errorResult,
 	resolveCoworker,
@@ -101,9 +97,6 @@ export async function handleCoworkerReview(
 		approval_policy?: string;
 	};
 
-	let timeoutMs: number | undefined;
-	let reviewMode: 'scoped-diff' | 'native' = 'native';
-
 	try {
 		const coworker = await resolveCoworker(target, projectRoot);
 		if (!coworker.reviewTask) {
@@ -116,54 +109,18 @@ export async function handleCoworkerReview(
 			commit_title,
 			instructions,
 		});
-		timeoutMs =
-			target === 'codex'
-				? recommendCodexReviewTimeout(
-						projectRoot,
-						reviewTarget,
-						timeout_ms,
-						paths,
-					)
-				: timeout_ms;
-		const useScopedTaskReview =
-			target === 'codex' && Array.isArray(paths) && paths.length > 0;
-		reviewMode = useScopedTaskReview ? 'scoped-diff' : 'native';
-		if (useScopedTaskReview && delivery === 'detached') {
-			throw new Error(
-				'Codex scoped review does not support delivery="detached" yet; omit delivery or use native review without paths.',
-			);
-		}
 
-		const result = useScopedTaskReview
-			? await coworker.runTask({
-					message: buildScopedCodexReviewPrompt(
-						projectRoot,
-						reviewTarget,
-						paths!,
-						message,
-					),
-					timeoutMs,
-					agent,
-					providerId: provider_id,
-					modelId: model_id,
-					approvalPolicy: approval_policy,
-					meta: {
-						taskType: 'review',
-						reviewMode,
-						paths: paths!,
-					},
-				})
-			: await coworker.reviewTask({
-					message,
-					timeoutMs,
-					agent,
-					providerId: provider_id,
-					modelId: model_id,
-					approvalPolicy: approval_policy,
-					paths,
-					delivery,
-					target: reviewTarget,
-				});
+		const result = await coworker.reviewTask({
+			message,
+			timeoutMs: timeout_ms,
+			agent,
+			providerId: provider_id,
+			modelId: model_id,
+			approvalPolicy: approval_policy,
+			paths,
+			delivery,
+			target: reviewTarget,
+		});
 		return successResult({
 			target,
 			response: result.content,
@@ -171,16 +128,9 @@ export async function handleCoworkerReview(
 			session_id: result.sessionId ?? null,
 			task_id: result.taskId ?? null,
 			model: result.model ?? null,
-			meta: {
-				...(result.meta ?? {}),
-				recommended_timeout_ms: timeoutMs ?? null,
-				review_mode: reviewMode,
-			},
+			meta: result.meta ?? null,
 		});
 	} catch (error) {
-		return errorResult(String(target ?? 'coworker'), error, {
-			recommended_timeout_ms: timeoutMs ?? null,
-			review_mode: reviewMode,
-		});
+		return errorResult(String(target ?? 'coworker'), error);
 	}
 }

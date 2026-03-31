@@ -140,7 +140,7 @@ function cleanupCoworkerTestArtifacts(): void {
 		'ses_approve_',
 		'ses_perm_',
 	];
-	for (const target of ['codex', 'opencode']) {
+	for (const target of ['opencode']) {
 		const logPath = join(baseDir, 'logs', 'coworker', `${target}.jsonl`);
 		if (existsSync(logPath)) {
 			try {
@@ -305,6 +305,8 @@ export async function install(options?: {
 				const agentsDir = join(homedir(), '.claude', 'agents');
 				const staleAgents = [
 					'frontend-ui-ux.md', // replaced by ui-designer in v2.0
+					'codex-cli.md', // removed in v2.2.3 — replaced by official openai/codex-plugin-cc
+					'codex-rescue.md', // removed in v2.2.3 — replaced by official openai/codex-plugin-cc
 				];
 				for (const stale of staleAgents) {
 					const stalePath = join(agentsDir, stale);
@@ -390,6 +392,7 @@ export async function install(options?: {
 						'omc-up.md', // removed in v2.1.3-beta.37 — stale legacy runtime API
 						'omc-down.md', // removed in v2.1.3-beta.37 — stale legacy runtime API
 						'omc-status-bridge.md', // removed in v2.1.3-beta.37 — merged into /omc-status (legacy filename cleanup)
+						'omc-codex.md', // removed in v2.2.3 — replaced by official openai/codex-plugin-cc
 					];
 					for (const deprecated of deprecatedCommands) {
 						const oldPath = join(commandsDir, deprecated);
@@ -563,6 +566,47 @@ process.exit(1);
 			} catch (error) {
 				result.errors.push(`Failed to install MCP server: ${error}`);
 			}
+		}
+
+		// 3b. Install official Codex plugin and enable review gate (non-blocking)
+		try {
+			execSync('claude plugins add openai/codex-plugin-cc', {
+				stdio: ['pipe', 'pipe', 'pipe'],
+				timeout: 30_000,
+			});
+			// Enable review gate by default — Codex audits code before stop
+			try {
+				const codexPluginDir = join(
+					homedir(), '.claude', 'plugins', 'cache', 'openai-codex', 'codex',
+				);
+				if (existsSync(codexPluginDir)) {
+					// Find the latest version directory (sort semver descending)
+					const versions = readdirSync(codexPluginDir)
+						.filter((v) => existsSync(join(codexPluginDir, v, 'scripts', 'codex-companion.mjs')))
+						.sort((a, b) => {
+							const pa = a.split('.').map(Number);
+							const pb = b.split('.').map(Number);
+							for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+								const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+								if (diff !== 0) return diff;
+							}
+							return 0;
+						});
+					if (versions.length > 0) {
+						const script = join(codexPluginDir, versions[0]!, 'scripts', 'codex-companion.mjs');
+						execSync(`node "${script}" setup --enable-review-gate`, {
+							stdio: ['pipe', 'pipe', 'pipe'],
+							timeout: 15_000,
+						});
+					}
+				}
+			} catch {
+				// Review gate setup is best-effort
+			}
+		} catch {
+			result.warnings.push(
+				'Codex plugin not installed. Run: claude plugins add openai/codex-plugin-cc',
+			);
 		}
 
 		// 4. Install statusline

@@ -144,10 +144,9 @@ export async function handleCoworkerRevert(
 export async function handleCoworkerStatus(
 	projectRoot: string,
 ): Promise<CallToolResult> {
-	const { listCodexCoworkers, listOpenCodeCoworkers } =
-		await import('../../../coworker');
+	const { listOpenCodeCoworkers } = await import('../../../coworker');
 	return successResult({
-		coworkers: [...listCodexCoworkers(), ...listOpenCodeCoworkers()],
+		coworkers: [...listOpenCodeCoworkers()],
 	});
 }
 
@@ -164,13 +163,9 @@ export async function handleCoworkerRecentActivity(
 			});
 		}
 
-		const { getCodexCoworker, getOpenCodeCoworker } =
-			await import('../../../coworker');
+		const { getOpenCodeCoworker } = await import('../../../coworker');
 		return successResult({
 			activity: [
-				...(await getCodexCoworker(projectRoot).getRecentActivity(
-					limit,
-				)),
 				...(await getOpenCodeCoworker(projectRoot).getRecentActivity(
 					limit,
 				)),

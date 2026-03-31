@@ -143,6 +143,7 @@ const MODEL_ABBREV: Record<string, string> = {
 	'deepseek-reasoner': 'R',
 	'deepseek-chat': 'C',
 	// ZhiPu / Z.AI models
+	'glm-5.1': 'G51',
 	'glm-5': 'G5',
 	'GLM-5': 'G5',
 	'glm-4.7': 'G47',

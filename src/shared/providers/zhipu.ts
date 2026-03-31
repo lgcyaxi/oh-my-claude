@@ -2,7 +2,8 @@
  * ZhiPu GLM API client (Anthropic-compatible) — CN endpoint
  *
  * Models:
- * - glm-5: Latest flagship model (coding & agent focused)
+ * - glm-5.1: Latest flagship model
+ * - glm-5: Previous flagship model (coding & agent focused)
  * - glm-4.7: Cost-efficient model
  *
  * CN Endpoint: https://open.bigmodel.cn/api/anthropic (ZHIPU_API_KEY)
@@ -20,7 +21,7 @@ export function createZhiPuClient(): AnthropicCompatibleClient {
     "ZhiPu",
     ZHIPU_BASE_URL,
     ZHIPU_API_KEY_ENV,
-    "glm-5"
+    "glm-5.1"
   );
 }
 

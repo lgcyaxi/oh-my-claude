@@ -1,6 +1,6 @@
 /**
  * Librarian - External documentation and library research agent
- * Uses ZhiPu GLM-5 via proxy auto-routing (model: glm-5)
+ * Uses ZhiPu GLM-5.1 via proxy auto-routing (model: glm-5.1)
  */
 
 import type { AgentDefinition } from './types';
@@ -211,7 +211,7 @@ export const librarianAgent: AgentDefinition = {
 	description:
 		'Research agent for external docs and library analysis. Evidence-backed documentation and implementation lookup.',
 	prompt: LIBRARIAN_PROMPT,
-	defaultModel: 'glm-5',
+	defaultModel: 'glm-5.1',
 	defaultTemperature: 0.3,
 	executionMode: 'task',
 	category: ['native', 'proxy'],

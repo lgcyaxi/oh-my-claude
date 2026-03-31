@@ -21,7 +21,6 @@ export const agentCommands = [
   "omc-mem-summary",
   "omc-ulw",
   "omc-opencode",
-  "omc-codex",
   "omc-pref",
 ] as const;
 
@@ -60,7 +59,6 @@ export const memoryCommands = [
 export const runtimeCommands = [
   "omc-status",
   "omc-switch",
-  "omc-codex",
   "omc-opencode",
   "omc-pref",
 ] as const;

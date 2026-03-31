@@ -16,7 +16,6 @@ import { fetchZhiPuQuota } from './zhipu';
 import { fetchMiniMaxQuota } from './minimax';
 import { fetchKimiQuota } from './kimi';
 import { fetchAliyunQuota } from './aliyun';
-import { fetchOpenAIUsage, isOpenAIConfigured } from './openai';
 import { hasKimiCredential } from '../../../shared/auth/kimi';
 import { hasAliyunCredential } from '../../../shared/auth/aliyun';
 import { hasMiniMaxCredential } from '../../../shared/auth/minimax';
@@ -28,7 +27,6 @@ export const PROVIDER_ABBREV: Record<string, string> = {
 	minimax: 'MM',
 	kimi: 'KM',
 	aliyun: 'AY',
-	openai: 'Codex',
 };
 
 export interface ProviderDefinition {
@@ -74,31 +72,34 @@ export function buildProviderRegistry(): ProviderDefinition[] {
 		fetch: () => fetchMiniMaxQuota(),
 	});
 
-	// Kimi: remote quota API with API key or saved credentials
+	// Kimi: remote quota API with saved credentials, or API key indicator
 	registry.push({
 		key: 'kimi',
 		abbrev: PROVIDER_ABBREV.kimi!,
 		isConfigured: () => !!process.env.KIMI_API_KEY || hasKimiCredential(),
-		fetch: () =>
-			hasKimiCredential() ? fetchKimiQuota() : Promise.resolve(null),
+		fetch: async () => {
+			if (hasKimiCredential()) return fetchKimiQuota();
+			if (process.env.KIMI_API_KEY) {
+				return { timestamp: Date.now(), display: 'ok', color: 'good' as const };
+			}
+			return null;
+		},
 	});
 
-	// Aliyun: remote quota API with saved cookie credentials
+	// Aliyun: remote quota API with saved cookie credentials, or API key indicator
 	registry.push({
 		key: 'aliyun',
 		abbrev: PROVIDER_ABBREV.aliyun!,
 		isConfigured: () =>
 			!!process.env.ALIYUN_API_KEY || hasAliyunCredential(),
-		fetch: () =>
-			hasAliyunCredential() ? fetchAliyunQuota() : Promise.resolve(null),
-	});
-
-	// OpenAI / Codex: shows login status when authenticated
-	registry.push({
-		key: 'openai',
-		abbrev: PROVIDER_ABBREV.openai!,
-		isConfigured: isOpenAIConfigured,
-		fetch: fetchOpenAIUsage,
+		fetch: async () => {
+			if (hasAliyunCredential()) return fetchAliyunQuota();
+			// API key only — no quota endpoint, show configured indicator
+			if (process.env.ALIYUN_API_KEY) {
+				return { timestamp: Date.now(), display: 'ok', color: 'good' as const };
+			}
+			return null;
+		},
 	});
 
 	return registry;

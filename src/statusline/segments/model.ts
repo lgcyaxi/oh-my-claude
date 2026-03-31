@@ -97,6 +97,7 @@ const EXTERNAL_MODEL_DISPLAY: Record<string, string> = {
 	'deepseek-reasoner': 'DeepSeek R',
 	'deepseek-chat': 'DeepSeek Chat',
 	// ZhiPu / Z.AI
+	'glm-5.1': 'GLM-5.1',
 	'glm-5': 'GLM-5',
 	'GLM-5': 'GLM-5',
 	'glm-4.7': 'GLM-4.7',
@@ -120,7 +121,6 @@ const EXTERNAL_MODEL_DISPLAY: Record<string, string> = {
 	'gpt-5.3-codex': 'GPT-5.3 Codex',
 	'o3-mini': 'o3-mini',
 	// OpenRouter
-	'openrouter/hunter-alpha': 'Hunter Alpha',
 	'nvidia/nemotron-3-super-120b-a12b:free': 'Nemotron 120B',
 	'openrouter/nvidia/nemotron-3-super-120b-a12b:free': 'Nemotron 120B',
 };

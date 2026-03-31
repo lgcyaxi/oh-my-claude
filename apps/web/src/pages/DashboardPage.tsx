@@ -7,10 +7,12 @@ import {
   getInstances,
   getMemories,
   getPreferences,
+  getUsage,
   type HealthResponse,
   type ProviderInfo,
   type ProxyInstance,
   type InstancesSummary,
+  type ProviderUsage,
 } from '../lib/api';
 
 export default function DashboardPage() {
@@ -20,6 +22,7 @@ export default function DashboardPage() {
   const [instances, setInstances] = useState<ProxyInstance[]>([]);
   const [summary, setSummary] = useState<InstancesSummary | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [usage, setUsage] = useState<ProviderUsage[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,12 +30,13 @@ export default function DashboardPage() {
 
     async function refresh() {
       try {
-        const [h, pr, inst, mem, pref] = await Promise.all([
+        const [h, pr, inst, mem, pref, usg] = await Promise.all([
           getHealth(),
           getProviders(),
           getInstances().catch(() => ({ instances: [], summary: { registered: 0, alive: 0, totalSessions: 0, totalRequests: 0 } })),
           getMemories().catch(() => ({ global: [], project: [], omcProject: [], total: 0 })),
           getPreferences().catch(() => ({ preferences: [] })),
+          getUsage().catch(() => ({ providers: [], cached: false })),
         ]);
         if (!active) return;
         setHealth(h);
@@ -45,6 +49,7 @@ export default function DashboardPage() {
           auto: mem.project.length,
         });
         setPrefCount(pref.preferences.length);
+        setUsage(usg.providers.filter((p: ProviderUsage) => p.configured));
         setError(null);
       } catch (err) {
         if (!active) return;
@@ -175,6 +180,38 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {/* Provider Usage/Quota */}
+      {usage.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-text-secondary mb-3">
+            Provider Usage
+          </h2>
+          <div className="grid grid-cols-5 gap-3">
+            {usage.map((u) => {
+              const colorClass = u.color === 'critical' ? 'text-danger'
+                : u.color === 'warning' ? 'text-warning'
+                : 'text-success';
+              const borderClass = u.color === 'critical' ? 'border-danger/30'
+                : u.color === 'warning' ? 'border-warning/30'
+                : 'border-border';
+              return (
+                <div
+                  key={u.key}
+                  className={`bg-bg-secondary border ${borderClass} rounded-lg p-3`}
+                >
+                  <div className="text-xs text-text-tertiary uppercase tracking-wider mb-1">
+                    {u.key}
+                  </div>
+                  <div className={`text-lg font-semibold font-mono ${colorClass}`}>
+                    {u.display || '--'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Active Sessions — each per-session proxy = 1 session */}
       {instances.length > 0 && (

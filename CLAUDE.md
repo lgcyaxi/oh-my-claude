@@ -25,14 +25,14 @@ bun test             # Run tests
 - `src/proxy/` - Live model switching HTTP proxy: server, handler, control API, state IPC, auth, stream
 - `src/shared/` - Cross-domain shared modules: config (Zod), providers (API clients), context, auth, preferences
 - `src/statusline/` - Statusline engine, session utils, and segment plugins
-- `src/coworker/` - Native coworker runtimes: Codex, OpenCode, shared daemon internals, generated Codex protocol types
+- `src/coworker/` - Native coworker runtimes: OpenCode, shared daemon internals
 
 ## Architecture
 
 Agents are defined in `src/assets/agents/` and organized by `category` array. Agents can support multiple execution modes:
 
 - **Native-only** (`category: ["native"]`, Claude subscription via Task tool):
-  Sisyphus, Prometheus, Claude-Reviewer, Claude-Scout, OpenCode, Codex-CLI
+  Sisyphus, Prometheus, Claude-Reviewer, Claude-Scout, OpenCode
 - **Proxy-only** (`category: ["proxy"]`, external APIs via MCP):
   Provider-specific tasks use route directives and proxy routing.
 - **Dual-mode** (`category: ["native", "proxy"]`):
@@ -89,7 +89,7 @@ Commands are defined in `src/assets/commands/` subfolders:
 
 - `orchestration/` — workflow commands: sisyphus, plan, start-work, pend, ulw
 - `memory/` — memory management: mem-clear, mem-compact, mem-daily, mem-summary
-- `runtime/` — runtime & infra: status, codex, opencode, pref
+- `runtime/` — runtime & infra: status, opencode, pref
 - `actions/` — quick actions: commit, implement, refactor, docs, issue
 - **Ultrawork Mode**: `/omc-ulw` (maximum performance, auto-accept permissions, work until done)
 - **Model Switching**: use `mcp__oh-my-claude__switch_model` / `mcp__oh-my-claude__switch_revert` MCP tools directly, or `curl` the proxy control API (port 18911)
@@ -181,9 +181,8 @@ npm publish --access public
 - `src/shared/auth/minimax.ts` - MiniMax authentication (cookie + groupId extraction via Playwright)
 - `scripts/minimax-login.ts` - Playwright script for MiniMax login (QR code scan)
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
-- `docs/guides/codex-app-server.md` - Codex app-server wire protocol, lifecycle, and coworker integration guide
 - `docs/guides/coworker-gui-acceptance.md` - Cross-platform coworker GUI acceptance tests (macOS/Windows/Linux)
-- `docs/guides/coworker-smoke-tests.md` - Manual and CI smoke-test commands for Codex/OpenCode coworkers
+- `docs/guides/coworker-smoke-tests.md` - Manual and CI smoke-test commands for OpenCode coworker
 
 ## Documentation Convention
 
@@ -198,7 +197,6 @@ When adding new features, always update ALL of these:
 
 Use the documented smoke scripts when changing native coworker runtimes:
 
-- `bun run test:smoke:codex`
 - `bun run test:smoke:opencode`
 - `bun run test:smoke:coworker`
 

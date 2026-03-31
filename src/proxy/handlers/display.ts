@@ -2,8 +2,8 @@
  * Display helpers for proxy log lines
  *
  * Avoids duplicate provider prefix in model display names.
- * E.g., OpenRouter models like "openrouter/hunter-alpha" should display as
- * "openrouter/hunter-alpha", not "openrouter/openrouter/hunter-alpha".
+ * E.g., OpenRouter models like "nvidia/nemotron-3-super-120b-a12b:free" should display as
+ * "openrouter/nvidia/nemotron-3-super-120b-a12b:free", not double-prefixed.
  */
 
 /**

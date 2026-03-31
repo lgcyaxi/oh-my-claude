@@ -31,16 +31,16 @@ Stays switched until manually reverted with switch_revert.
 
 **Available Providers** (must be configured with API key or OAuth):
 - deepseek: deepseek-reasoner, deepseek-chat
-- zhipu: glm-5
+- zhipu: glm-5.1, glm-5
 - minimax: MiniMax-M2.5
 - kimi: kimi-for-coding
 - aliyun: qwen3.5-plus, qwen3-coder-plus, qwen3-coder-next, qwen3-max-2026-01-23, glm-4.7, kimi-k2.5
-- openrouter: openrouter/hunter-alpha, nvidia/nemotron-3-super-120b-a12b:free (free models, no API key cost)
+- openrouter: nvidia/nemotron-3-super-120b-a12b:free (free models, no API key cost)
 - openai: gpt-5.2, gpt-5.3-codex, o3-mini (OAuth: oh-my-claude auth login openai)
 - ollama: (auto-discovered from local Ollama instance — model param optional)
 **Example**: switch_model(provider="deepseek", model="deepseek-reasoner")
 This routes all subsequent Claude Code requests through DeepSeek's reasoner model.
-**OpenRouter**: switch_model(provider="openrouter", model="openrouter/hunter-alpha")
+**OpenRouter**: switch_model(provider="openrouter", model="nvidia/nemotron-3-super-120b-a12b:free")
 Free models available — set OPENROUTER_API_KEY (free tier key from openrouter.ai).
 **Ollama**: switch_model(provider="ollama") auto-discovers first available model.
 Or specify: switch_model(provider="ollama", model="llama3.3").
@@ -55,7 +55,7 @@ Once switched, use /model <name> to switch between any installed Ollama model.`,
 					.string()
 					.optional()
 					.describe(
-						'Model name. Optional for ollama (auto-discovered). Examples: deepseek-reasoner, glm-5, MiniMax-M2.5, kimi-for-coding, qwen3.5-plus, openrouter/hunter-alpha, gpt-5.3-codex, llama3.3',
+						'Model name. Optional for ollama (auto-discovered). Examples: deepseek-reasoner, glm-5.1, glm-5, MiniMax-M2.5, kimi-for-coding, qwen3.5-plus, nvidia/nemotron-3-super-120b-a12b:free, gpt-5.3-codex, llama3.3',
 					),
 			}),
 		},

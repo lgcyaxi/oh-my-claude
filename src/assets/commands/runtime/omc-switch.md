@@ -21,6 +21,7 @@ Show available models and switch provider for this session.
  ma        MiniMax-M2.5-ay        MiniMax M2.5 (Aliyun)  aliyun
  dr        deepseek-reasoner      DeepSeek Reasoner      deepseek
  ds        deepseek-chat          DeepSeek Chat          deepseek
+ g51       glm-5.1                ZhiPu GLM-5.1           zhipu
  g5        glm-5                  ZhiPu GLM-5            zhipu
  mm        MiniMax-M2.5           MiniMax M2.5           minimax-cn
  km        kimi-for-coding        Kimi K2.5              kimi
@@ -42,6 +43,7 @@ Shortcut → model/provider lookup:
 - `ma`  → provider: `aliyun`,    model: `MiniMax-M2.5-ay`
 - `dr`  → provider: `deepseek`,  model: `deepseek-reasoner`
 - `ds`  → provider: `deepseek`,  model: `deepseek-chat`
+- `g51` → provider: `zhipu`,     model: `glm-5.1`
 - `g5`  → provider: `zhipu`,     model: `glm-5`
 - `mm`  → provider: `minimax-cn`,model: `MiniMax-M2.5`
 - `km`  → provider: `kimi`,      model: `kimi-for-coding`

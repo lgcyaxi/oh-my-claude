@@ -26,6 +26,43 @@ import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { platform, homedir } from 'node:os';
 
+/**
+ * Load API key environment variables from ~/.zshrc.api.
+ * The statusline runs as a standalone process that may not inherit the user's
+ * shell profile (e.g., when launched inside tmux started before env vars were set).
+ */
+function loadApiEnvFile(): void {
+	try {
+		const envFile = join(homedir(), '.zshrc.api');
+		if (!existsSync(envFile)) return;
+
+		const content = readFileSync(envFile, 'utf-8');
+		for (const line of content.split('\n')) {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith('#')) continue;
+			const match = trimmed.match(/^export\s+([A-Z_][A-Z0-9_]*)=(.*)$/);
+			if (!match) continue;
+			const key = match[1]!;
+			let value = match[2]!;
+			if (
+				(value.startsWith('"') && value.endsWith('"')) ||
+				(value.startsWith("'") && value.endsWith("'"))
+			) {
+				value = value.slice(1, -1);
+			}
+			// Only set if not already in environment (don't override explicit env vars)
+			if (!process.env[key]) {
+				process.env[key] = value;
+			}
+		}
+	} catch {
+		// Silent — file may not exist or be unreadable
+	}
+}
+
+// Load API keys from ~/.zshrc.api (shell env may not be inherited in tmux/statusline)
+loadApiEnvFile();
+
 // Debug mode: set DEBUG_STATUSLINE=1 to enable
 const DEBUG_STATUSLINE = process.env.DEBUG_STATUSLINE === '1';
 

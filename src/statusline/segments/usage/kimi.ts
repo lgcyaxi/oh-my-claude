@@ -28,6 +28,7 @@ export async function fetchKimiQuota(): Promise<ProviderCacheEntry | null> {
 		const cred = getKimiCredential();
 		if (!cred?.token || !cred?.cookie) return null;
 
+		let authExpired = false;
 		const fetchUsages = async (
 			body: Record<string, unknown>,
 		): Promise<KimiUsageResponse | null> => {
@@ -46,7 +47,7 @@ export async function fetchKimiQuota(): Promise<ProviderCacheEntry | null> {
 			);
 
 			if (resp.status === 401 || resp.status === 403) {
-				// Auth expired/revoked: let caller fall back to local request count.
+				authExpired = true;
 				return null;
 			}
 			if (!resp.ok) return null;
@@ -67,7 +68,11 @@ export async function fetchKimiQuota(): Promise<ProviderCacheEntry | null> {
 				data?.usages?.find((u) => !!u.detail) ??
 				data?.usages?.[0];
 		}
-		if (!entry?.detail) return null;
+		if (!entry?.detail) {
+			return authExpired
+				? { timestamp: Date.now(), display: '!auth', color: 'critical' }
+				: null;
+		}
 
 		const parts: string[] = [];
 

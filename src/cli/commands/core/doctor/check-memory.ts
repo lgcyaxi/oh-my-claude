@@ -149,24 +149,55 @@ export async function checkMemoryZone(ctx: DoctorContext) {
         if (dims) console.log(`    EMBEDDING_DIMENSIONS: ${c.green}${dims}${c.reset}`);
 
         if (apiBase) {
+          const embUrl = apiBase.replace(/\/+$/, "").replace(/\/embeddings$/, "") + "/embeddings";
+          const embHeaders: Record<string, string> = { "Content-Type": "application/json" };
+          const embKey = process.env.EMBEDDING_API_KEY;
+          if (embKey) embHeaders["Authorization"] = `Bearer ${embKey}`;
+
+          // Step 1: Check if the server is reachable at all
+          const baseHost = apiBase.replace(/\/+$/, "").replace(/\/v1$/, "");
+          let serverReachable = false;
           try {
-            const url = apiBase.replace(/\/+$/, "").replace(/\/embeddings$/, "") + "/embeddings";
-            const headers: Record<string, string> = { "Content-Type": "application/json" };
-            const embKey = process.env.EMBEDDING_API_KEY;
-            if (embKey) headers["Authorization"] = `Bearer ${embKey}`;
-            const resp = await fetch(url, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ model: model ?? "text-embedding-3-small", input: ["test"] }),
-              signal: AbortSignal.timeout(5000),
+            const healthResp = await fetch(baseHost, {
+              method: "GET",
+              signal: AbortSignal.timeout(3000),
             });
-            if (resp.ok) {
-              console.log(`    Connectivity: ${c.green}OK (HTTP ${resp.status})${c.reset}`);
-            } else {
-              console.log(`    Connectivity: ${c.yellow}HTTP ${resp.status}${c.reset}`);
-            }
+            serverReachable = healthResp.status < 500;
           } catch {
-            console.log(`    Connectivity: ${c.red}FAILED (cannot reach ${apiBase})${c.reset}`);
+            // Server not reachable
+          }
+
+          if (!serverReachable) {
+            const isOllama = apiBase.includes("11434");
+            console.log(`    Connectivity: ${c.red}FAILED — server not reachable at ${baseHost}${c.reset}`);
+            if (isOllama) {
+              console.log(`    ${c.dim}Hint: Is Ollama running? Try: ollama serve${c.reset}`);
+            }
+          } else {
+            // Step 2: Test actual embedding endpoint
+            try {
+              const resp = await fetch(embUrl, {
+                method: "POST",
+                headers: embHeaders,
+                body: JSON.stringify({ model: model ?? "text-embedding-3-small", input: ["test"] }),
+                signal: AbortSignal.timeout(10000),
+              });
+              if (resp.ok) {
+                console.log(`    Connectivity: ${c.green}OK (HTTP ${resp.status})${c.reset}`);
+              } else if (resp.status === 404) {
+                console.log(`    Connectivity: ${c.yellow}HTTP 404 — model "${model ?? "text-embedding-3-small"}" not found${c.reset}`);
+                const isOllama = apiBase.includes("11434");
+                if (isOllama) {
+                  console.log(`    ${c.dim}Hint: Pull the model first: ollama pull ${model ?? "text-embedding-3-small"}${c.reset}`);
+                }
+              } else {
+                const errBody = await resp.text().catch(() => "");
+                const errSnippet = errBody.slice(0, 100);
+                console.log(`    Connectivity: ${c.yellow}HTTP ${resp.status}${errSnippet ? ` — ${errSnippet}` : ""}${c.reset}`);
+              }
+            } catch (e) {
+              console.log(`    Connectivity: ${c.red}FAILED — request to ${embUrl} failed${c.reset}`);
+            }
           }
         }
       } else if (embeddingProvider === "zhipu") {
@@ -307,24 +338,42 @@ async function runFixMem(ctx: DoctorContext) {
       console.log(`    ${warn("EMBEDDING_API_BASE not set — embedding disabled")}`);
     } else {
       const model = process.env.EMBEDDING_MODEL ?? "text-embedding-3-small";
+      const baseHost = apiBase.replace(/\/+$/, "").replace(/\/v1$/, "");
+      const isOllama = apiBase.includes("11434");
+
+      // Check server reachability first
+      let serverUp = false;
       try {
-        const url = apiBase.replace(/\/+$/, "").replace(/\/embeddings$/, "") + "/embeddings";
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        const embKey = process.env.EMBEDDING_API_KEY;
-        if (embKey) headers["Authorization"] = `Bearer ${embKey}`;
-        const resp = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ model, input: ["fix-mem connectivity test"] }),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (resp.ok) {
-          console.log(`    ${ok(`${model} @ ${apiBase} — connectivity OK`)}`);
-        } else {
-          console.log(`    ${fail(`HTTP ${resp.status} from ${apiBase}`)}`);
+        const health = await fetch(baseHost, { method: "GET", signal: AbortSignal.timeout(3000) });
+        serverUp = health.status < 500;
+      } catch { /* not reachable */ }
+
+      if (!serverUp) {
+        console.log(`    ${fail(`Server not reachable at ${baseHost}`)}`);
+        if (isOllama) console.log(`    ${dimText("Hint: Is Ollama running? Try: ollama serve")}`);
+      } else {
+        try {
+          const url = apiBase.replace(/\/+$/, "").replace(/\/embeddings$/, "") + "/embeddings";
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          const embKey = process.env.EMBEDDING_API_KEY;
+          if (embKey) headers["Authorization"] = `Bearer ${embKey}`;
+          const resp = await fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ model, input: ["fix-mem connectivity test"] }),
+            signal: AbortSignal.timeout(10000),
+          });
+          if (resp.ok) {
+            console.log(`    ${ok(`${model} @ ${apiBase} — connectivity OK`)}`);
+          } else if (resp.status === 404) {
+            console.log(`    ${fail(`Model "${model}" not found (HTTP 404)`)}`);
+            if (isOllama) console.log(`    ${dimText(`Hint: ollama pull ${model}`)}`);
+          } else {
+            console.log(`    ${fail(`HTTP ${resp.status} from ${apiBase}`)}`);
+          }
+        } catch {
+          console.log(`    ${fail(`Request failed to ${apiBase}`)}`);
         }
-      } catch {
-        console.log(`    ${fail(`Cannot reach ${apiBase} — is Ollama running?`)}`);
       }
     }
   } else {

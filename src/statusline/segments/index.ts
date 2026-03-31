@@ -55,7 +55,6 @@ import { modeSegment } from './mode';
 import { proxySegment } from './proxy';
 import { usageSegment } from './usage/index';
 import { preferencesSegment } from './preferences';
-import { codexSegment } from './codex';
 import { opencodeSegment } from './opencode';
 
 // Registry of all available segments
@@ -228,5 +227,4 @@ registerSegment(modeSegment);
 registerSegment(proxySegment);
 registerSegment(usageSegment);
 registerSegment(preferencesSegment);
-registerSegment(codexSegment);
 registerSegment(opencodeSegment);

@@ -13,14 +13,12 @@ import { hasMiniMaxCredential } from "../../../shared/auth/minimax";
 import { hasKimiCredential, loginKimi } from "../../../shared/auth/kimi";
 import { hasAliyunCredential, loginAliyun } from "../../../shared/auth/aliyun";
 import { loginMiniMax } from "../../../shared/auth/minimax";
-import { loginCodexHeadless, loginCodexBrowser } from "../../../shared/auth/codex";
 
 export function registerAuthCommand(program: Command) {
   program
     .command("auth [provider]")
     .description("Authenticate with a provider (or show status)")
-    .option("--headless", "Use device code flow instead of browser (OpenAI only)")
-    .action(async (provider: string | undefined, options: { headless?: boolean }) => {
+    .action(async (provider: string | undefined) => {
       const { c, dimText, ok, fail } = createFormatters();
 
       // No provider arg → show status
@@ -55,7 +53,7 @@ export function registerAuthCommand(program: Command) {
           }
 
           console.log(`Run ${c.cyan}omc auth <provider>${c.reset} to authenticate.`);
-          console.log(`Supported: ${c.cyan}openai${c.reset} (OAuth), ${c.cyan}minimax-cn${c.reset} (quota), ${c.cyan}kimi${c.reset} (quota), ${c.cyan}aliyun${c.reset} (quota)`);
+          console.log(`Supported: ${c.cyan}minimax-cn${c.reset} (quota), ${c.cyan}kimi${c.reset} (quota), ${c.cyan}aliyun${c.reset} (quota)`);
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
           console.log(fail(`Failed to check credentials: ${msg}`));
@@ -67,7 +65,7 @@ export function registerAuthCommand(program: Command) {
       const normalizedProvider = normalizeProvider(provider);
       if (!normalizedProvider) {
         console.log(fail(`Unknown provider: "${provider}"`));
-        console.log(dimText("Supported: openai, minimax-cn (or mm), kimi (or km), aliyun (or ay)"));
+        console.log(dimText("Supported: minimax-cn (or mm), kimi (or km), aliyun (or ay)"));
         process.exit(1);
       }
 
@@ -75,14 +73,6 @@ export function registerAuthCommand(program: Command) {
 
       try {
         switch (normalizedProvider) {
-          case "openai": {
-            const cred = options.headless ? await loginCodexHeadless() : await loginCodexBrowser();
-            const label = options.headless ? "OpenAI authenticated (headless)" : "OpenAI authenticated";
-            console.log(ok(`${label}: ${c.cyan}${cred.accountId ?? "connected"}${c.reset}`));
-            console.log(dimText(`  Models: gpt-5.2, gpt-5.3-codex, o3-mini`));
-            console.log(dimText(`  Try: /omc-switch gpt`));
-            break;
-          }
           case "minimax-cn": {
             const result = await loginMiniMax();
             if (result.success && result.credential) {
@@ -127,13 +117,9 @@ export function registerAuthCommand(program: Command) {
     });
 }
 
-function normalizeProvider(input: string): "openai" | "minimax-cn" | "kimi" | "aliyun" | null {
+function normalizeProvider(input: string): "minimax-cn" | "kimi" | "aliyun" | null {
   const lower = input.toLowerCase();
   switch (lower) {
-    case "openai":
-    case "codex":
-    case "chatgpt":
-      return "openai";
     case "minimax":
     case "minimax-cn":
     case "mm":

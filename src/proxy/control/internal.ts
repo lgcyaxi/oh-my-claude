@@ -180,7 +180,7 @@ function resolveMemoryProvider(
 		'deepseek',
 	];
 	const defaultModels: Record<string, string> = {
-		zhipu: 'glm-5',
+		zhipu: 'glm-5.1',
 		minimax: 'MiniMax-M2.5',
 		deepseek: 'deepseek-chat',
 		kimi: 'kimi-for-coding',

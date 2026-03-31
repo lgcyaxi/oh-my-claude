@@ -36,6 +36,10 @@ export default function SettingsPage() {
     data: any;
   } | null>(null);
 
+  // Type filter for compact/summarize
+  const [memTypeFilter, setMemTypeFilter] = useState('note'); // compact default: note
+  const [sumTypeFilter, setSumTypeFilter] = useState('all'); // summarize default: all
+
   function getMemOpOptions() {
     const projectPath = memOpProject
       ? projects.find((p) => p.folder === memOpProject)?.projectPath
@@ -68,6 +72,9 @@ export default function SettingsPage() {
         ...opts,
         days: 7,
         mode: action === 'daily' ? undefined : 'analyze',
+        // Pass type filter for compact and summarize
+        ...(action === 'compact' ? { type: memTypeFilter } : {}),
+        ...(action === 'summarize' ? { type: sumTypeFilter } : {}),
       });
 
       // Daily is single-phase (auto-executes)
@@ -354,21 +361,47 @@ export default function SettingsPage() {
           </label>
         </div>
 
-        <label className="block">
-          <span className="text-xs text-text-tertiary mb-1 block">Scope</span>
-          <select
-            value={memOpProject}
-            onChange={(e) => setMemOpProject(e.target.value)}
-            className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded text-sm text-text-primary outline-none focus:border-accent/50"
-          >
-            <option value="">All memories (global + all projects)</option>
-            {projects.map((p) => (
-              <option key={p.folder} value={p.folder}>
-                {p.projectPath}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="grid grid-cols-3 gap-3">
+          <label className="block col-span-1">
+            <span className="text-xs text-text-tertiary mb-1 block">Scope</span>
+            <select
+              value={memOpProject}
+              onChange={(e) => setMemOpProject(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded text-sm text-text-primary outline-none focus:border-accent/50"
+            >
+              <option value="">All memories</option>
+              {projects.map((p) => (
+                <option key={p.folder} value={p.folder}>
+                  {p.projectPath}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs text-text-tertiary mb-1 block">Compact type</span>
+            <select
+              value={memTypeFilter}
+              onChange={(e) => setMemTypeFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded text-sm text-text-primary outline-none focus:border-accent/50"
+            >
+              <option value="note">Notes only</option>
+              <option value="session">Sessions only</option>
+              <option value="all">All types</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs text-text-tertiary mb-1 block">Summarize type</span>
+            <select
+              value={sumTypeFilter}
+              onChange={(e) => setSumTypeFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded text-sm text-text-primary outline-none focus:border-accent/50"
+            >
+              <option value="all">All types</option>
+              <option value="note">Notes only</option>
+              <option value="session">Sessions only</option>
+            </select>
+          </label>
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <button

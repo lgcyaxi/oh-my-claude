@@ -74,15 +74,32 @@ export async function fetchAliyunQuota(): Promise<ProviderCacheEntry | null> {
 		});
 
 		// 302 = auth expired (redirects to err.taobao.com)
-		if (resp.status === 302 || resp.status === 301) return null;
+		if (resp.status === 302 || resp.status === 301) {
+			return { timestamp: Date.now(), display: '!auth', color: 'critical' };
+		}
+		if (resp.status === 401 || resp.status === 403) {
+			return { timestamp: Date.now(), display: '!auth', color: 'critical' };
+		}
 		if (!resp.ok) return null;
 
 		const text = await resp.text();
 		// Quick check: if response is HTML (redirect page), auth expired
-		if (text.startsWith('<!') || text.startsWith('<html')) return null;
+		if (text.startsWith('<!') || text.startsWith('<html')) {
+			return { timestamp: Date.now(), display: '!auth', color: 'critical' };
+		}
 
 		const data = JSON.parse(text) as AliyunQuotaApiResponse;
 		if (data.code !== '200') return null;
+
+		// Check for auth-expired responses that return code=200 but success=false
+		const innerData = data.data as Record<string, unknown> | undefined;
+		if (innerData?.success === false) {
+			const errorCode = innerData.errorCode as string | undefined;
+			if (errorCode?.includes('NotLogined') || errorCode?.includes('Login')) {
+				return { timestamp: Date.now(), display: '!auth', color: 'critical' };
+			}
+			return null;
+		}
 
 		// Navigate the nested response: data.DataV2.data.data.codingPlanInstanceInfos[0]
 		const instances =

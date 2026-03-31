@@ -16,8 +16,6 @@ import { loadConfig } from '../../shared/config/loader';
 export interface Capabilities {
 	/** OpenCode CLI is installed and available */
 	opencode: boolean;
-	/** Codex CLI is installed and available */
-	codex: boolean;
 	/** MCP agents are available (MCP server running) */
 	mcp: boolean;
 	/** OAuth providers configured */
@@ -65,7 +63,6 @@ export function detectCapabilities(): Capabilities {
 
 	// Check external CLI tools
 	const opencode = commandExists('opencode');
-	const codex = commandExists('codex') || commandExists('codex-cli');
 
 	// Check OAuth providers
 	const openaiAuth = !!getCredential('openai');
@@ -100,7 +97,6 @@ export function detectCapabilities(): Capabilities {
 
 	cachedCapabilities = {
 		opencode,
-		codex,
 		mcp,
 		openaiAuth,
 		minimaxAuth,
@@ -135,7 +131,6 @@ export function getCapabilitySummary(): string {
 	const lines: string[] = [];
 	lines.push('CLI Agents:');
 	lines.push(`  OpenCode: ${caps.opencode ? '✓' : '✗'}`);
-	lines.push(`  Codex CLI: ${caps.codex ? '✓' : '✗'}`);
 	lines.push('');
 	lines.push('Infrastructure:');
 	lines.push(`  MCP Server: ${caps.mcp ? '✓' : '✗'}`);
@@ -173,6 +168,5 @@ export function getAvailableCliTools(): string[] {
 	const caps = detectCapabilities();
 	const tools: string[] = [];
 	if (caps.opencode) tools.push('opencode');
-	if (caps.codex) tools.push('codex');
 	return tools;
 }

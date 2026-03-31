@@ -12,11 +12,7 @@ export type CoworkerTaskAction =
 	| 'recent_activity';
 
 export async function resolveCoworker(target: string, projectRoot: string) {
-	const { getCodexCoworker, getOpenCodeCoworker } =
-		await import('../../coworker');
-	if (target === 'codex') {
-		return getCodexCoworker(projectRoot);
-	}
+	const { getOpenCodeCoworker } = await import('../../coworker');
 	if (target === 'opencode') {
 		return getOpenCodeCoworker(projectRoot);
 	}

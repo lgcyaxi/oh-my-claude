@@ -11,10 +11,10 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, K
 ## Features
 
 - **Multi-Provider MCP Server** - Background task execution with DeepSeek, ZhiPu GLM, MiniMax, Kimi, Aliyun, OpenRouter
-- **OAuth Authentication** - One-command login for OpenAI Codex, MiniMax, Kimi, and Aliyun — no API keys needed
+- **OAuth Authentication** - One-command login for MiniMax, Kimi, and Aliyun — no API keys needed
 - **Concurrent Background Tasks** - Run multiple agents in parallel with configurable limits
 - **Specialized Agent Workflows** - Pre-configured agents for different task types (Sisyphus, Oracle, Hephaestus, Librarian, etc.)
-- **Native Coworker Runtimes** - Codex and OpenCode with cross-platform viewer, 9 operations, scoped-diff reviews, and live status
+- **Native Coworker Runtimes** - OpenCode with cross-platform viewer, 9 operations, scoped-diff reviews, and live status. Codex via official [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) (auto-installed)
 - **Slash Commands** - Quick actions (`/omcx-commit`, `/omcx-implement`) and agent activation (`/omc-sisyphus`, `/omc-plan`)
 - **Real-Time StatusLine** - Live status bar showing active agents, task progress, and concurrency slots
 - **Planning System** - Strategic planning with Prometheus agent and boulder-state tracking
@@ -72,7 +72,7 @@ export KIMI_API_KEY=your-kimi-api-key
 # Aliyun Coding Plan (Qwen models)
 export ALIYUN_API_KEY=your-aliyun-api-key
 
-# OpenRouter (free models: hunter-alpha, nemotron-3-super)
+# OpenRouter (free models: nemotron-3-super)
 export OPENROUTER_API_KEY=your-openrouter-api-key
 
 # Ollama (local, no API key needed — auto-discovered)
@@ -87,10 +87,6 @@ For providers that support OAuth, you can authenticate without API keys (OpenAI,
 <summary>View OAuth setup commands</summary>
 
 ```bash
-# OpenAI (for Codex coworker)
-oh-my-claude auth login openai
-oh-my-claude auth login openai --headless  # For SSH/remote environments
-
 # MiniMax (for quota display)
 oh-my-claude auth login minimax  # Opens browser for QR code login
 
@@ -135,10 +131,8 @@ npx @lgcyaxi/oh-my-claude doctor --detail
 
 ### Guides
 
-- [Codex App-Server Guide](docs/guides/codex-app-server.md)
 - [Coworker Architecture](docs/guides/orchestrator-architecture.md)
 - [Coworker GUI Acceptance](docs/guides/coworker-gui-acceptance.md)
-- [Coworker Protocol Coverage](docs/guides/coworker-protocol-coverage.md)
 - [Coworker Smoke Tests](docs/guides/coworker-smoke-tests.md)
 
 ## Slash Commands
@@ -158,7 +152,7 @@ oh-my-claude provides slash commands for quick actions (`/omcx-*`) and agent act
 | `/omc-status` | Display proxy + coworker status via `coworker_task(action="status")` |
 | `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r`) |
 | `/omc-opencode` | Activate OpenCode for refactoring and UI design |
-| `/omc-codex` | Assign a self-contained task to the Codex coworker |
+| `/omc-opencode` | Assign a self-contained task to the OpenCode coworker |
 | `/omc-pref` | Manage persistent preferences (always/never rules) |
 | `/omc-up` | Upvote — mark a response as helpful |
 | `/omc-down` | Downvote — mark a response as unhelpful |
@@ -301,7 +295,7 @@ npx @lgcyaxi/oh-my-claude statusline toggle output-style  # Toggle output-style
 npx @lgcyaxi/oh-my-claude statusline toggle context off   # Disable context segment
 ```
 
-**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mode`, `mcp`, `memory`, `proxy`, `codex`, `usage`, `preferences`
+**Available segments:** `model`, `git`, `directory`, `context`, `session`, `output-style`, `mode`, `mcp`, `memory`, `proxy`, `usage`, `preferences`
 
 ### Multi-Line Support
 
@@ -579,9 +573,7 @@ Each `cc` session gets its own proxy instance with isolated state. Multiple sess
 | `-skip` | `--dangerously-skip-permissions` | Skip permission prompts |
 | `-wt` | `--worktree` | Isolated git worktree session |
 | `-rc` | `claude remote-control` | Mobile access via claude.ai/code |
-Codex and OpenCode are native coworker targets. Use `coworker_task(action="send" | "review" | "diff" | "fork" | "approve" | "revert" | "cancel" | "status" | "recent_activity", ...)` for coworker control. OpenCode accepts explicit `agent`, `provider_id`, and `model_id` overrides. Codex accepts native `approval_policy` values and honors `OMC_CODEX_APPROVAL_POLICY`; supported values are `never`, `on-request`, `on-failure`, `untrusted`, and `reject`. The default Codex behavior is `never`. `on-request` is not an always-ask mode; Codex only opens pending approvals when it decides the action needs approval. For sustained multi-turn provider routing, keep using proxy mode via `oh-my-claude cc`.
-
-For Codex specifically, prefer coworker-style delegation: assign the goal, scope, and completion criteria, then let Codex execute autonomously. Avoid step-by-step task scripts unless the user explicitly asks for them.
+OpenCode is a native coworker target. Use `coworker_task(action="send" | "review" | "diff" | "fork" | "approve" | "revert" | "cancel" | "status" | "recent_activity", ...)` for coworker control. OpenCode accepts explicit `agent`, `provider_id`, and `model_id` overrides. Codex is available via the official [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) plugin (auto-installed with `omc install`). For sustained multi-turn provider routing, keep using proxy mode via `oh-my-claude cc`.
 
 **Provider shortcuts for `cc -p`:**
 
@@ -617,6 +609,7 @@ For Codex specifically, prefer coworker-style delegation: assign the goal, scope
 |----------|----------|-------|
 | `ds` | deepseek | deepseek-chat |
 | `dr` | deepseek | deepseek-reasoner |
+| `g51` | zhipu | glm-5.1 |
 | `g5` | zhipu | glm-5 |
 | `mm` | minimax-cn | MiniMax-M2.5 |
 | `km` | kimi | kimi-for-coding |
@@ -624,7 +617,7 @@ For Codex specifically, prefer coworker-style delegation: assign the goal, scope
 | `qc` | aliyun | qwen3-coder-plus |
 | `qn` | aliyun | qwen3-coder-next |
 | `g4` | aliyun | glm-4.7 |
-| `or` | openrouter | openrouter/hunter-alpha |
+| `or` | openrouter | nemotron-3-super (free) |
 | `ol` | ollama | *(auto-discovered)* |
 
 **Via CLI** (session ID supports prefix matching):
@@ -665,7 +658,7 @@ All agents run as native Task tool agents with full Claude Code tool access (Edi
 |-------|-------|---------|
 | Oracle | *(Claude native)* | Passthrough (dual-mode) |
 | Analyst | qwen3.5-plus | Directive → Aliyun |
-| Librarian | glm-5 | Directive → ZhiPu |
+| Librarian | glm-5.1 | Directive → ZhiPu |
 | Navigator | *(Claude native)* | Passthrough (dual-mode) |
 | Hephaestus | *(Claude native)* | Passthrough (dual-mode) |
 | Document-Writer | MiniMax-M2.5 | Directive → MiniMax |
@@ -675,7 +668,7 @@ All agents run as native Task tool agents with full Claude Code tool access (Edi
 | @deepseek | deepseek-chat | Directive → DeepSeek |
 | @deepseek-r | deepseek-reasoner | Directive → DeepSeek |
 | @qwen | qwen3.5-plus | Directive → Aliyun |
-| @zhipu | glm-5 | Directive → ZhiPu |
+| @zhipu | glm-5.1 | Directive → ZhiPu |
 
 ### Safety Features
 
@@ -740,7 +733,7 @@ omc proxy dashboard --stop  # Stop dashboard
 - 9 pages: Dashboard, Sessions, OMC Mem, Memory, Models, Providers, Switch, Prefs, Settings
 - Per-session model switching via forwarding API (`/api/instances/:controlPort/switch`)
 - Memory/preferences CRUD APIs with AI-powered operations (compact, daily, summarize, clear)
-- All AI features default to zhipu/glm-5, exclude Anthropic (dashboard runs outside CC)
+- All AI features default to zhipu/glm-5.1, exclude Anthropic (dashboard runs outside CC)
 
 </details>
 
@@ -802,7 +795,7 @@ All task agents run via Claude Code's Task tool. Each agent's prompt contains an
 |-------|-------|---------------------------|------|
 | **Oracle** | *(Claude native)* | Anthropic (dual-mode) | Deep reasoning |
 | **Analyst** | qwen3.5-plus | Aliyun | Quick code analysis |
-| **Librarian** | glm-5 | ZhiPu | External research |
+| **Librarian** | glm-5.1 | ZhiPu | External research |
 | **UI-Designer** | *(Claude native)* | Anthropic (dual-mode) | Visual/UI design |
 | **Document-Writer** | MiniMax-M2.5 | MiniMax | Documentation |
 | **Navigator** | *(Claude native)* | Anthropic (dual-mode) | Visual-to-code & multi-step tasks |

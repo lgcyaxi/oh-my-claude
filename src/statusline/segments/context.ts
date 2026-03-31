@@ -34,7 +34,8 @@ const CONTEXT_WINDOWS: Record<string, number> = {
 	'claude-3-haiku': 200_000,
 	// DeepSeek (deepseek-chat V3, deepseek-reasoner)
 	deepseek: 128_000,
-	// ZhiPu GLM (glm-5 before glm-4 — specificity)
+	// ZhiPu GLM (glm-5.1 before glm-5 before glm-4 — specificity)
+	'glm-5.1': 200_000,
 	'glm-5': 200_000,
 	'glm-4': 128_000,
 	// MiniMax

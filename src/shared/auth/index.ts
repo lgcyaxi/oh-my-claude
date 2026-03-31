@@ -1,7 +1,7 @@
 /**
  * Auth module barrel export
  *
- * OAuth authentication for OpenAI Codex.
+ * OAuth authentication utilities.
  */
 
 // Types
@@ -35,6 +35,3 @@ export {
   type PkcePair,
   type OAuthCallbackResult,
 } from "./server";
-
-// Provider-specific login flows
-export { loginCodex, loginCodexBrowser, loginCodexHeadless } from "./codex";

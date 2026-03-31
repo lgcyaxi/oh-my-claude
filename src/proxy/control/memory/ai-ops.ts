@@ -283,6 +283,10 @@ ${result.content}`;
  * Compact: Two-phase merge of related memories.
  *   analyze → AI suggests groups of related memories
  *   execute → merge groups into consolidated notes, delete originals
+ *
+ * Supports `body.type` filter: "note" (default), "session", or "all".
+ * Matches MCP compact_memories behavior (defaults to notes-only,
+ * sessions should use /omc-mem-daily).
  */
 export async function handleCompactOperation(
 	controlPort: string,
@@ -292,6 +296,12 @@ export async function handleCompactOperation(
 	corsHeaders: Record<string, string>,
 ): Promise<Response> {
 	const allEntries = await collectMemoryEntries(targetProject, true);
+
+	// Filter by type — default to "note" (matching MCP compact_memories behavior)
+	const typeFilter = typeof body.type === 'string' ? body.type : 'note';
+	const filteredEntries = typeFilter === 'all'
+		? allEntries
+		: allEntries.filter((e) => e.type === typeFilter);
 
 	if (mode === 'execute') {
 		// Execute: merge confirmed groups
@@ -304,6 +314,7 @@ export async function handleCompactOperation(
 
 		for (const group of groups) {
 			try {
+				// Look up entries from the full set (execute may reference IDs from analyze)
 				const entries = group.ids
 					.map((id) => allEntries.find((e) => e.id === id))
 					.filter((e): e is MemoryEntryWithPath => !!e);
@@ -335,6 +346,10 @@ export async function handleCompactOperation(
 					}
 				}
 
+				// Determine output type: if all entries are sessions → session, otherwise note
+				const allSessions = entries.every((e) => e.type === 'session');
+				const outputType = allSessions ? 'session' : 'note';
+
 				// Write merged file
 				const targetDir = entries[0]!.dir;
 				await mkdir(targetDir, { recursive: true });
@@ -351,7 +366,7 @@ export async function handleCompactOperation(
 
 				const fileContent = `---
 title: "${group.title}"
-type: note
+type: ${outputType}
 tags: [${[...mergedTags].join(', ')}]
 created: "${latestCreated}"
 updated: "${new Date().toISOString()}"
@@ -382,16 +397,26 @@ ${mergedContent}`;
 
 		return jsonResponse({
 			ok: true, action: 'compact', mode: 'execute',
-			analysis: `Compact Results\n===============\nMerged: ${totalMerged} memories into ${results.filter(r => !r.error).length} notes\nDeleted: ${totalDeleted} originals\n\n${results.map(r => r.error ? `- ${r.title}: ERROR — ${r.error}` : `- ${r.title}: Merged ${r.merged} → ${r.newFile} (deleted ${r.deleted.length})`).join('\n')}`,
-			memoriesAnalyzed: allEntries.length, results,
+			analysis: `Compact Results\n===============\nMerged: ${totalMerged} memories into ${results.filter(r => !r.error).length} groups\nDeleted: ${totalDeleted} originals\n\n${results.map(r => r.error ? `- ${r.title}: ERROR — ${r.error}` : `- ${r.title}: Merged ${r.merged} → ${r.newFile} (deleted ${r.deleted.length})`).join('\n')}`,
+			memoriesAnalyzed: filteredEntries.length, typeFilter, results,
 		}, 200, corsHeaders);
 	}
 
-	// Analyze mode: AI suggests groups
-	const prompt = `You are a memory organization assistant. Analyze these memories and suggest groups that can be merged.
+	// Analyze mode: AI suggests groups (only from filtered entries)
+	if (filteredEntries.length < 2) {
+		return jsonResponse({
+			ok: true, action: 'compact', mode: 'analyze',
+			analysis: `Not enough ${typeFilter === 'all' ? '' : typeFilter + ' '}memories to compact (found ${filteredEntries.length}, need at least 2).`,
+			groups: [], typeFilter,
+			memoriesAnalyzed: filteredEntries.length,
+		}, 200, corsHeaders);
+	}
+
+	const typeLabel = typeFilter === 'all' ? '' : `${typeFilter} `;
+	const prompt = `You are a memory organization assistant. Analyze these ${typeLabel}memories and suggest groups that can be merged.
 
 ## Memories:
-${allEntries.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created}): ${e.content.slice(0, 200)}`).join('\n')}
+${filteredEntries.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created}): ${e.content.slice(0, 200)}`).join('\n')}
 
 ## Rules:
 - Only group memories that are truly related or overlapping
@@ -417,9 +442,9 @@ ${allEntries.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created}): ${e
 		return jsonResponse({
 			ok: true, action: 'compact', mode: 'analyze',
 			analysis: result.content,
-			groups,
+			groups, typeFilter,
 			provider: result.provider, model: result.model,
-			memoriesAnalyzed: allEntries.length,
+			memoriesAnalyzed: filteredEntries.length,
 		}, 200, corsHeaders);
 	} catch (error) {
 		return jsonResponse({ error: `Compact failed: ${error instanceof Error ? error.message : String(error)}` }, 500, corsHeaders);
@@ -516,6 +541,9 @@ ${allEntries.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created}): ${e
  * Summarize: Two-phase timeline consolidation.
  *   analyze → AI generates summary from date range
  *   execute → write summary file, delete originals
+ *
+ * Supports `body.type` filter: "all" (default), "note", or "session".
+ * Matches MCP summarize_memories behavior.
  */
 export async function handleSummarizeOperation(
 	controlPort: string,
@@ -527,7 +555,15 @@ export async function handleSummarizeOperation(
 	const allEntries = await collectMemoryEntries(targetProject, true);
 	const days = typeof body.days === 'number' ? body.days : 7;
 	const cutoff = new Date(Date.now() - days * 86400000).toISOString();
-	const recent = allEntries.filter((e) => e.created && e.created >= cutoff);
+
+	// Filter by date range first
+	const recentAll = allEntries.filter((e) => e.created && e.created >= cutoff);
+
+	// Then filter by type — default to "all" (matching MCP summarize_memories behavior)
+	const typeFilter = typeof body.type === 'string' ? body.type : 'all';
+	const recent = typeFilter === 'all'
+		? recentAll
+		: recentAll.filter((e) => e.type === typeFilter);
 
 	if (mode === 'execute') {
 		const summary = body.summary as string | undefined;
@@ -587,11 +623,12 @@ ${summary}`;
 	}
 
 	// Analyze mode: AI generates summary
+	const typeLabel = typeFilter === 'all' ? '' : `${typeFilter} `;
 	if (recent.length === 0) {
 		return jsonResponse({
 			ok: true, action: 'summarize', mode: 'analyze',
-			analysis: `No memories found in the last ${days} days.`,
-			memoriesAnalyzed: 0,
+			analysis: `No ${typeLabel}memories found in the last ${days} days.`,
+			memoriesAnalyzed: 0, typeFilter,
 		}, 200, corsHeaders);
 	}
 
@@ -599,7 +636,7 @@ ${summary}`;
 
 ## Date Range: Last ${days} days (since ${cutoff.slice(0, 10)})
 
-## Memories:
+## ${typeLabel ? typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1) + 'memories' : 'Memories'}:
 ${recent.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created}): ${e.content.slice(0, 500)}`).join('\n\n')}
 
 ## Task:
@@ -629,7 +666,7 @@ Create a chronological timeline of key events, decisions, and activities. Preser
 			suggestedTags: parsed.tags || [],
 			originalIds: parsed.originalIds || recent.map((e) => e.id),
 			provider: result.provider, model: result.model,
-			memoriesAnalyzed: recent.length,
+			memoriesAnalyzed: recent.length, typeFilter,
 		}, 200, corsHeaders);
 	} catch (error) {
 		return jsonResponse({ error: `Summarize failed: ${error instanceof Error ? error.message : String(error)}` }, 500, corsHeaders);

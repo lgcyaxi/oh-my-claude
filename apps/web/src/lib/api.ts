@@ -63,7 +63,14 @@ export const getHealth = () => request<HealthResponse>('/health');
 export const getStatus = (sessionId?: string) =>
   request<StatusResponse>(`/status${sessionId ? `?session=${sessionId}` : ''}`);
 export const getSessions = () => request<{ sessions: Session[]; count: number }>('/sessions');
-export const getUsage = () => request<{ providers: Record<string, number> }>('/usage');
+export interface ProviderUsage {
+  key: string;
+  abbrev: string;
+  display: string;
+  color: 'good' | 'warning' | 'critical';
+  configured: boolean;
+}
+export const getUsage = () => request<{ providers: ProviderUsage[]; cached: boolean }>('/api/usage', { timeout: 10000 });
 
 /* ── Providers & Models ── */
 

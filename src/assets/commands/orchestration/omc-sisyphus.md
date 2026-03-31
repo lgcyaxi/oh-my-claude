@@ -27,7 +27,7 @@ Use @mentions to delegate to specialized agents (role-based):
 | @scout           | Scout           | Quick codebase exploration              | claude-haiku      |
 | @explore         | Explore         | Contextual grep, find patterns          | claude-haiku      |
 | @analyst         | Analyst         | Quick code analysis, pattern review     | deepseek-chat     |
-| @librarian       | Librarian       | External docs, library research         | glm-5             |
+| @librarian       | Librarian       | External docs, library research         | glm-5.1           |
 | @document-writer | Document Writer | READMEs, API docs, guides               | MiniMax-M2.5      |
 
 Use @mentions to target specific providers (provider agents):
@@ -39,7 +39,7 @@ Use @mentions to target specific providers (provider agents):
 | @deepseek   | DeepSeek   | deepseek-chat     | General tasks via DeepSeek           |
 | @deepseek-r | DeepSeek   | deepseek-reasoner | Reasoning-heavy tasks via DeepSeek R |
 | @qwen       | Aliyun     | qwen3.5-plus      | General tasks via Qwen               |
-| @zhipu      | ZhiPu      | glm-5             | General tasks via ZhiPu GLM          |
+| @zhipu      | ZhiPu      | glm-5.1           | General tasks via ZhiPu GLM          |
 
 **Usage**: `/omc-sisyphus @oracle analyze this API design` → Sisyphus delegates
 to Oracle (auto-routed to qwen3.5-plus via proxy)
@@ -57,7 +57,7 @@ cheaper/specialized models instead of consuming Anthropic tokens.
 
 | Priority | Method                                  | When to Use                                                    | Token Cost         |
 | -------- | --------------------------------------- | -------------------------------------------------------------- | ------------------ |
-| 1        | `coworker_task(action="send", target="codex" | "opencode")`         | Self-contained, parallelizable tasks                           | Free (local)       |
+| 1        | `coworker_task(action="send", target="opencode")` or `/codex:rescue`         | Self-contained, parallelizable tasks                           | Free (local)       |
 | 2        | `Task(subagent_type=...)`               | Single estimable tasks — each auto-routed to external provider | Low (external API) |
 | 3        | `switch_model` → work → `switch_revert` | Sustained multi-turn work (3+ turns)                           | Low (external API) |
 | 4        | Direct execution                        | Trivial tasks (< 3 tool calls)                                 | High (Anthropic)   |
@@ -77,7 +77,7 @@ cheaper/specialized models instead of consuming Anthropic tokens.
 | Code implementation           | `Task(subagent_type="hephaestus")`      | Routes to kimi-for-coding      |
 | Visual / multimodal           | `Task(subagent_type="navigator")`       | Routes to kimi-for-coding      |
 | Quick analysis                | `Task(subagent_type="analyst")`         | Routes to deepseek-chat        |
-| Library research              | `Task(subagent_type="librarian")`       | Routes to glm-5                |
+| Library research              | `Task(subagent_type="librarian")`       | Routes to glm-5.1              |
 | Documentation                 | `Task(subagent_type="document-writer")` | Routes to MiniMax-M2.5         |
 | Code review                   | `Task(subagent_type="claude-reviewer")` | Uses Claude (quality critical) |
 | Fast exploration              | `Task(subagent_type="claude-scout")`    | Uses Claude haiku (speed)      |
@@ -110,7 +110,8 @@ Task(subagent_type="analyst", prompt="review patterns")      // → deepseek-cha
 
 | Scenario                               | Tool                             | Why                                 |
 | -------------------------------------- | -------------------------------- | ----------------------------------- |
-| Self-contained task for Codex/OpenCode | `coworker_task(action="send")`                  | Native coworker delegation          |
+| Self-contained task for Codex          | `/codex:rescue [task]`           | Codex plugin delegation             |
+| Self-contained task for OpenCode       | `coworker_task(action="send")`   | Native coworker delegation          |
 | Single estimable task                  | `Task(subagent_type=...)`        | Auto-routed, saves Anthropic tokens |
 | Trivial task (< 3 tool calls)          | Do it yourself                   | Direct execution                    |
 | Multi-turn sustained work (3+)         | `switch_model` → `switch_revert` | Only for sustained sessions         |
@@ -133,7 +134,7 @@ Agent routing (switch_model, only for sustained 3+ turn work):
 - Deep impl → `switch_model(kimi, K2.5)`, work directly
 - Reasoning → `switch_model(aliyun, qwen3.5-plus)`, work directly
 - Analysis → `switch_model(deepseek, deepseek-chat)`, work directly
-- Research → `switch_model(zhipu, glm-5)`, work directly
+- Research → `switch_model(zhipu, glm-5.1)`, work directly
 - Docs → `switch_model(minimax, MiniMax-M2.5)`, work directly
 
 **Requires proxy** — launch via `oh-my-claude cc`. Model routing is not
@@ -145,51 +146,47 @@ Forgetting to revert leaves the session permanently routed to the provider.
 
 ## Coworker Delegation
 
-Codex and OpenCode are native coworker targets with full protocol support.
-**Prefer coworkers over direct execution for any self-contained implementation
-task.**
+Codex (via official plugin) and OpenCode (native coworker) handle self-contained
+implementation tasks. **Prefer delegation over direct execution.**
 
-**Coworker-First Principle**: Before implementing yourself, always check:
+**Delegation-First Principle**: Before implementing yourself, always check:
 
 1. Is the task self-contained with clear acceptance criteria?
 2. Can it run independently without multi-turn clarification?
-3. If YES to both → delegate to a coworker
+3. If YES to both → delegate to Codex or OpenCode
 
 **Extended Routing table:**
 
 | Task Type                         | Preferred Route                         | Fallback                                |
 | --------------------------------- | --------------------------------------- | --------------------------------------- |
-| Scaffolding / greenfield          | `coworker_task(action="send", target="codex")`         | `Task(subagent_type="hephaestus")`      |
+| Scaffolding / greenfield          | `/codex:rescue [task]`                  | `Task(subagent_type="hephaestus")`      |
 | Refactoring / file reorganization | `coworker_task(action="send", target="opencode")`      | `Task(subagent_type="hephaestus")`      |
-| Code generation                   | `coworker_task(action="send", target="codex")`         | `Task(subagent_type="hephaestus")`      |
-| Boilerplate / templates           | `coworker_task(action="send", target="codex")`         | `Task(subagent_type="hephaestus")`      |
+| Code generation                   | `/codex:rescue [task]`                  | `Task(subagent_type="hephaestus")`      |
+| Boilerplate / templates           | `/codex:rescue [task]`                  | `Task(subagent_type="hephaestus")`      |
 | UI design / visual-to-code        | `coworker_task(action="send", target="opencode")`      | `Task(subagent_type="navigator")`       |
-| Test writing                      | `coworker_task(action="send", target="codex")`         | `Task(subagent_type="analyst")`         |
-| Migration scripts                 | `coworker_task(action="send", target="codex")`         | Direct execution                        |
-| Config generation                 | `coworker_task(action="send", target="codex")`         | Direct execution                        |
-| Simple bug fixes                  | `coworker_task(action="send", target="codex")`         | Direct execution                        |
-| Code review suggestions           | `coworker_task(action="send", target="opencode")`      | `Task(subagent_type="claude-reviewer")` |
+| Test writing                      | `/codex:rescue [task]`                  | `Task(subagent_type="analyst")`         |
+| Migration scripts                 | `/codex:rescue [task]`                  | Direct execution                        |
+| Config generation                 | `/codex:rescue [task]`                  | Direct execution                        |
+| Simple bug fixes                  | `/codex:rescue [task]`                  | Direct execution                        |
+| Code review                       | `/codex:rescue Review changes for bugs` | `Task(subagent_type="claude-reviewer")` |
 | Research / reasoning              | `Task(subagent_type="oracle")`          | `Task(subagent_type="analyst")`         |
 | Long-form docs                    | `Task(subagent_type="document-writer")` | Direct execution                        |
 
-**Parallel coworker execution**: Launch multiple coworkers simultaneously for
-independent subtasks:
+**Parallel execution**: Launch Codex and OpenCode simultaneously for independent
+subtasks:
 
 ```
-coworker_task(action="send", target="codex", message="implement backend API")
+/codex:rescue --background implement backend API validation
 coworker_task(action="send", target="opencode", message="refactor frontend components")
 ```
 
 **How to use:**
 
-1. Use `coworker_task(action="send")` when the task is self-contained, parallelizable, or
-   explicitly assigned to Codex/OpenCode
-2. Frame the task with: goal, scope, files to touch, and done-when conditions
-3. If coworker routing is unavailable, fall back to `Task(subagent_type=...)`
-   (auto-routed)
-4. Do not involve Codex/OpenCode for ambiguous, multi-turn exploration
-5. For non-send coworker controls, prefer the unified task surface:
-   `coworker_task(action="review" | "diff" | "fork" | "approve" | "revert" | "status" | "recent_activity", ...)`
+1. Use `/codex:rescue [task]` for Codex tasks (scaffolding, code gen, tests, bug fixes)
+2. Use `coworker_task(action="send", target="opencode")` for OpenCode tasks (refactoring, UI)
+3. Frame the task with: goal, scope, files to touch, and done-when conditions
+4. If Codex/OpenCode unavailable, fall back to `Task(subagent_type=...)`
+5. Do not delegate ambiguous, multi-turn exploration tasks
 
 **Memory Integration (MANDATORY — do NOT skip):**
 
@@ -221,9 +218,15 @@ Skipping memory = losing cross-session continuity. The user relies on this.
    features)
 7. Execute or delegate as appropriate — prefer subagents and coworkers over
    direct execution
-8. Verify results before reporting completion
-9. **Remember** (REQUIRED LAST STEP):
-   `remember({content: "key findings", tags: [...]})` — store decisions and
-   patterns
+8. **Codex Audit** (REQUIRED before reporting completion):
+   If code was changed and the Codex plugin is available, run
+   `/codex:rescue Review all uncommitted changes for bugs and code quality`
+   to audit changes. Address any findings before proceeding.
+   This is a BLOCKING step — do not skip it.
+   Note: Use `/codex:rescue` (not `/codex:review`) — Claude can invoke rescue but not review directly.
+9. Verify results before reporting completion
+10. **Remember** (REQUIRED LAST STEP):
+    `remember({content: "key findings", tags: [...]})` — store decisions and
+    patterns
 
 Now, analyze the user's request and proceed accordingly.

@@ -29,7 +29,7 @@ constraints, not a detailed implementation script.
 **Fallback Strategy:**
 
 1. Try OpenCode first (if installed)
-2. Fall back to Codex coworker for scaffolding or self-contained parallel tasks
+2. Fall back to `/codex:rescue` for scaffolding or self-contained parallel tasks
 3. Fall back to Claude native for architecture decisions
 
 ## Execution
@@ -49,7 +49,7 @@ await coworker_task({
 ```
 
 **Step 2: Handle fallback if OpenCode not available** If OpenCode CLI is not
-installed or `opencode serve` fails to start, delegate to the Codex coworker for
+installed or `opencode serve` fails to start, delegate to `/codex:rescue` for
 implementation tasks, or use Claude native for analysis.
 
 **Step 3: Return results** Present the results from OpenCode to the user,

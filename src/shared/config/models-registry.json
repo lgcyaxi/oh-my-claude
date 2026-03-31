@@ -14,6 +14,7 @@
 			"name": "zhipu",
 			"label": "ZhiPu",
 			"models": [
+				{ "id": "glm-5.1", "label": "ZhiPu GLM-5.1" },
 				{ "id": "glm-5", "label": "ZhiPu GLM-5" },
 				{ "id": "glm-5-turbo", "label": "ZhiPu GLM-5 Turbo" }
 			]
@@ -21,17 +22,26 @@
 		{
 			"name": "zai",
 			"label": "Z.AI",
-			"models": [{ "id": "glm-5", "label": "GLM-5 (Z.AI)" }]
+			"models": [
+				{ "id": "glm-5.1", "label": "GLM-5.1 (Z.AI)" },
+				{ "id": "glm-5", "label": "GLM-5 (Z.AI)" }
+			]
 		},
 		{
 			"name": "minimax",
 			"label": "MiniMax",
-			"models": [{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5" }]
+			"models": [
+				{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5" },
+				{ "id": "MiniMax-M2.7", "label": "MiniMax M2.7" }
+			]
 		},
 		{
 			"name": "minimax-cn",
 			"label": "MiniMax CN",
-			"models": [{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5 (CN)" }]
+			"models": [
+				{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5 (CN)" },
+				{ "id": "MiniMax-M2.7", "label": "MiniMax M2.7 (CN)" }
+			]
 		},
 		{
 			"name": "kimi",
@@ -65,6 +75,11 @@
 					"id": "MiniMax-M2.5-ay",
 					"realId": "MiniMax-M2.5",
 					"label": "MiniMax M2.5 (Aliyun)"
+				},
+				{
+					"id": "MiniMax-M2.7-ay",
+					"realId": "MiniMax-M2.7",
+					"label": "MiniMax M2.7 (Aliyun)"
 				}
 			]
 		},
@@ -72,11 +87,6 @@
 			"name": "openrouter",
 			"label": "OpenRouter",
 			"models": [
-				{
-					"id": "openrouter/hunter-alpha",
-					"label": "Hunter Alpha (free)",
-					"note": "1T params, 1M context, agentic"
-				},
 				{
 					"id": "nvidia/nemotron-3-super-120b-a12b:free",
 					"label": "Nemotron 3 Super (free)",
@@ -133,14 +143,14 @@
 		},
 		"librarian": {
 			"provider": "zhipu",
-			"model": "glm-5",
+			"model": "glm-5.1",
 			"temperature": 0.3,
 			"description": "External docs, library research, remote codebases",
 			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
 		},
 		"document-writer": {
 			"provider": "minimax-cn",
-			"model": "MiniMax-M2.5",
+			"model": "MiniMax-M2.7",
 			"temperature": 0.5,
 			"description": "Technical documentation, READMEs, API docs",
 			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
@@ -175,7 +185,7 @@
 		},
 		"mm-cn": {
 			"provider": "minimax-cn",
-			"model": "MiniMax-M2.5",
+			"model": "MiniMax-M2.7",
 			"temperature": 0.5,
 			"description": "Provider agent: general-purpose via MiniMax CN",
 			"agentType": "provider"
@@ -203,9 +213,9 @@
 		},
 		"zhipu": {
 			"provider": "zhipu",
-			"model": "glm-5",
+			"model": "glm-5.1",
 			"temperature": 0.3,
-			"description": "Provider agent: general-purpose via ZhiPu GLM-5",
+			"description": "Provider agent: general-purpose via ZhiPu GLM-5.1",
 			"agentType": "provider"
 		}
 	},
@@ -247,7 +257,7 @@
 		},
 		"writing": {
 			"provider": "minimax-cn",
-			"model": "MiniMax-M2.5",
+			"model": "MiniMax-M2.7",
 			"temperature": 0.5
 		},
 		"visual-execution": {

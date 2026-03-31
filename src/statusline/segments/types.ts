@@ -16,7 +16,6 @@ export type SegmentId =
 	| 'proxy'
 	| 'usage'
 	| 'preferences'
-	| 'codex'
 	| 'opencode';
 
 export const ALL_SEGMENT_IDS: SegmentId[] = [
@@ -31,7 +30,6 @@ export const ALL_SEGMENT_IDS: SegmentId[] = [
 	'proxy',
 	'usage',
 	'preferences',
-	'codex',
 	'opencode',
 ];
 
@@ -142,7 +140,6 @@ export const PRESETS: Record<StatusLineConfig['preset'], SegmentId[]> = {
 		'proxy',
 		'usage',
 		'preferences',
-		'codex',
 		'opencode',
 	],
 };
@@ -162,7 +159,6 @@ export const DEFAULT_SEGMENT_ROWS: Record<SegmentId, number> = {
 	memory: 2,
 	preferences: 2,
 	'output-style': 2,
-	codex: 3,
 	opencode: 3,
 	usage: 3,
 };
@@ -179,7 +175,6 @@ export const DEFAULT_SEGMENT_POSITIONS: Record<SegmentId, number> = {
 	memory: 4,
 	preferences: 5,
 	'output-style': 6,
-	codex: 1,
-	opencode: 2,
-	usage: 3,
+	opencode: 1,
+	usage: 2,
 };

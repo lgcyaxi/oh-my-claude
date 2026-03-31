@@ -265,7 +265,7 @@ class LiveRenderer {
 
 export function registerCoworkerLogSubcommand(
 	parent: Command,
-	target: 'codex' | 'opencode',
+	target: 'opencode',
 	label: string,
 ): Command {
 	const logPath = getCoworkerLogPath(target);

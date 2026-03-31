@@ -4,11 +4,15 @@
  * Looks for files in two locations:
  * 1. dist/proxy/web/ (development, relative to project root)
  * 2. ~/.claude/oh-my-claude/proxy/web/ (production, installed location)
+ *
+ * index.html is read into memory once to avoid EMFILE (too many open files)
+ * on Windows — Bun.file() opens a new FD per request, and the SPA fallback
+ * fires on every unmatched path.
  */
 
-import { existsSync } from 'fs';
-import { join, extname } from 'path';
-import { homedir } from 'os';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, extname } from 'node:path';
+import { homedir } from 'node:os';
 
 const MIME_TYPES: Record<string, string> = {
 	'.html': 'text/html',
@@ -62,6 +66,18 @@ function resolveWebDir(): string | null {
 	return null;
 }
 
+/**
+ * Cached index.html buffer — read once into memory to avoid opening a new
+ * file descriptor on every SPA fallback request (prevents EMFILE on Windows).
+ */
+let cachedIndexHtml: Buffer | null = null;
+
+function getIndexHtml(webDir: string): Buffer {
+	if (cachedIndexHtml !== null) return cachedIndexHtml;
+	cachedIndexHtml = readFileSync(join(webDir, 'index.html'));
+	return cachedIndexHtml;
+}
+
 export function serveWebAsset(assetPath: string): Response {
 	const webDir = resolveWebDir();
 	if (!webDir) {
@@ -78,12 +94,22 @@ export function serveWebAsset(assetPath: string): Response {
 	const normalized = assetPath.replace(/\.\./g, '').replace(/^\/+/, '');
 	const filePath = join(webDir, normalized);
 
-	// Check if file exists
-	const file = Bun.file(filePath);
-	if (file.size > 0) {
+	// Serve index.html directly from memory cache
+	if (normalized === 'index.html' || normalized === '') {
+		return new Response(getIndexHtml(webDir), {
+			headers: {
+				'content-type': 'text/html',
+				'cache-control': 'no-cache',
+			},
+		});
+	}
+
+	// Serve static assets from disk — use existsSync + readFileSync to avoid
+	// Bun.file() FD leaks (each Bun.file() holds an open FD until Response is consumed)
+	if (existsSync(filePath)) {
 		const ext = extname(filePath);
 		const contentType = MIME_TYPES[ext] ?? 'application/octet-stream';
-		return new Response(file, {
+		return new Response(readFileSync(filePath), {
 			headers: {
 				'content-type': contentType,
 				'cache-control':
@@ -94,9 +120,8 @@ export function serveWebAsset(assetPath: string): Response {
 		});
 	}
 
-	// SPA fallback — serve index.html for any unresolved path
-	const indexFile = Bun.file(join(webDir, 'index.html'));
-	return new Response(indexFile, {
+	// SPA fallback — serve cached index.html for any unresolved path
+	return new Response(getIndexHtml(webDir), {
 		headers: {
 			'content-type': 'text/html',
 			'cache-control': 'no-cache',

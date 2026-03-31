@@ -23,7 +23,6 @@ import { registerTerminalConfigCommand } from './terminal-config';
 import { registerStyleCommand } from './style';
 import { registerOllamaCommand } from './ollama';
 import { registerCleanupCommand } from './cleanup';
-import { registerCodexLogCommand } from './codex-log';
 import { registerOpenCodeLogCommand } from './opencode-log';
 
 export function registerManageCommand(program: Command) {
@@ -64,7 +63,6 @@ export function registerManageCommand(program: Command) {
 				`  omc m cleanup     ${c.dim}# Clean stale session data and temp files${c.reset}`,
 			);
 			console.log(
-				`  omc m codex log   ${c.dim}# View Codex coworker activity log${c.reset}`,
 			);
 			console.log(
 				`  omc m opencode log ${c.dim}# View OpenCode coworker activity log${c.reset}`,
@@ -87,6 +85,5 @@ export function registerManageCommand(program: Command) {
 	registerOllamaCommand(manageCmd); // manage ollama + status, pull, use
 	registerTerminalConfigCommand(manageCmd); // manage terminal-config (tc) + tmux, wezterm
 	registerCleanupCommand(manageCmd); // manage cleanup + --dry-run, --force
-	registerCodexLogCommand(manageCmd); // manage codex log + --print, --follow, --clear
 	registerOpenCodeLogCommand(manageCmd); // manage opencode log + --print, --follow, --clear
 }
