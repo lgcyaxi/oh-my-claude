@@ -41,9 +41,12 @@ export default function SettingsPage() {
   const [sumTypeFilter, setSumTypeFilter] = useState('all'); // summarize default: all
 
   function getMemOpOptions() {
-    const projectPath = memOpProject
-      ? projects.find((p) => p.folder === memOpProject)?.projectPath
-      : undefined;
+    let projectPath: string | undefined;
+    if (memOpProject === '__global__') {
+      projectPath = '__global__';
+    } else if (memOpProject) {
+      projectPath = projects.find((p) => p.folder === memOpProject)?.projectPath;
+    }
     const provider = memProvider || selectedProvider;
     const model = memModel || selectedModel;
     return { provider: provider || undefined, model: model || undefined, projectPath };
@@ -370,6 +373,7 @@ export default function SettingsPage() {
               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded text-sm text-text-primary outline-none focus:border-accent/50"
             >
               <option value="">All memories</option>
+              <option value="__global__">Global only</option>
               {projects.map((p) => (
                 <option key={p.folder} value={p.folder}>
                   {p.projectPath}

@@ -8,6 +8,10 @@ All notable changes to oh-my-claude are documented here.
 
 - **Dashboard OMC Mem Duplicate Entries** — Fixed duplicate project memory entries caused by multiple Claude project folders resolving to the same cwd. Three-layer dedup fix restores correct per-project memory lists and reliable click behavior.
 - **Stale Update Banner** — Fixed update notification persisting after `omc update --beta`. Cache now cleared on update and re-validated on display.
+- **Memory Operations Timeout** — Increased from 60s to 180s, fixing "signal is aborted" errors during daily consolidation.
+- **Memory Operations Global Scope** — Added "Global only" option to scope dropdown for targeting global memories independently.
+- **Session Bulk AI Rename** — "Rename N unnamed" button on Sessions page for batch AI-renaming.
+- **Old Session Cleanup** — "Clean N old" button to delete sessions older than 15 days.
 
 ## [2.2.3](changelog/v2.2.3.md) - 2026-03-31
 

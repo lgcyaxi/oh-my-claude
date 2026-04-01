@@ -293,6 +293,12 @@ export const cleanupEmptySessions = (folder: string) =>
     { method: 'DELETE', headers: {} },
   );
 
+export const cleanupOldSessions = (folder: string, days: number = 15) =>
+  request<{ ok: boolean; deleted: number; sessionIds: string[]; days: number }>(
+    `/api/sessions/${encodeURIComponent(folder)}/old?days=${days}`,
+    { method: 'DELETE' },
+  );
+
 export const deleteProject = (folder: string) =>
   request<{ ok: boolean; folder: string }>(
     `/api/sessions/${encodeURIComponent(folder)}`,
@@ -339,7 +345,7 @@ export const runMemoryOperation = (action: string, options?: Record<string, any>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   request<{ ok: boolean; action: string; analysis: string; provider: string; model: string; memoriesAnalyzed: number; datesProcessed?: number; groups?: any[]; candidates?: any[]; suggestedSummary?: string; suggestedTitle?: string; suggestedTags?: string[]; originalIds?: string[] }>(
     `/api/memory/operations/${action}`,
-    { method: 'POST', body: JSON.stringify(options ?? {}), timeout: 60000 },
+    { method: 'POST', body: JSON.stringify(options ?? {}), timeout: 180000 },
   );
 
 /* ── Preferences ── */

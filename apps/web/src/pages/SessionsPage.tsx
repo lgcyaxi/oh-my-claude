@@ -6,6 +6,7 @@ import {
   renameSession,
   deleteSession,
   cleanupEmptySessions,
+  cleanupOldSessions,
   deleteProject,
   aiRenameSession,
   type ProjectEntry,
@@ -25,6 +26,8 @@ export default function SessionsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<string | null>(null);
   const [aiRenamingId, setAiRenamingId] = useState<string | null>(null);
+  const [bulkRenaming, setBulkRenaming] = useState(false);
+  const [bulkRenameProgress, setBulkRenameProgress] = useState('');
 
   // Load projects
   useEffect(() => {
@@ -117,7 +120,42 @@ export default function SessionsPage() {
     setAiRenamingId(null);
   }
 
+  async function handleBulkAiRename() {
+    if (!selectedFolder) return;
+    setBulkRenaming(true);
+    setBulkRenameProgress('');
+    const candidates = sessions.filter((s) => s.firstPrompt && !s.summary);
+    if (candidates.length === 0) {
+      setBulkRenameProgress('All sessions already have summaries');
+      setBulkRenaming(false);
+      return;
+    }
+    for (let i = 0; i < candidates.length; i++) {
+      const s = candidates[i]!;
+      setBulkRenameProgress(`Renaming ${i + 1}/${candidates.length}...`);
+      try {
+        await aiRenameSession(selectedFolder, s.sessionId);
+      } catch { /* continue */ }
+    }
+    setBulkRenameProgress(`Done! Renamed ${candidates.length} sessions`);
+    setBulkRenaming(false);
+    reloadSessions();
+  }
+
+  async function handleCleanupOld() {
+    if (!selectedFolder) return;
+    try {
+      const result = await cleanupOldSessions(selectedFolder, 15);
+      if (result.deleted > 0) reloadSessions();
+    } catch { /* ignore */ }
+  }
+
   const emptyCount = sessions.filter((s) => !s.firstPrompt && !s.summary).length;
+  const unnamedCount = sessions.filter((s) => s.firstPrompt && !s.summary).length;
+  const oldCount = sessions.filter((s) => {
+    const modified = new Date(s.modified).getTime();
+    return Date.now() - modified > 15 * 86400000;
+  }).length;
 
   async function handleCleanup() {
     if (!selectedFolder) return;
@@ -271,6 +309,25 @@ export default function SessionsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1 px-3 py-1.5 text-sm rounded border border-border bg-bg-secondary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent"
           />
+          {unnamedCount > 0 && (
+            <button
+              onClick={handleBulkAiRename}
+              disabled={bulkRenaming}
+              className="shrink-0 px-3 py-1.5 text-xs border border-border text-text-tertiary rounded hover:text-accent hover:border-accent/50 transition-colors disabled:opacity-50"
+              title={`AI-rename ${unnamedCount} unnamed session${unnamedCount !== 1 ? 's' : ''}`}
+            >
+              {bulkRenaming ? bulkRenameProgress : `Rename ${unnamedCount} unnamed`}
+            </button>
+          )}
+          {oldCount > 0 && (
+            <button
+              onClick={handleCleanupOld}
+              className="shrink-0 px-3 py-1.5 text-xs border border-border text-text-tertiary rounded hover:text-warning hover:border-warning/50 transition-colors"
+              title={`Delete ${oldCount} session${oldCount !== 1 ? 's' : ''} older than 15 days`}
+            >
+              Clean {oldCount} old
+            </button>
+          )}
           {emptyCount > 0 && (
             <button
               onClick={handleCleanup}

@@ -52,6 +52,13 @@ export async function handleSessionsRequest(
 		return handleCleanupEmpty(folder, corsHeaders);
 	}
 
+	// DELETE /api/sessions/:folder/old — delete sessions older than N days (default 15)
+	if (req.method === 'DELETE' && parts.length === 2 && parts[1] === 'old') {
+		const url = new URL(req.url, 'http://localhost');
+		const days = parseInt(url.searchParams.get('days') ?? '15', 10);
+		return handleCleanupOld(folder, days, corsHeaders);
+	}
+
 	const sessionId = parts[1] ?? '';
 	if (!sessionId)
 		return jsonResponse({ error: 'Not found' }, 404, corsHeaders);
@@ -580,6 +587,52 @@ async function handleCleanupEmpty(
 
 	return jsonResponse(
 		{ ok: true, deleted: deleted.length, sessionIds: deleted },
+		200,
+		corsHeaders,
+	);
+}
+
+/** DELETE /api/sessions/:folder/old?days=15 — delete sessions older than N days */
+async function handleCleanupOld(
+	folder: string,
+	days: number,
+	corsHeaders: Record<string, string>,
+): Promise<Response> {
+	const cutoff = Date.now() - days * 86400000;
+	const jsonlFiles = await scanJsonlFiles(folder);
+	const deleted: string[] = [];
+
+	for (const file of jsonlFiles) {
+		// Use file mtime as age indicator
+		if (file.mtime.getTime() < cutoff) {
+			try {
+				await unlink(file.filePath);
+				const sessionDir = join(PROJECTS_DIR, folder, file.sessionId);
+				if (existsSync(sessionDir)) {
+					await rm(sessionDir, { recursive: true });
+				}
+				deleted.push(file.sessionId);
+			} catch { /* skip */ }
+		}
+	}
+
+	// Clean up sessions-index.json
+	if (deleted.length > 0) {
+		try {
+			const indexPath = join(PROJECTS_DIR, folder, 'sessions-index.json');
+			const raw = await readFile(indexPath, 'utf-8');
+			const index = JSON.parse(raw) as SessionIndex;
+			const deletedSet = new Set(deleted);
+			const before = index.entries.length;
+			index.entries = index.entries.filter((e) => !deletedSet.has(e.sessionId));
+			if (index.entries.length < before) {
+				await writeFile(indexPath, JSON.stringify(index, null, 2), 'utf-8');
+			}
+		} catch { /* no index */ }
+	}
+
+	return jsonResponse(
+		{ ok: true, deleted: deleted.length, sessionIds: deleted, days },
 		200,
 		corsHeaders,
 	);
