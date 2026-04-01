@@ -10,10 +10,26 @@ import {
   type ProxyInstance,
 } from '../lib/api';
 
+/** Flattened view: one entry per Claude Code session */
+interface SessionView {
+  /** Proxy control port (for API forwarding) */
+  controlPort: number;
+  /** Claude Code session ID (from in-memory session state) */
+  sessionId: string;
+  /** Proxy instance session ID (from registry) */
+  instanceSessionId: string;
+  switched: boolean;
+  provider?: string;
+  model?: string;
+  lastActivity: number;
+  uptimeHuman?: string;
+  requestCount?: number;
+}
+
 export default function SwitchPage() {
-  const [instances, setInstances] = useState<ProxyInstance[]>([]);
+  const [sessions, setSessions] = useState<SessionView[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [selectedSession, setSelectedSession] = useState<number | null>(null);
+  const [selected, setSelected] = useState<string | null>(null); // sessionId
   const [selectedProvider, setSelectedProvider] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,11 +42,44 @@ export default function SwitchPage() {
         getInstances().catch(() => ({ instances: [], summary: { registered: 0, alive: 0, totalSessions: 0, totalRequests: 0 } })),
       ]);
       setProviders(pr.providers ?? []);
-      const alive = (inst.instances ?? []).filter((i) => i.alive);
-      setInstances(alive);
+
+      // Flatten: each proxy instance may have multiple Claude Code sessions
+      const views: SessionView[] = [];
+      for (const instance of (inst.instances ?? []).filter((i: ProxyInstance) => i.alive)) {
+        if (instance.sessions.length > 0) {
+          for (const s of instance.sessions) {
+            views.push({
+              controlPort: instance.controlPort,
+              sessionId: s.sessionId,
+              instanceSessionId: instance.sessionId,
+              switched: s.switched,
+              provider: s.provider,
+              model: s.model,
+              lastActivity: s.lastActivity,
+              uptimeHuman: instance.health?.uptimeHuman,
+              requestCount: instance.health?.requestCount,
+            });
+          }
+        } else {
+          // No active sessions yet — show instance-level info
+          views.push({
+            controlPort: instance.controlPort,
+            sessionId: instance.sessionId,
+            instanceSessionId: instance.sessionId,
+            switched: !!instance.provider,
+            provider: instance.provider,
+            model: instance.model,
+            lastActivity: Date.now(),
+            uptimeHuman: instance.health?.uptimeHuman,
+            requestCount: instance.health?.requestCount,
+          });
+        }
+      }
+      setSessions(views);
+
       // Auto-select if only one session
-      if (alive.length === 1 && selectedSession === null) {
-        setSelectedSession(alive[0]!.controlPort);
+      if (views.length === 1 && selected === null) {
+        setSelected(views[0]!.sessionId);
       }
     } catch { /* ignore */ }
   }
@@ -44,17 +93,16 @@ export default function SwitchPage() {
   const currentProvider = providers.find((p) => p.name === selectedProvider);
   const models = currentProvider?.models ?? [];
 
-  const selectedInstance = instances.find((i) => i.controlPort === selectedSession);
-  const session = selectedInstance?.sessions[0];
-  const isSwitched = session?.switched ?? !!selectedInstance?.provider;
-  const currentModel = session?.model ?? selectedInstance?.model;
-  const currentProv = session?.provider ?? selectedInstance?.provider;
+  const selectedSession = sessions.find((s) => s.sessionId === selected);
+  const isSwitched = selectedSession?.switched ?? false;
+  const currentModel = selectedSession?.model;
+  const currentProv = selectedSession?.provider;
 
   const handleSwitch = async () => {
     if (!selectedSession || !selectedProvider || !selectedModel) return;
     setLoading(true);
     try {
-      await switchInstanceModel(selectedSession, selectedProvider, selectedModel);
+      await switchInstanceModel(selectedSession.controlPort, selectedProvider, selectedModel, selectedSession.sessionId);
       toast(`Switched to ${selectedProvider}/${selectedModel}`, 'success');
       await refresh();
     } catch (err) {
@@ -68,7 +116,7 @@ export default function SwitchPage() {
     if (!selectedSession) return;
     setLoading(true);
     try {
-      await revertInstance(selectedSession);
+      await revertInstance(selectedSession.controlPort, selectedSession.sessionId);
       toast('Reverted to Anthropic passthrough', 'success');
       await refresh();
     } catch (err) {
@@ -82,13 +130,13 @@ export default function SwitchPage() {
     <div className="max-w-2xl space-y-6">
       <h1 className="text-xl font-semibold">Live Model Switch</h1>
 
-      {instances.length === 0 && (
+      {sessions.length === 0 && (
         <div className="text-sm text-text-tertiary text-center py-8 bg-bg-secondary border border-border rounded-lg">
           No active proxy sessions. Start one with <code className="text-text-secondary">omc cc</code>
         </div>
       )}
 
-      {instances.length > 0 && (
+      {sessions.length > 0 && (
         <>
           {/* Session Selector */}
           <div className="bg-bg-secondary border border-border rounded-lg p-5">
@@ -96,17 +144,13 @@ export default function SwitchPage() {
               Select Session
             </span>
             <div className="space-y-2">
-              {instances.map((inst) => {
-                const s = inst.sessions[0];
-                const switched = s?.switched ?? !!inst.provider;
-                const prov = s?.provider ?? inst.provider;
-                const mod = s?.model ?? inst.model;
-                const isSelected = inst.controlPort === selectedSession;
+              {sessions.map((s) => {
+                const isSelected = s.sessionId === selected;
 
                 return (
                   <button
-                    key={inst.controlPort}
-                    onClick={() => setSelectedSession(inst.controlPort)}
+                    key={s.sessionId}
+                    onClick={() => setSelected(s.sessionId)}
                     className={`w-full text-left px-4 py-3 rounded-lg border transition-colors flex items-center gap-3 ${
                       isSelected
                         ? 'border-accent bg-accent-muted'
@@ -114,22 +158,22 @@ export default function SwitchPage() {
                     }`}
                   >
                     <StatusBadge
-                      variant={switched ? 'warning' : 'success'}
-                      label={switched ? 'Switched' : 'Native'}
+                      variant={s.switched ? 'warning' : 'success'}
+                      label={s.switched ? 'Switched' : 'Native'}
                       pulse
                     />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">
-                        {switched ? `${prov}/${mod}` : 'Anthropic (native)'}
+                        {s.switched ? `${s.provider}/${s.model}` : 'Anthropic (native)'}
                       </div>
                       <div className="text-[10px] text-text-tertiary">
-                        {inst.health?.uptimeHuman ?? '?'} uptime
-                        {' · '}{inst.health?.requestCount ?? 0} reqs
-                        {' · '}port {inst.controlPort}
+                        {s.uptimeHuman ?? '?'} uptime
+                        {' · '}{s.requestCount ?? 0} reqs
+                        {' · '}port {s.controlPort}
                       </div>
                     </div>
                     <span className="text-[10px] font-mono text-text-tertiary">
-                      {inst.sessionId.slice(0, 8)}
+                      {s.sessionId.slice(0, 8)}
                     </span>
                   </button>
                 );
@@ -138,7 +182,7 @@ export default function SwitchPage() {
           </div>
 
           {/* Current State for selected session */}
-          {selectedInstance && (
+          {selectedSession && (
             <div className="bg-bg-secondary border border-border rounded-lg p-5">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-text-tertiary uppercase tracking-wider">
@@ -157,7 +201,7 @@ export default function SwitchPage() {
           )}
 
           {/* Switch Controls */}
-          {selectedSession && (
+          {selected && (
             <div className="bg-bg-secondary border border-border rounded-lg p-5 space-y-4">
               <h2 className="text-sm font-medium text-text-secondary">Switch Model</h2>
 

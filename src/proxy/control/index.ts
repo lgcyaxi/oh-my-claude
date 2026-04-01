@@ -173,7 +173,10 @@ export async function handleControl(req: Request): Promise<Response> {
 	const instanceMatch = path.match(/^\/api\/instances\/(\d+)\/(switch|revert|status)$/);
 	if (instanceMatch) {
 		const [, targetPort, action] = instanceMatch;
-		return forwardToInstance(req, Number(targetPort), `/${action}`, corsHeaders);
+		// Forward session query param for session-scoped switch/revert
+		const sessionParam = url.searchParams.get('session');
+		const targetPath = sessionParam ? `/${action}?session=${sessionParam}` : `/${action}`;
+		return forwardToInstance(req, Number(targetPort), targetPath, corsHeaders);
 	}
 
 	// Config API

@@ -107,14 +107,14 @@ export const revertSwitch = (sessionId?: string) =>
 
 /* ── Instance Control (forward to per-session proxy) ── */
 
-export const switchInstanceModel = (controlPort: number, provider: string, model: string) =>
-  request<{ ok: boolean }>(`/api/instances/${controlPort}/switch`, {
+export const switchInstanceModel = (controlPort: number, provider: string, model: string, sessionId?: string) =>
+  request<{ ok: boolean }>(`/api/instances/${controlPort}/switch${sessionId ? `?session=${sessionId}` : ''}`, {
     method: 'POST',
     body: JSON.stringify({ provider, model }),
   });
 
-export const revertInstance = (controlPort: number) =>
-  request<{ ok: boolean }>(`/api/instances/${controlPort}/revert`, {
+export const revertInstance = (controlPort: number, sessionId?: string) =>
+  request<{ ok: boolean }>(`/api/instances/${controlPort}/revert${sessionId ? `?session=${sessionId}` : ''}`, {
     method: 'POST',
   });
 

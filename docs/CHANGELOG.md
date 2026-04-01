@@ -2,6 +2,13 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.5](changelog/v2.2.5.md) - 2026-04-01
+
+### Fixes
+
+- **Dashboard Revert to Claude** — Fixed revert not working from dashboard by forwarding session ID to proxy instances (menubar was unaffected).
+- **Session-Centric Switch View** — Refactored dashboard switch page from port/instance-centric to per-session view with visible session IDs.
+
 ## [2.2.4](changelog/v2.2.4.md) - 2026-04-01
 
 ### Fixes

@@ -47,7 +47,7 @@ const VERSION = (() => {
       } catch { /* try next */ }
     }
   } catch { /* fallback */ }
-  return "2.2.3"; // fallback if package.json unreadable
+  return "2.2.5"; // fallback if package.json unreadable
 })();
 
 // When invoked as `omc` with no args: show version + hint (brief, not full help).
