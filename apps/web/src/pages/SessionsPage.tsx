@@ -145,16 +145,21 @@ export default function SessionsPage() {
   async function handleCleanupOld() {
     if (!selectedFolder) return;
     try {
-      const result = await cleanupOldSessions(selectedFolder, 15);
+      const result = await cleanupOldSessions(selectedFolder, OLD_SESSION_DAYS);
       if (result.deleted > 0) reloadSessions();
     } catch { /* ignore */ }
   }
 
   const emptyCount = sessions.filter((s) => !s.firstPrompt && !s.summary).length;
   const unnamedCount = sessions.filter((s) => s.firstPrompt && !s.summary).length;
+  const OLD_SESSION_DAYS = 30;
   const oldCount = sessions.filter((s) => {
-    const modified = new Date(s.modified).getTime();
-    return Date.now() - modified > 15 * 86400000;
+    if (!s.modified) return false;
+    const mod = new Date(s.modified);
+    mod.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today.getTime() - mod.getTime() > OLD_SESSION_DAYS * 86400000;
   }).length;
 
   async function handleCleanup() {
@@ -323,7 +328,7 @@ export default function SessionsPage() {
             <button
               onClick={handleCleanupOld}
               className="shrink-0 px-3 py-1.5 text-xs border border-border text-text-tertiary rounded hover:text-warning hover:border-warning/50 transition-colors"
-              title={`Delete ${oldCount} session${oldCount !== 1 ? 's' : ''} older than 15 days`}
+              title={`Delete ${oldCount} session${oldCount !== 1 ? 's' : ''} older than ${OLD_SESSION_DAYS} days`}
             >
               Clean {oldCount} old
             </button>

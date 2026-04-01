@@ -598,13 +598,17 @@ async function handleCleanupOld(
 	days: number,
 	corsHeaders: Record<string, string>,
 ): Promise<Response> {
-	const cutoff = Date.now() - days * 86400000;
+	// Compare by calendar date only (truncate to midnight) so "15 days" means 16+ calendar days ago
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+	const cutoff = today.getTime() - days * 86400000;
 	const jsonlFiles = await scanJsonlFiles(folder);
 	const deleted: string[] = [];
 
 	for (const file of jsonlFiles) {
-		// Use file mtime as age indicator
-		if (file.mtime.getTime() < cutoff) {
+		const mday = new Date(file.mtime);
+		mday.setHours(0, 0, 0, 0);
+		if (mday.getTime() < cutoff) {
 			try {
 				await unlink(file.filePath);
 				const sessionDir = join(PROJECTS_DIR, folder, file.sessionId);
