@@ -158,6 +158,14 @@ async function handleListMemories(
 		// ignore
 	}
 
+	// Deduplicate omc project entries by ID (multiple Claude project folders can resolve to same cwd)
+	const seenOmcIds = new Set<string>();
+	const dedupedOmcEntries = omcProjectEntries.filter(e => {
+		if (seenOmcIds.has(e.id)) return false;
+		seenOmcIds.add(e.id);
+		return true;
+	});
+
 	// Strip full content for listing (keep snippet only)
 	const strip = (entries: MemoryEntry[]) =>
 		entries.map((e) => ({
@@ -170,11 +178,11 @@ async function handleListMemories(
 		{
 			global: strip(globalEntries),
 			project: strip(projectEntries),
-			omcProject: strip(omcProjectEntries),
+			omcProject: strip(dedupedOmcEntries),
 			total:
 				globalEntries.length +
 				projectEntries.length +
-				omcProjectEntries.length,
+				dedupedOmcEntries.length,
 		},
 		200,
 		corsHeaders,

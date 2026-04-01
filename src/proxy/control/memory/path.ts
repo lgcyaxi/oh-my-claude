@@ -120,19 +120,23 @@ export async function findOmcProjectMemDirs(): Promise<
 		projectPath: string;
 	}> = [];
 	try {
+		const seenRoots = new Set<string>();
 		const folders = await readdir(PROJECTS_DIR, { withFileTypes: true });
 		for (const f of folders) {
 			if (!f.isDirectory()) continue;
 			const projDir = join(PROJECTS_DIR, f.name);
 
 			const cwd = await resolveProjectCwd(projDir);
-			if (!cwd) continue;
+			if (!cwd || seenRoots.has(cwd)) continue;
+			seenRoots.add(cwd);
 
 			const memBaseDir = join(cwd, '.claude', 'mem');
 			if (existsSync(memBaseDir)) {
 				const segments = cwd.replace(/\\/g, '/').split('/');
 				const projName = segments[segments.length - 1] ?? f.name;
-				omcProjectRoots.set(projName, cwd);
+				if (!omcProjectRoots.has(projName)) {
+					omcProjectRoots.set(projName, cwd);
+				}
 
 				// Scan both notes/ and sessions/ subdirectories
 				for (const sub of ['notes', 'sessions']) {

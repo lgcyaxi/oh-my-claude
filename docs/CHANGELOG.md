@@ -2,6 +2,12 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.4](changelog/v2.2.4.md) - 2026-04-01
+
+### Fixes
+
+- **Dashboard OMC Mem Duplicate Entries** — Fixed duplicate project memory entries caused by multiple Claude project folders resolving to the same cwd. Three-layer dedup fix restores correct per-project memory lists and reliable click behavior.
+
 ## [2.2.3](changelog/v2.2.3.md) - 2026-03-31
 
 ### Highlights

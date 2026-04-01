@@ -33,9 +33,17 @@ export default function MemoryPage() {
     try {
       const data = await getMemories();
 
+      // Deduplicate entries by ID (defensive — backend should already dedup)
+      const seenIds = new Set<string>();
+      const dedupedEntries = (data.omcProject ?? []).filter(e => {
+        if (seenIds.has(e.id)) return false;
+        seenIds.add(e.id);
+        return true;
+      });
+
       // Group omc project entries by project
       const groups = new Map<string, ProjectGroup>();
-      for (const e of data.omcProject ?? []) {
+      for (const e of dedupedEntries) {
         const proj = (e as MemoryEntry & { project?: string }).project ?? 'unknown';
         if (!groups.has(proj)) {
           groups.set(proj, {
