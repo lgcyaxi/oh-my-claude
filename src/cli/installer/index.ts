@@ -1082,6 +1082,11 @@ process.exit(1);
 						branch: 'dev',
 						installedAt: new Date().toISOString(),
 					});
+					// Clear stale update check cache
+					try {
+						const { clearCache } = require('../utils/update-check');
+						clearCache();
+					} catch { /* non-critical */ }
 					if (debug)
 						console.log(
 							`[DEBUG] Created beta channel marker: dev @ ${ref}`,

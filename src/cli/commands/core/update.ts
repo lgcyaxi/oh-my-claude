@@ -178,12 +178,16 @@ export function registerUpdateCommand(program: Command) {
 						// Use original ref if resolution fails
 					}
 
-					// Write beta channel marker
+					// Write beta channel marker and clear stale update cache
 					setBetaChannelInfo({
 						ref: resolvedRef,
 						branch: ref === 'dev' ? 'dev' : ref,
 						installedAt: new Date().toISOString(),
 					});
+					try {
+						const { clearCache } = require('../../utils/update-check');
+						clearCache();
+					} catch { /* non-critical */ }
 
 					console.log(`\n${ok('Beta installation complete!')}`);
 					if (isCurrentlyBeta && betaInfo) {

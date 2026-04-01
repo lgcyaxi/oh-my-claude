@@ -7,7 +7,7 @@
  * Cache file: ~/.claude/oh-my-claude/.update-check.json
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { isBetaInstallation, getBetaChannelInfo } from '../installer/beta-channel';
@@ -37,6 +37,13 @@ function readCache(): UpdateCache | null {
 	}
 }
 
+/** Remove stale update cache (e.g. after a successful update) */
+export function clearCache(): void {
+	try {
+		if (existsSync(CACHE_FILE)) unlinkSync(CACHE_FILE);
+	} catch { /* non-critical */ }
+}
+
 /**
  * Sync — print update banner from previous run's cache.
  * Call early in CLI startup. Returns true if banner was shown.
@@ -46,8 +53,18 @@ export function printUpdateBannerIfCached(): boolean {
 	if (!cache?.updateAvailable) return false;
 
 	if (cache.isBeta) {
+		// Re-validate: the user may have already updated since the cache was written
+		const betaInfo = getBetaChannelInfo();
+		const betaRef = betaInfo?.ref ?? '';
+		const latestRef = cache.latestRef ?? '';
+		if (betaRef && latestRef && (betaRef.startsWith(latestRef) || latestRef.startsWith(betaRef))) {
+			// Already up-to-date — clear stale cache
+			clearCache();
+			return false;
+		}
+
 		process.stderr.write(
-			`\n  Update available: newer commit on dev branch (${cache.latestRef ?? 'unknown'})\n` +
+			`\n  Update available: newer commit on dev branch (${latestRef})\n` +
 			`  Run: omc update --beta\n\n`,
 		);
 	} else {
