@@ -2,7 +2,7 @@
  * MiniMax API client (Anthropic-compatible) — CN endpoint
  *
  * Models:
- * - MiniMax-M2.5: Latest flagship model for coding & agent tasks
+ * - MiniMax-M2.7: Latest flagship model for coding & agent tasks
  * - MiniMax-M2.1: Previous generation model
  *
  * CN Endpoint: https://api.minimaxi.com/anthropic (MINIMAX_CN_API_KEY)
@@ -24,7 +24,7 @@ export function createMiniMaxClient(): AnthropicCompatibleClient {
     "MiniMax",
     MINIMAX_BASE_URL,
     MINIMAX_API_KEY_ENV,
-    "MiniMax-M2.5"
+    "MiniMax-M2.7"
   );
 }
 

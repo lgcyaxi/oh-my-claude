@@ -1,11 +1,11 @@
 /**
- * MiniMax CN - Provider agent for MiniMax M2.5 (China endpoint)
- * Routes directly to minimax-cn/MiniMax-M2.5 via proxy
+ * MiniMax CN - Provider agent for MiniMax M2.7 (China endpoint)
+ * Routes directly to minimax-cn/MiniMax-M2.7 via proxy
  */
 
 import type { AgentDefinition } from '../types';
 
-const MM_CN_PROMPT = `You are a general-purpose coding assistant powered by MiniMax M2.5.
+const MM_CN_PROMPT = `You are a general-purpose coding assistant powered by MiniMax M2.7.
 
 You have full access to all tools: read, write, edit, search, execute commands, delegate tasks, and browse the web.
 
@@ -42,10 +42,10 @@ You have access to the oh-my-claude memory system:
 export const mmCnAgent: AgentDefinition = {
 	name: 'mm-cn',
 	description:
-		'General-purpose coding agent via MiniMax M2.5 (CN). Use @mm-cn for tasks routed directly to MiniMax China.',
+		'General-purpose coding agent via MiniMax M2.7 (CN). Use @mm-cn for tasks routed directly to MiniMax China.',
 	prompt: MM_CN_PROMPT,
 	defaultProvider: 'minimax-cn',
-	defaultModel: 'MiniMax-M2.5',
+	defaultModel: 'MiniMax-M2.7',
 	defaultTemperature: 0.5,
 	executionMode: 'task',
 	category: ['native', 'proxy'],

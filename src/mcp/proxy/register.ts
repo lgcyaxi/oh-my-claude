@@ -32,7 +32,7 @@ Stays switched until manually reverted with switch_revert.
 **Available Providers** (must be configured with API key or OAuth):
 - deepseek: deepseek-reasoner, deepseek-chat
 - zhipu: glm-5.1, glm-5
-- minimax: MiniMax-M2.5
+- minimax: MiniMax-M2.7
 - kimi: kimi-for-coding
 - aliyun: qwen3.5-plus, qwen3-coder-plus, qwen3-coder-next, qwen3-max-2026-01-23, glm-4.7, kimi-k2.5
 - openrouter: nvidia/nemotron-3-super-120b-a12b:free (free models, no API key cost)
@@ -55,7 +55,7 @@ Once switched, use /model <name> to switch between any installed Ollama model.`,
 					.string()
 					.optional()
 					.describe(
-						'Model name. Optional for ollama (auto-discovered). Examples: deepseek-reasoner, glm-5.1, glm-5, MiniMax-M2.5, kimi-for-coding, qwen3.5-plus, nvidia/nemotron-3-super-120b-a12b:free, gpt-5.3-codex, llama3.3',
+						'Model name. Optional for ollama (auto-discovered). Examples: deepseek-reasoner, glm-5.1, glm-5, MiniMax-M2.7, kimi-for-coding, qwen3.5-plus, nvidia/nemotron-3-super-120b-a12b:free, gpt-5.3-codex, llama3.3',
 					),
 			}),
 		},

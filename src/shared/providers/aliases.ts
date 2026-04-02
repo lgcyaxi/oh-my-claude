@@ -44,14 +44,14 @@ const PROVIDER_INFO_ENTRIES: Record<string, ProviderInfo> = {
 	},
 	minimax: {
 		provider: 'minimax',
-		defaultModel: 'MiniMax-M2.5',
+		defaultModel: 'MiniMax-M2.7',
 		name: 'MiniMax',
 		baseUrl: 'https://api.minimax.io/anthropic',
 		apiKeyEnv: 'MINIMAX_API_KEY',
 	},
 	'minimax-cn': {
 		provider: 'minimax-cn',
-		defaultModel: 'MiniMax-M2.5',
+		defaultModel: 'MiniMax-M2.7',
 		name: 'MiniMax CN',
 		baseUrl: 'https://api.minimaxi.com/anthropic',
 		apiKeyEnv: 'MINIMAX_CN_API_KEY',
@@ -101,11 +101,11 @@ const ALIAS_MAP: Record<string, AliasTarget> = {
 	'zp-g': { provider: 'zai', model: 'glm-5.1' },
 	'zhipu-global': { provider: 'zai', model: 'glm-5.1' },
 	// MiniMax
-	mm: { provider: 'minimax', model: 'MiniMax-M2.5' },
-	minimax: { provider: 'minimax', model: 'MiniMax-M2.5' },
+	mm: { provider: 'minimax', model: 'MiniMax-M2.7' },
+	minimax: { provider: 'minimax', model: 'MiniMax-M2.7' },
 	// MiniMax CN
-	'mm-cn': { provider: 'minimax-cn', model: 'MiniMax-M2.5' },
-	'minimax-cn': { provider: 'minimax-cn', model: 'MiniMax-M2.5' },
+	'mm-cn': { provider: 'minimax-cn', model: 'MiniMax-M2.7' },
+	'minimax-cn': { provider: 'minimax-cn', model: 'MiniMax-M2.7' },
 	// Kimi
 	km: { provider: 'kimi', model: 'kimi-for-coding' },
 	kimi: { provider: 'kimi', model: 'kimi-for-coding' },

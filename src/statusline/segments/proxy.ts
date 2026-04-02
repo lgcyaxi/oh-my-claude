@@ -59,6 +59,8 @@ function getModelDisplay(model: string): string {
 		'GLM-5': 'GLM-5',
 		'glm-4.7': 'GLM-4.7',
 		// MiniMax
+		'MiniMax-M2.7': 'MiniMax-M2.7',
+		'minimax-m2.7': 'MiniMax-M2.7',
 		'MiniMax-M2.5': 'MiniMax-M2.5',
 		'minimax-m2.5': 'MiniMax-M2.5',
 		// Kimi

@@ -41,7 +41,7 @@ Create a well-crafted git commit for the current changes.
 ### Documentation Updates
 
 **Routing priority** (follow in order):
-1. **Proxy mode**: `switch_model(minimax, MiniMax-M2.5)` for changelog/README prose
+1. **Proxy mode**: `switch_model(minimax, MiniMax-M2.7)` for changelog/README prose
 2. **No proxy**: Write it yourself
 
 **Key principle**: Tell the worker WHAT changed (1-2 lines). Let the worker READ files itself.

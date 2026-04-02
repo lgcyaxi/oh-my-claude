@@ -31,16 +31,16 @@
 			"name": "minimax",
 			"label": "MiniMax",
 			"models": [
-				{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5" },
-				{ "id": "MiniMax-M2.7", "label": "MiniMax M2.7" }
+				{ "id": "MiniMax-M2.7", "label": "MiniMax M2.7" },
+				{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5" }
 			]
 		},
 		{
 			"name": "minimax-cn",
 			"label": "MiniMax CN",
 			"models": [
-				{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5 (CN)" },
-				{ "id": "MiniMax-M2.7", "label": "MiniMax M2.7 (CN)" }
+				{ "id": "MiniMax-M2.7", "label": "MiniMax M2.7 (CN)" },
+				{ "id": "MiniMax-M2.5", "label": "MiniMax M2.5 (CN)" }
 			]
 		},
 		{
@@ -72,14 +72,14 @@
 					"note": "supports vision"
 				},
 				{
-					"id": "MiniMax-M2.5-ay",
-					"realId": "MiniMax-M2.5",
-					"label": "MiniMax M2.5 (Aliyun)"
-				},
-				{
 					"id": "MiniMax-M2.7-ay",
 					"realId": "MiniMax-M2.7",
 					"label": "MiniMax M2.7 (Aliyun)"
+				},
+				{
+					"id": "MiniMax-M2.5-ay",
+					"realId": "MiniMax-M2.5",
+					"label": "MiniMax M2.5 (Aliyun)"
 				}
 			]
 		},

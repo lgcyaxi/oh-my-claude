@@ -149,6 +149,8 @@ const MODEL_ABBREV: Record<string, string> = {
 	'glm-4.7': 'G47',
 	// MiniMax models
 	'minimax-m2.1': 'M2',
+	'MiniMax-M2.7': 'M27',
+	'minimax-m2.7': 'M27',
 	'MiniMax-M2.5': 'M25',
 	'minimax-m2.5': 'M25',
 	// Kimi models

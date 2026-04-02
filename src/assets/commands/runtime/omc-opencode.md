@@ -44,7 +44,7 @@ await coworker_task({
   timeout_ms: 120000,
   agent: "build",                    // optional; any live /agent entry, including plugin agents
   provider_id: "minimax-cn",         // optional, must pair with model_id
-  model_id: "MiniMax-M2.5"           // optional, must pair with provider_id
+  model_id: "MiniMax-M2.7"           // optional, must pair with provider_id
 });
 ```
 

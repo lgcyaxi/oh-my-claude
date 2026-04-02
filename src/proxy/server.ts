@@ -16,7 +16,7 @@
  * Usage:
  *   bun run src/proxy/server.ts
  *   bun run src/proxy/server.ts --port 18910 --control-port 18911
- *   bun run src/proxy/server.ts --port 59069 --control-port 59070 --provider minimax-cn --model MiniMax-M2.5
+ *   bun run src/proxy/server.ts --port 59069 --control-port 59070 --provider minimax-cn --model MiniMax-M2.7
  */
 
 import {

@@ -28,14 +28,14 @@ Use @mentions to delegate to specialized agents (role-based):
 | @explore         | Explore         | Contextual grep, find patterns          | claude-haiku      |
 | @analyst         | Analyst         | Quick code analysis, pattern review     | deepseek-chat     |
 | @librarian       | Librarian       | External docs, library research         | glm-5.1           |
-| @document-writer | Document Writer | READMEs, API docs, guides               | MiniMax-M2.5      |
+| @document-writer | Document Writer | READMEs, API docs, guides               | MiniMax-M2.7      |
 
 Use @mentions to target specific providers (provider agents):
 
 | Mention     | Provider   | Model             | Best For                             |
 | ----------- | ---------- | ----------------- | ------------------------------------ |
 | @kimi       | Kimi       | kimi-for-coding   | General coding tasks via Kimi K2.5   |
-| @mm-cn      | MiniMax CN | MiniMax-M2.5      | General tasks via MiniMax China      |
+| @mm-cn      | MiniMax CN | MiniMax-M2.7      | General tasks via MiniMax China      |
 | @deepseek   | DeepSeek   | deepseek-chat     | General tasks via DeepSeek           |
 | @deepseek-r | DeepSeek   | deepseek-reasoner | Reasoning-heavy tasks via DeepSeek R |
 | @qwen       | Aliyun     | qwen3.5-plus      | General tasks via Qwen               |
@@ -78,7 +78,7 @@ cheaper/specialized models instead of consuming Anthropic tokens.
 | Visual / multimodal           | `Task(subagent_type="navigator")`       | Routes to kimi-for-coding      |
 | Quick analysis                | `Task(subagent_type="analyst")`         | Routes to deepseek-chat        |
 | Library research              | `Task(subagent_type="librarian")`       | Routes to glm-5.1              |
-| Documentation                 | `Task(subagent_type="document-writer")` | Routes to MiniMax-M2.5         |
+| Documentation                 | `Task(subagent_type="document-writer")` | Routes to MiniMax-M2.7         |
 | Code review                   | `Task(subagent_type="claude-reviewer")` | Uses Claude (quality critical) |
 | Fast exploration              | `Task(subagent_type="claude-scout")`    | Uses Claude haiku (speed)      |
 
@@ -135,7 +135,7 @@ Agent routing (switch_model, only for sustained 3+ turn work):
 - Reasoning → `switch_model(aliyun, qwen3.5-plus)`, work directly
 - Analysis → `switch_model(deepseek, deepseek-chat)`, work directly
 - Research → `switch_model(zhipu, glm-5.1)`, work directly
-- Docs → `switch_model(minimax, MiniMax-M2.5)`, work directly
+- Docs → `switch_model(minimax, MiniMax-M2.7)`, work directly
 
 **Requires proxy** — launch via `oh-my-claude cc`. Model routing is not
 available without proxy. If `switch_model` fails, inform the user: "Proxy

@@ -109,7 +109,7 @@ natively with full tool access. Always `switch_revert` when done.
 | **Oracle** | deepseek/deepseek-chat | Fast pattern review and reasoning |
 | **Research Route** | zhipu/glm-5.1 | External docs and library research via proxy |
 | **Frontend-UI-UX** | kimi/K2.5 | All frontend/UI work |
-| **Docs Route (Long-form)** | minimax/MiniMax-M2.5 | Documentation, README via proxy |
+| **Docs Route (Long-form)** | minimax/MiniMax-M2.7 | Documentation, README via proxy |
 | **Navigator** | kimi/K2.5 | Visual-to-code, multimodal |
 
 **Requires proxy** — launch via `oh-my-claude cc`. If `switch_model` fails, inform the user: "Proxy required. Launch via `oh-my-claude cc`."

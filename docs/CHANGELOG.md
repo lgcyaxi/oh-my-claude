@@ -2,6 +2,16 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.6](changelog/v2.2.6.md) - 2026-04-02
+
+### Improvements
+
+- **MiniMax M2.7 Default** — Default model updated from M2.5 to M2.7 across all providers and agents.
+
+### Fixes
+
+- **Thinking Signature Error Recovery** — Proxy passthrough auto-retries with thinking blocks stripped when Anthropic rejects invalid signatures.
+
 ## [2.2.5](changelog/v2.2.5.md) - 2026-04-01
 
 ### Fixes

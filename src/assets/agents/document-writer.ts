@@ -1,6 +1,6 @@
 /**
  * Document Writer - Technical documentation specialist
- * Uses MiniMax-M2.5 via proxy auto-routing (model: MiniMax-M2.5)
+ * Uses MiniMax-M2.7 via proxy auto-routing (model: MiniMax-M2.7)
  */
 
 import type { AgentDefinition } from './types';
@@ -149,7 +149,7 @@ export const documentWriterAgent: AgentDefinition = {
 	description:
 		'Technical documentation agent. README, API docs, architecture docs, and user-guide writing.',
 	prompt: DOCUMENT_WRITER_PROMPT,
-	defaultModel: 'MiniMax-M2.5',
+	defaultModel: 'MiniMax-M2.7',
 	defaultTemperature: 0.5,
 	executionMode: 'task',
 	category: ['native', 'proxy'],

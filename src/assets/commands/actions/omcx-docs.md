@@ -6,7 +6,7 @@ Quick documentation generation and updates.
 
 Create or update documentation for code, APIs, or features.
 
-**IMPORTANT**: If proxy routing is available, prefer `switch_model(minimax, MiniMax-M2.5)` for long-form docs. Otherwise write it directly.
+**IMPORTANT**: If proxy routing is available, prefer `switch_model(minimax, MiniMax-M2.7)` for long-form docs. Otherwise write it directly.
 
 ### Workflow
 
@@ -18,7 +18,7 @@ Create or update documentation for code, APIs, or features.
 
 **Follow in priority order:**
 
-1. **Proxy mode** (preferred for long-form prose): `switch_model(minimax, MiniMax-M2.5)` and write directly
+1. **Proxy mode** (preferred for long-form prose): `switch_model(minimax, MiniMax-M2.7)` and write directly
 2. **No proxy**: Write it yourself
 
 **Key principle**: Tell the worker WHAT to document (file paths, feature names). Let the worker READ files itself.

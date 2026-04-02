@@ -203,8 +203,8 @@ const UNIVERSAL_FALLBACK_CHAIN: { provider: string; model: string }[] = [
   { provider: "aliyun", model: "qwen3.5-plus" },
   { provider: "zhipu", model: "glm-5" },
   { provider: "zai", model: "glm-5" },
-  { provider: "minimax-cn", model: "MiniMax-M2.5" },
-  { provider: "minimax", model: "MiniMax-M2.5" },
+  { provider: "minimax-cn", model: "MiniMax-M2.7" },
+  { provider: "minimax", model: "MiniMax-M2.7" },
   { provider: "kimi", model: "kimi-for-coding" },
   { provider: "openrouter", model: "nvidia/nemotron-3-super-120b-a12b:free" },
 ];
@@ -213,7 +213,7 @@ const UNIVERSAL_FALLBACK_CHAIN: { provider: string; model: string }[] = [
  * Cross-provider model resolution.
  *
  * Hub providers like Aliyun Coding Plan serve models from other providers
- * (GLM-5, MiniMax-M2.5, K2.5). When the primary provider isn't configured,
+ * (GLM-5, MiniMax-M2.7, K2.5). When the primary provider isn't configured,
  * this checks if a hub can serve the *same* model — preserving quality by
  * using the exact model the agent was designed for, just via a different route.
  *

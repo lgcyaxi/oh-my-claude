@@ -18,12 +18,12 @@ Show available models and switch provider for this session.
  g4        glm-4.7                GLM 4.7                aliyun
  g5a       glm-5-ay               GLM-5 (Aliyun)         aliyun
  ka        kimi-k2.5              Kimi K2.5 (Aliyun)     aliyun
- ma        MiniMax-M2.5-ay        MiniMax M2.5 (Aliyun)  aliyun
+ ma        MiniMax-M2.7-ay        MiniMax M2.7 (Aliyun)  aliyun
  dr        deepseek-reasoner      DeepSeek Reasoner      deepseek
  ds        deepseek-chat          DeepSeek Chat          deepseek
  g51       glm-5.1                ZhiPu GLM-5.1           zhipu
  g5        glm-5                  ZhiPu GLM-5            zhipu
- mm        MiniMax-M2.5           MiniMax M2.5           minimax-cn
+ mm        MiniMax-M2.7           MiniMax M2.7           minimax-cn
  km        kimi-for-coding        Kimi K2.5              kimi
 ──────────────────────────────────────────────────────────────────────
  c / revert                       → revert to native Claude
@@ -40,12 +40,12 @@ Shortcut → model/provider lookup:
 - `g4`  → provider: `aliyun`,    model: `glm-4.7`
 - `g5a` → provider: `aliyun`,    model: `glm-5-ay`
 - `ka`  → provider: `aliyun`,    model: `kimi-k2.5`
-- `ma`  → provider: `aliyun`,    model: `MiniMax-M2.5-ay`
+- `ma`  → provider: `aliyun`,    model: `MiniMax-M2.7-ay`
 - `dr`  → provider: `deepseek`,  model: `deepseek-reasoner`
 - `ds`  → provider: `deepseek`,  model: `deepseek-chat`
 - `g51` → provider: `zhipu`,     model: `glm-5.1`
 - `g5`  → provider: `zhipu`,     model: `glm-5`
-- `mm`  → provider: `minimax-cn`,model: `MiniMax-M2.5`
+- `mm`  → provider: `minimax-cn`,model: `MiniMax-M2.7`
 - `km`  → provider: `kimi`,      model: `kimi-for-coding`
 - `c` / `revert` / any `claude-*` → revert
 

@@ -77,7 +77,7 @@ After classifying, check if the task should be DELEGATED instead of handled dire
 | UI from mockup/screenshot | \`coworker_task(action="send", target="opencode")\` | Visual designs to code via native protocol |
 | "Refactor X", "restructure Y", pattern changes | \`coworker_task(action="send", target="opencode")\` | Code refactoring via native protocol |
 | "Scaffold X", "create new project", boilerplate | \`/codex:rescue\` | New project setup via Codex plugin |
-| "Write docs for X", documentation sprint | \`Task(subagent_type="document-writer")\` | Auto-routes to MiniMax-M2.5 |
+| "Write docs for X", documentation sprint | \`Task(subagent_type="document-writer")\` | Auto-routes to MiniMax-M2.7 |
 | "Review X", code review | \`Task(subagent_type="claude-reviewer")\` | Quality gate — uses Claude |
 | Complex feature (50+ LOC, multi-file, needs design) | \`/omc-plan\` | Architecture decisions before coding |
 | "Fix all X", "complete everything", batch work | \`/omc-ulw\` | Relentless multi-step execution |
@@ -494,7 +494,7 @@ If the user's approach seems problematic:
 
 ### Auto-Routing Subagents (Token Optimization)
 Subagents are invoked via the Task tool and automatically route to the best available provider:
-- **With proxy**: Each agent's model directive (e.g. \`glm-5.1\`, \`MiniMax-M2.5\`, \`kimi-for-coding\`) is resolved to the best configured provider at request time. **This saves Anthropic tokens** — every subagent call uses the external model instead of Claude.
+- **With proxy**: Each agent's model directive (e.g. \`glm-5.1\`, \`MiniMax-M2.7\`, \`kimi-for-coding\`) is resolved to the best configured provider at request time. **This saves Anthropic tokens** — every subagent call uses the external model instead of Claude.
 - **Without proxy**: Agents run natively on Claude's subscription model — the routing directive is harmless.
 
 **Subagent → External Model routing map:**
@@ -503,7 +503,7 @@ Subagents are invoked via the Task tool and automatically route to the best avai
 | oracle | qwen3.5-plus | Aliyun |
 | analyst | deepseek-chat | DeepSeek |
 | librarian | glm-5.1 | ZhiPu |
-| document-writer | MiniMax-M2.5 | MiniMax CN |
+| document-writer | MiniMax-M2.7 | MiniMax CN |
 | navigator | kimi-for-coding | Kimi |
 | hephaestus | kimi-for-coding | Kimi |
 | ui-designer | kimi-for-coding | Kimi |
@@ -559,7 +559,7 @@ You and your delegated agents have access to a persistent memory system:
 
 ### Hot Switch (Model Switching)
 The proxy supports live model switching to external providers:
-- DeepSeek (deepseek-chat, deepseek-reasoner), Z.AI/ZhiPu (glm-5.1), MiniMax (MiniMax-M2.5), Kimi (K2.5)
+- DeepSeek (deepseek-chat, deepseek-reasoner), Z.AI/ZhiPu (glm-5.1), MiniMax (MiniMax-M2.7), Kimi (K2.5)
 - Use \`mcp__oh-my-claude__switch_model\` MCP tool to switch: \`switch_model(provider="deepseek", model="deepseek-reasoner")\`
 - Use \`mcp__oh-my-claude__switch_revert\` to revert back to native Claude
 - Switch to deepseek-reasoner for architecture decisions and complex debugging

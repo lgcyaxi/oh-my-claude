@@ -102,6 +102,8 @@ const EXTERNAL_MODEL_DISPLAY: Record<string, string> = {
 	'GLM-5': 'GLM-5',
 	'glm-4.7': 'GLM-4.7',
 	// MiniMax
+	'minimax-m2.7': 'MiniMax-M2.7',
+	'MiniMax-M2.7': 'MiniMax-M2.7',
 	'minimax-m2.5': 'MiniMax-M2.5',
 	'MiniMax-M2.5': 'MiniMax-M2.5',
 	// Kimi
@@ -127,7 +129,7 @@ const EXTERNAL_MODEL_DISPLAY: Record<string, string> = {
 
 /**
  * Get full model name for display
- * @param modelId - The model ID (e.g., "claude-opus-4-6-20251101" or "MiniMax-M2.5")
+ * @param modelId - The model ID (e.g., "claude-opus-4-6-20251101" or "MiniMax-M2.7")
  * @param isExternal - If true, use external provider naming; otherwise use Claude naming
  */
 function getModelDisplay(modelId: string, isExternal: boolean = false): string {

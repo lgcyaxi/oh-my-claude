@@ -157,7 +157,7 @@ export function resolveModelToProvider(
  * Used by model-only route directives [omc-route:model]. Resolves which provider
  * to route to and what model ID to send upstream.
  *
- * Priority: dedicated provider (e.g. minimax.com for MiniMax-M2.5) →
+ * Priority: dedicated provider (e.g. minimax.com for MiniMax-M2.7) →
  *           hub provider (aliyun) → cross-provider alias fallback.
  *
  * @returns {provider, effectiveModel} or null if no configured provider serves this model

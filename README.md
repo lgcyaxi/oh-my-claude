@@ -611,7 +611,7 @@ OpenCode is a native coworker target. Use `coworker_task(action="send" | "review
 | `dr` | deepseek | deepseek-reasoner |
 | `g51` | zhipu | glm-5.1 |
 | `g5` | zhipu | glm-5 |
-| `mm` | minimax-cn | MiniMax-M2.5 |
+| `mm` | minimax-cn | MiniMax-M2.7 |
 | `km` | kimi | kimi-for-coding |
 | `q` | aliyun | qwen3.5-plus |
 | `qc` | aliyun | qwen3-coder-plus |
@@ -661,10 +661,10 @@ All agents run as native Task tool agents with full Claude Code tool access (Edi
 | Librarian | glm-5.1 | Directive → ZhiPu |
 | Navigator | *(Claude native)* | Passthrough (dual-mode) |
 | Hephaestus | *(Claude native)* | Passthrough (dual-mode) |
-| Document-Writer | MiniMax-M2.5 | Directive → MiniMax |
+| Document-Writer | MiniMax-M2.7 | Directive → MiniMax |
 | UI-Designer | *(Claude native)* | Passthrough (dual-mode) |
 | @kimi | kimi-for-coding | Directive → Kimi |
-| @mm-cn | MiniMax-M2.5 | Directive → MiniMax CN |
+| @mm-cn | MiniMax-M2.7 | Directive → MiniMax CN |
 | @deepseek | deepseek-chat | Directive → DeepSeek |
 | @deepseek-r | deepseek-reasoner | Directive → DeepSeek |
 | @qwen | qwen3.5-plus | Directive → Aliyun |
@@ -797,7 +797,7 @@ All task agents run via Claude Code's Task tool. Each agent's prompt contains an
 | **Analyst** | qwen3.5-plus | Aliyun | Quick code analysis |
 | **Librarian** | glm-5.1 | ZhiPu | External research |
 | **UI-Designer** | *(Claude native)* | Anthropic (dual-mode) | Visual/UI design |
-| **Document-Writer** | MiniMax-M2.5 | MiniMax | Documentation |
+| **Document-Writer** | MiniMax-M2.7 | MiniMax | Documentation |
 | **Navigator** | *(Claude native)* | Anthropic (dual-mode) | Visual-to-code & multi-step tasks |
 | **Hephaestus** | *(Claude native)* | Anthropic (dual-mode) | Code forge specialist |
 

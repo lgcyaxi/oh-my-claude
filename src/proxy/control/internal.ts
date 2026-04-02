@@ -181,7 +181,7 @@ function resolveMemoryProvider(
 	];
 	const defaultModels: Record<string, string> = {
 		zhipu: 'glm-5.1',
-		minimax: 'MiniMax-M2.5',
+		minimax: 'MiniMax-M2.7',
 		deepseek: 'deepseek-chat',
 		kimi: 'kimi-for-coding',
 		aliyun: 'qwen3.5-plus',
