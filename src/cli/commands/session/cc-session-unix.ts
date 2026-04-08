@@ -25,6 +25,26 @@ import {
 	spawnProxyInNativeTerminal,
 } from './cc-terminals';
 
+/**
+ * Create and attach a tmux session using detach-then-attach pattern.
+ * Works in IDE terminals (Cursor/VSCode) where stdin may not be a real TTY.
+ * Direct `tmux new-session` (attached) fails with "open terminal failed"
+ * when the parent process lacks a controlling terminal.
+ */
+function spawnSyncTmuxSession(
+	sessionName: string,
+	shellCmd: string,
+): ReturnType<typeof spawnSync> {
+	spawnSync('tmux', ['new-session', '-d', '-s', sessionName, shellCmd], {
+		stdio: 'ignore',
+		env: process.env,
+	});
+	return spawnSync('tmux', ['attach-session', '-t', sessionName], {
+		stdio: 'inherit',
+		env: process.env,
+	});
+}
+
 export async function launchDetachedSession(options: {
 	sessionId: string;
 	ports: { port: number; controlPort: number };
@@ -378,18 +398,10 @@ export async function launchInlineSession(options: {
 					provider: switchProvider,
 					model: switchModel,
 				});
-				result = spawnSync(
-					'tmux',
-					['new-session', '-s', tmuxSession, shellCmd],
-					{ stdio: 'inherit', env: process.env },
-				);
+				result = spawnSyncTmuxSession(tmuxSession, shellCmd);
 			}
 		} else {
-			result = spawnSync(
-				'tmux',
-				['new-session', '-s', tmuxSession, shellCmd],
-				{ stdio: 'inherit', env: process.env },
-			);
+			result = spawnSyncTmuxSession(tmuxSession, shellCmd);
 		}
 
 		cleanup();

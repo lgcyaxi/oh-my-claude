@@ -151,7 +151,7 @@ export function preCreateWorktree(name: string): void {
 
     const { existsSync } = require("node:fs");
     const worktreeDir = join(process.cwd(), ".claude", "worktrees", name);
-    if (existsSync(worktreeDir)) return;
+    if (existsSync(worktreeDir)) return; // Reuse existing worktree
 
     const branchName = `worktree-${name}`;
     const { c, ok, dimText } = createFormatters();
