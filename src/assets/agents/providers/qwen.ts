@@ -1,6 +1,6 @@
 /**
- * Qwen - Provider agent for Qwen 3.5 Plus (Aliyun)
- * Routes directly to aliyun/qwen3.5-plus via proxy
+ * Qwen - Provider agent for Qwen 3.6 Plus (Aliyun)
+ * Routes directly to aliyun/qwen3.6-plus via proxy
  */
 
 import type { AgentDefinition } from '../types';
@@ -43,10 +43,10 @@ You have access to the oh-my-claude memory system:
 export const qwenAgent: AgentDefinition = {
 	name: 'qwen',
 	description:
-		'General-purpose coding agent via Qwen 3.5 Plus. Use @qwen for tasks routed directly to Aliyun Qwen.',
+		'General-purpose coding agent via Qwen 3.6 Plus. Use @qwen for tasks routed directly to Aliyun Qwen.',
 	prompt: QWEN_PROMPT,
 	defaultProvider: 'aliyun',
-	defaultModel: 'qwen3.5-plus',
+	defaultModel: 'qwen3.6-plus',
 	defaultTemperature: 0.3,
 	executionMode: 'task',
 	category: ['native', 'proxy'],

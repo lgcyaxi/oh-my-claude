@@ -2,6 +2,20 @@
 
 All notable changes to oh-my-claude are documented here.
 
+## [2.2.7](changelog/v2.2.7.md) - 2026-04-08
+
+### Improvements
+
+- **Qwen 3.6 Plus Default** — Default Aliyun model updated from qwen3.5-plus to qwen3.6-plus across all aliases, fallbacks, and categories.
+- **Claude 4.6 Agent Models** — Native agents updated from Claude 4.5 to 4.6 (Sisyphus, Reviewer, Scout, Prometheus).
+- **Dashboard Adaptive Polling** — Backs off to 15s after 3 consecutive failures; resets on success.
+- **Bounded Response Cache** — Control API cache limited to 50 entries with LRU eviction.
+
+### Fixes
+
+- **Aliyun MiniMax M2.7 Removed** — Not supported on Aliyun; removed from registry.
+- **Missing Statusline Mappings** — Added Haiku 4.6 and Qwen 3.6+ display entries.
+
 ## [2.2.6](changelog/v2.2.6.md) - 2026-04-02
 
 ### Improvements

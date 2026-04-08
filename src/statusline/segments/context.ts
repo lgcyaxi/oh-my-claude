@@ -24,6 +24,7 @@ const CONTEXT_WINDOWS: Record<string, number> = {
 	// Claude 4.6
 	'claude-opus-4-6': 200_000,
 	'claude-sonnet-4-6': 200_000,
+	'claude-haiku-4-6': 200_000,
 	// Claude 4.5
 	'claude-opus-4-5': 200_000,
 	'claude-sonnet-4-5': 200_000,
@@ -43,6 +44,7 @@ const CONTEXT_WINDOWS: Record<string, number> = {
 	// Kimi (kimi-for-coding, kimi-k2.5)
 	kimi: 256_000,
 	// Qwen (specific before broad)
+	'qwen3.6': 1_000_000,
 	'qwen3.5': 1_000_000,
 	'qwen3-coder': 128_000,
 	'qwen3-max': 128_000,

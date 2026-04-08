@@ -568,7 +568,7 @@ OpenCode 是原生协作者目标。对于协作者控制，统一使用 `cowork
 | `g5` | zhipu | GLM-5 |
 | `mm` | minimax | MiniMax-M2.7 |
 | `km` | kimi | K2.5 |
-| `q` | aliyun | qwen3.5-plus |
+| `q` | aliyun | qwen3.6-plus |
 | `qc` | aliyun | qwen3-coder-plus |
 | `qn` | aliyun | qwen3.5-coder-plus |
 | `g4` | aliyun | qwen-max |
@@ -927,7 +927,7 @@ npx @lgcyaxi/oh-my-claude menubar --build          # 构建发布版应用
   },
   "agents": {
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
-    "oracle": { "provider": "aliyun", "model": "qwen3.5-plus" },
+    "oracle": { "provider": "aliyun", "model": "qwen3.6-plus" },
     "hephaestus": { "provider": "kimi", "model": "K2.5" },
     "librarian": { "provider": "zhipu", "model": "GLM-5" }
   },

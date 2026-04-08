@@ -27,6 +27,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let active = true;
+    let errorCount = 0;
+    let timerId: ReturnType<typeof setTimeout>;
+
+    const POLL_NORMAL = 5_000;
+    const POLL_BACKOFF = 15_000;
+    const ERROR_THRESHOLD = 3;
 
     async function refresh() {
       try {
@@ -51,17 +57,22 @@ export default function DashboardPage() {
         setPrefCount(pref.preferences.length);
         setUsage(usg.providers.filter((p: ProviderUsage) => p.configured));
         setError(null);
+        errorCount = 0;
       } catch (err) {
         if (!active) return;
+        errorCount++;
         setError(err instanceof Error ? err.message : 'Connection failed');
+      }
+      if (active) {
+        const delay = errorCount >= ERROR_THRESHOLD ? POLL_BACKOFF : POLL_NORMAL;
+        timerId = setTimeout(refresh, delay);
       }
     }
 
     refresh();
-    const interval = setInterval(refresh, 5000);
     return () => {
       active = false;
-      clearInterval(interval);
+      clearTimeout(timerId);
     };
   }, []);
 

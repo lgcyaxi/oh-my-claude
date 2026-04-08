@@ -73,7 +73,7 @@ After classifying, check if the task should be DELEGATED instead of handled dire
 | Trigger Pattern | Route To | When to Use |
 |----------------|----------|-------------|
 | Multi-domain work (frontend + backend + docs) | Parallel Task tool agents | Spawn multiple specialized agents in parallel (each auto-routed) |
-| "Research X", "investigate Y", compare libraries | \`Task(subagent_type="oracle")\` + \`Task(subagent_type="librarian")\` | oracle → qwen3.5-plus, librarian → glm-5.1 |
+| "Research X", "investigate Y", compare libraries | \`Task(subagent_type="oracle")\` + \`Task(subagent_type="librarian")\` | oracle → qwen3.6-plus, librarian → glm-5.1 |
 | UI from mockup/screenshot | \`coworker_task(action="send", target="opencode")\` | Visual designs to code via native protocol |
 | "Refactor X", "restructure Y", pattern changes | \`coworker_task(action="send", target="opencode")\` | Code refactoring via native protocol |
 | "Scaffold X", "create new project", boilerplate | \`/codex:rescue\` | New project setup via Codex plugin |
@@ -81,7 +81,7 @@ After classifying, check if the task should be DELEGATED instead of handled dire
 | "Review X", code review | \`Task(subagent_type="claude-reviewer")\` | Quality gate — uses Claude |
 | Complex feature (50+ LOC, multi-file, needs design) | \`/omc-plan\` | Architecture decisions before coding |
 | "Fix all X", "complete everything", batch work | \`/omc-ulw\` | Relentless multi-step execution |
-| Architecture decision, complex debugging | \`Task(subagent_type="oracle")\` | Deep reasoning → qwen3.5-plus |
+| Architecture decision, complex debugging | \`Task(subagent_type="oracle")\` | Deep reasoning → qwen3.6-plus |
 | Quick codebase exploration | \`Task(subagent_type="claude-scout")\` | Fast search using Claude haiku |
 | Test writing / code generation | \`/codex:rescue\` | Self-contained, delegated to Codex |
 | Simple bug fixes / config changes | \`/codex:rescue\` | Clear scope, no ambiguity |
@@ -500,7 +500,7 @@ Subagents are invoked via the Task tool and automatically route to the best avai
 **Subagent → External Model routing map:**
 | Subagent | Auto-routes to | Provider |
 |----------|---------------|----------|
-| oracle | qwen3.5-plus | Aliyun |
+| oracle | qwen3.6-plus | Aliyun |
 | analyst | deepseek-chat | DeepSeek |
 | librarian | glm-5.1 | ZhiPu |
 | document-writer | MiniMax-M2.7 | MiniMax CN |
@@ -594,7 +594,7 @@ export const sisyphusAgent: AgentDefinition = {
 		'Powerful AI orchestrator from OhMyClaudeCode. Plans obsessively with todos, assesses search complexity before exploration, delegates strategically to specialized agents.',
 	prompt: SISYPHUS_PROMPT,
 	defaultProvider: 'claude',
-	defaultModel: 'claude-opus-4.5',
+	defaultModel: 'claude-opus-4.6',
 	executionMode: 'task',
 	category: ['native'],
 };

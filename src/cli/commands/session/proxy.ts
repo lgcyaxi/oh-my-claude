@@ -256,7 +256,8 @@ export function registerProxyCommand(program: Command) {
         { model: "MiniMax-M2.7", alias: "mn", provider: "minimax", label: "MiniMax M2.7" },
         { model: "MiniMax-M2.7", alias: "mm-cn", provider: "minimax-cn", label: "MiniMax M2.7 CN" },
         { model: "kimi-for-coding", alias: "kimi", provider: "kimi", label: "Kimi K2.5" },
-        { model: "qwen3.5-plus", alias: "ali", provider: "aliyun", label: "Aliyun Qwen 3.5+" },
+        { model: "qwen3.6-plus", alias: "q36", provider: "aliyun", label: "Aliyun Qwen 3.6+" },
+        { model: "qwen3.6-plus", alias: "ali", provider: "aliyun", label: "Aliyun Qwen 3.6+" },
         { model: "qwen3-coder-plus", alias: "ali-c", provider: "aliyun", label: "Aliyun Qwen Coder+" },
         { model: "gpt-5.3-codex", alias: "codex", provider: "openai", label: "GPT-5.3 Codex (OAuth)" },
       ];

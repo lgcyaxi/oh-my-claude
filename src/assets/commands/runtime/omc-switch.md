@@ -11,14 +11,14 @@ Show available models and switch provider for this session.
 ──────────────────────────────────────────────────────────────────────
  Shortcut  Model ID               Label                  Provider
 ──────────────────────────────────────────────────────────────────────
- q         qwen3.5-plus           Qwen 3.5 Plus          aliyun
+ q         qwen3.6-plus           Qwen 3.6 Plus          aliyun
  qc        qwen3-coder-plus       Qwen 3 Coder Plus      aliyun
  qn        qwen3-coder-next       Qwen 3 Coder Next      aliyun
  qm        qwen3-max-2026-01-23   Qwen 3 Max             aliyun
  g4        glm-4.7                GLM 4.7                aliyun
  g5a       glm-5-ay               GLM-5 (Aliyun)         aliyun
  ka        kimi-k2.5              Kimi K2.5 (Aliyun)     aliyun
- ma        MiniMax-M2.7-ay        MiniMax M2.7 (Aliyun)  aliyun
+ q36       qwen3.6-plus           Qwen 3.6 Plus          aliyun
  dr        deepseek-reasoner      DeepSeek Reasoner      deepseek
  ds        deepseek-chat          DeepSeek Chat          deepseek
  g51       glm-5.1                ZhiPu GLM-5.1           zhipu
@@ -33,14 +33,14 @@ Show available models and switch provider for this session.
 **Step 2: Check if an argument was provided.**
 
 Shortcut → model/provider lookup:
-- `q`   → provider: `aliyun`,    model: `qwen3.5-plus`
+- `q`   → provider: `aliyun`,    model: `qwen3.6-plus`
 - `qc`  → provider: `aliyun`,    model: `qwen3-coder-plus`
 - `qn`  → provider: `aliyun`,    model: `qwen3-coder-next`
 - `qm`  → provider: `aliyun`,    model: `qwen3-max-2026-01-23`
 - `g4`  → provider: `aliyun`,    model: `glm-4.7`
 - `g5a` → provider: `aliyun`,    model: `glm-5-ay`
 - `ka`  → provider: `aliyun`,    model: `kimi-k2.5`
-- `ma`  → provider: `aliyun`,    model: `MiniMax-M2.7-ay`
+- `q36` → provider: `aliyun`,    model: `qwen3.6-plus`
 - `dr`  → provider: `deepseek`,  model: `deepseek-reasoner`
 - `ds`  → provider: `deepseek`,  model: `deepseek-chat`
 - `g51` → provider: `zhipu`,     model: `glm-5.1`

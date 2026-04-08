@@ -184,7 +184,7 @@ function resolveMemoryProvider(
 		minimax: 'MiniMax-M2.7',
 		deepseek: 'deepseek-chat',
 		kimi: 'kimi-for-coding',
-		aliyun: 'qwen3.5-plus',
+		aliyun: 'qwen3.6-plus',
 	};
 
 	for (const p of priority) {

@@ -2,7 +2,8 @@
  * Aliyun Coding Plan API client (Anthropic-compatible)
  *
  * Models:
- * - qwen3.5-plus: Latest Qwen 3.5 flagship model
+ * - qwen3.6-plus: Latest Qwen 3.6 flagship model
+ * - qwen3.5-plus: Qwen 3.5 flagship model
  * - qwen3-max-2026-01-23: Qwen 3 Max snapshot
  * - qwen3-coder-next: Next-gen Qwen code model
  * - qwen3-coder-plus: Qwen code model (Plus tier)
@@ -27,7 +28,7 @@ export function createAliyunClient(): AnthropicCompatibleClient {
     "Aliyun",
     ALIYUN_BASE_URL,
     ALIYUN_API_KEY_ENV,
-    "qwen3.5-plus"
+    "qwen3.6-plus"
   );
 }
 

@@ -20,7 +20,7 @@ Use @mentions to delegate to specialized agents (role-based):
 
 | Mention          | Agent           | Best For                                | Auto-routed Model |
 | ---------------- | --------------- | --------------------------------------- | ----------------- |
-| @oracle          | Oracle          | Deep reasoning, architecture, debugging | qwen3.5-plus      |
+| @oracle          | Oracle          | Deep reasoning, architecture, debugging | qwen3.6-plus      |
 | @hephaestus      | Hephaestus      | Intensive code implementation           | kimi-for-coding   |
 | @navigator       | Navigator       | Visual-to-code, multimodal, documents   | kimi-for-coding   |
 | @reviewer        | Reviewer        | Code review, quality assurance          | claude-sonnet     |
@@ -38,11 +38,11 @@ Use @mentions to target specific providers (provider agents):
 | @mm-cn      | MiniMax CN | MiniMax-M2.7      | General tasks via MiniMax China      |
 | @deepseek   | DeepSeek   | deepseek-chat     | General tasks via DeepSeek           |
 | @deepseek-r | DeepSeek   | deepseek-reasoner | Reasoning-heavy tasks via DeepSeek R |
-| @qwen       | Aliyun     | qwen3.5-plus      | General tasks via Qwen               |
+| @qwen       | Aliyun     | qwen3.6-plus      | General tasks via Qwen               |
 | @zhipu      | ZhiPu      | glm-5.1           | General tasks via ZhiPu GLM          |
 
 **Usage**: `/omc-sisyphus @oracle analyze this API design` → Sisyphus delegates
-to Oracle (auto-routed to qwen3.5-plus via proxy)
+to Oracle (auto-routed to qwen3.6-plus via proxy)
 
 **Usage**: `/omc-sisyphus @kimi implement this feature` → Sisyphus delegates to
 Kimi provider agent (routed directly to Kimi K2.5)
@@ -73,7 +73,7 @@ cheaper/specialized models instead of consuming Anthropic tokens.
 
 | Task Type                     | Preferred Subagent                      | Why                            |
 | ----------------------------- | --------------------------------------- | ------------------------------ |
-| Deep reasoning / architecture | `Task(subagent_type="oracle")`          | Routes to qwen3.5-plus         |
+| Deep reasoning / architecture | `Task(subagent_type="oracle")`          | Routes to qwen3.6-plus         |
 | Code implementation           | `Task(subagent_type="hephaestus")`      | Routes to kimi-for-coding      |
 | Visual / multimodal           | `Task(subagent_type="navigator")`       | Routes to kimi-for-coding      |
 | Quick analysis                | `Task(subagent_type="analyst")`         | Routes to deepseek-chat        |
@@ -86,7 +86,7 @@ cheaper/specialized models instead of consuming Anthropic tokens.
 subtasks are independent:
 
 ```
-Task(subagent_type="oracle", prompt="analyze API design")    // → qwen3.5-plus
+Task(subagent_type="oracle", prompt="analyze API design")    // → qwen3.6-plus
 Task(subagent_type="hephaestus", prompt="implement changes") // → kimi-for-coding
 Task(subagent_type="analyst", prompt="review patterns")      // → deepseek-chat
 ```
@@ -132,7 +132,7 @@ When you need sustained multi-turn work on an external model, use
 Agent routing (switch_model, only for sustained 3+ turn work):
 
 - Deep impl → `switch_model(kimi, K2.5)`, work directly
-- Reasoning → `switch_model(aliyun, qwen3.5-plus)`, work directly
+- Reasoning → `switch_model(aliyun, qwen3.6-plus)`, work directly
 - Analysis → `switch_model(deepseek, deepseek-chat)`, work directly
 - Research → `switch_model(zhipu, glm-5.1)`, work directly
 - Docs → `switch_model(minimax, MiniMax-M2.7)`, work directly

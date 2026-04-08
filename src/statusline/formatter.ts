@@ -133,8 +133,10 @@ const MODEL_ABBREV: Record<string, string> = {
 	// Claude 4.6 (current)
 	'claude-sonnet-4-6': 'S',
 	'claude-opus-4-6': 'O',
+	'claude-haiku-4-6': 'H',
 	'claude-sonnet-4.6': 'S',
 	'claude-opus-4.6': 'O',
+	'claude-haiku-4.6': 'H',
 	// Claude 4.5 (legacy)
 	'claude-sonnet-4.5': 'S',
 	'claude-opus-4.5': 'O',
@@ -158,6 +160,7 @@ const MODEL_ABBREV: Record<string, string> = {
 	'kimi-k2.5': 'K2',
 	kimi2p5: 'K2',
 	// Aliyun / Qwen models
+	'qwen3.6-plus': 'Q36',
 	'qwen3.5-plus': 'Q3',
 	'qwen3.5': 'Q3',
 	'qwen3-coder-next': 'QCN',

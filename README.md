@@ -613,7 +613,7 @@ OpenCode is a native coworker target. Use `coworker_task(action="send" | "review
 | `g5` | zhipu | glm-5 |
 | `mm` | minimax-cn | MiniMax-M2.7 |
 | `km` | kimi | kimi-for-coding |
-| `q` | aliyun | qwen3.5-plus |
+| `q` | aliyun | qwen3.6-plus |
 | `qc` | aliyun | qwen3-coder-plus |
 | `qn` | aliyun | qwen3-coder-next |
 | `g4` | aliyun | glm-4.7 |
@@ -657,7 +657,7 @@ All agents run as native Task tool agents with full Claude Code tool access (Edi
 | Agent | Model | Routing |
 |-------|-------|---------|
 | Oracle | *(Claude native)* | Passthrough (dual-mode) |
-| Analyst | qwen3.5-plus | Directive → Aliyun |
+| Analyst | qwen3.6-plus | Directive → Aliyun |
 | Librarian | glm-5.1 | Directive → ZhiPu |
 | Navigator | *(Claude native)* | Passthrough (dual-mode) |
 | Hephaestus | *(Claude native)* | Passthrough (dual-mode) |
@@ -667,7 +667,7 @@ All agents run as native Task tool agents with full Claude Code tool access (Edi
 | @mm-cn | MiniMax-M2.7 | Directive → MiniMax CN |
 | @deepseek | deepseek-chat | Directive → DeepSeek |
 | @deepseek-r | deepseek-reasoner | Directive → DeepSeek |
-| @qwen | qwen3.5-plus | Directive → Aliyun |
+| @qwen | qwen3.6-plus | Directive → Aliyun |
 | @zhipu | glm-5.1 | Directive → ZhiPu |
 
 ### Safety Features
@@ -794,7 +794,7 @@ All task agents run via Claude Code's Task tool. Each agent's prompt contains an
 | Agent | Model | Provider (directive-routed) | Role |
 |-------|-------|---------------------------|------|
 | **Oracle** | *(Claude native)* | Anthropic (dual-mode) | Deep reasoning |
-| **Analyst** | qwen3.5-plus | Aliyun | Quick code analysis |
+| **Analyst** | qwen3.6-plus | Aliyun | Quick code analysis |
 | **Librarian** | glm-5.1 | ZhiPu | External research |
 | **UI-Designer** | *(Claude native)* | Anthropic (dual-mode) | Visual/UI design |
 | **Document-Writer** | MiniMax-M2.7 | MiniMax | Documentation |
@@ -971,7 +971,7 @@ Configuration file: `~/.claude/oh-my-claude.json`
   },
   "agents": {
     "Sisyphus": { "provider": "claude", "model": "claude-opus-4-5" },
-    "oracle": { "provider": "aliyun", "model": "qwen3.5-plus" },
+    "oracle": { "provider": "aliyun", "model": "qwen3.6-plus" },
     "hephaestus": { "provider": "kimi", "model": "K2.5" },
     "librarian": { "provider": "zhipu", "model": "GLM-5" }
   },

@@ -1,6 +1,6 @@
 /**
  * Analyst - Quick code analysis specialist
- * Uses Qwen 3.5+ via proxy auto-routing (model: qwen3.5-plus)
+ * Uses Qwen 3.6+ via proxy auto-routing (model: qwen3.6-plus)
  *
  * Faster alternative to Oracle for simpler reasoning tasks.
  * Use Oracle for deep architectural decisions, Analyst for quick analysis.
@@ -98,7 +98,7 @@ export const analystAgent: AgentDefinition = {
 	description:
 		'Quick code analysis agent. Fast code review, pattern analysis, and simple improvement guidance.',
 	prompt: ANALYST_PROMPT,
-	defaultModel: 'qwen3.5-plus',
+	defaultModel: 'qwen3.6-plus',
 	defaultTemperature: 0.1,
 	executionMode: 'task',
 	category: ['native', 'proxy'],

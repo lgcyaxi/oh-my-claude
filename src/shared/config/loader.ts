@@ -200,7 +200,7 @@ export function isProviderConfigured(
  */
 const UNIVERSAL_FALLBACK_CHAIN: { provider: string; model: string }[] = [
   { provider: "deepseek", model: "deepseek-chat" },
-  { provider: "aliyun", model: "qwen3.5-plus" },
+  { provider: "aliyun", model: "qwen3.6-plus" },
   { provider: "zhipu", model: "glm-5" },
   { provider: "zai", model: "glm-5" },
   { provider: "minimax-cn", model: "MiniMax-M2.7" },

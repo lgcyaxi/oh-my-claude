@@ -34,7 +34,7 @@ Stays switched until manually reverted with switch_revert.
 - zhipu: glm-5.1, glm-5
 - minimax: MiniMax-M2.7
 - kimi: kimi-for-coding
-- aliyun: qwen3.5-plus, qwen3-coder-plus, qwen3-coder-next, qwen3-max-2026-01-23, glm-4.7, kimi-k2.5
+- aliyun: qwen3.6-plus, qwen3.5-plus, qwen3-coder-plus, qwen3-coder-next, qwen3-max-2026-01-23, glm-4.7, kimi-k2.5
 - openrouter: nvidia/nemotron-3-super-120b-a12b:free (free models, no API key cost)
 - openai: gpt-5.2, gpt-5.3-codex, o3-mini (OAuth: oh-my-claude auth login openai)
 - ollama: (auto-discovered from local Ollama instance — model param optional)

@@ -113,6 +113,7 @@ const EXTERNAL_MODEL_DISPLAY: Record<string, string> = {
 	'k2.5': 'Kimi K2.5',
 	'K2.5': 'Kimi K2.5',
 	// Aliyun (Qwen models)
+	'qwen3.6-plus': 'Qwen 3.6+',
 	'qwen3.5-plus': 'Qwen 3.5+',
 	'qwen3.5': 'Qwen 3.5+',
 	'qwen3-max-2026-01-23': 'Qwen 3 Max',

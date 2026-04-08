@@ -47,6 +47,7 @@ const responseCache = new Map<
 	{ body: string; status: number; ts: number }
 >();
 const CACHE_TTL_MS = 5_000; // 5 seconds — matches dashboard poll interval
+const MAX_CACHE_SIZE = 50; // Prevent unbounded growth from unique cache keys
 
 /** Return a cached response if fresh, or null */
 function getCached(
@@ -74,6 +75,15 @@ async function cachedHandler(
 	// Only cache successful JSON responses
 	if (resp.status < 300 && resp.headers.get('content-type')?.includes('json')) {
 		const body = await resp.text();
+		// Evict oldest entry if cache is at capacity
+		if (responseCache.size >= MAX_CACHE_SIZE) {
+			let oldestKey: string | undefined;
+			let oldestTs = Infinity;
+			for (const [k, v] of responseCache) {
+				if (v.ts < oldestTs) { oldestTs = v.ts; oldestKey = k; }
+			}
+			if (oldestKey) responseCache.delete(oldestKey);
+		}
 		responseCache.set(key, { body, status: resp.status, ts: Date.now() });
 		return new Response(body, {
 			status: resp.status,

@@ -53,6 +53,10 @@
 			"label": "Aliyun Coding Plan",
 			"models": [
 				{
+					"id": "qwen3.6-plus",
+					"label": "Qwen 3.6 Plus"
+				},
+				{
 					"id": "qwen3.5-plus",
 					"label": "Qwen 3.5 Plus",
 					"note": "supports vision"
@@ -70,11 +74,6 @@
 					"id": "kimi-k2.5",
 					"label": "Kimi K2.5 (Aliyun)",
 					"note": "supports vision"
-				},
-				{
-					"id": "MiniMax-M2.7-ay",
-					"realId": "MiniMax-M2.7",
-					"label": "MiniMax M2.7 (Aliyun)"
 				},
 				{
 					"id": "MiniMax-M2.5-ay",
@@ -123,13 +122,13 @@
 		},
 		"claude-scout": {
 			"provider": "claude",
-			"model": "claude-haiku-4-5",
+			"model": "claude-haiku-4-6",
 			"temperature": 0.3,
 			"description": "Fast codebase exploration"
 		},
 		"oracle": {
 			"provider": "aliyun",
-			"model": "qwen3.5-plus",
+			"model": "qwen3.6-plus",
 			"temperature": 0.1,
 			"description": "Deep reasoning, architecture, debugging",
 			"fallback": { "provider": "deepseek", "model": "deepseek-reasoner" }
@@ -139,28 +138,28 @@
 			"model": "deepseek-chat",
 			"temperature": 0.1,
 			"description": "Quick code analysis and pattern review",
-			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+			"fallback": { "provider": "aliyun", "model": "qwen3.6-plus" }
 		},
 		"librarian": {
 			"provider": "zhipu",
 			"model": "glm-5.1",
 			"temperature": 0.3,
 			"description": "External docs, library research, remote codebases",
-			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+			"fallback": { "provider": "aliyun", "model": "qwen3.6-plus" }
 		},
 		"document-writer": {
 			"provider": "minimax-cn",
 			"model": "MiniMax-M2.7",
 			"temperature": 0.5,
 			"description": "Technical documentation, READMEs, API docs",
-			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+			"fallback": { "provider": "aliyun", "model": "qwen3.6-plus" }
 		},
 		"navigator": {
 			"provider": "kimi",
 			"model": "kimi-for-coding",
 			"temperature": 0.3,
 			"description": "Visual-to-code, multimodal, document processing",
-			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+			"fallback": { "provider": "aliyun", "model": "qwen3.6-plus" }
 		},
 		"hephaestus": {
 			"provider": "kimi",
@@ -174,7 +173,7 @@
 			"model": "kimi-for-coding",
 			"temperature": 0.3,
 			"description": "Visual design and UI implementation",
-			"fallback": { "provider": "aliyun", "model": "qwen3.5-plus" }
+			"fallback": { "provider": "aliyun", "model": "qwen3.6-plus" }
 		},
 		"kimi": {
 			"provider": "kimi",
@@ -206,7 +205,7 @@
 		},
 		"qwen": {
 			"provider": "aliyun",
-			"model": "qwen3.5-plus",
+			"model": "qwen3.6-plus",
 			"temperature": 0.3,
 			"description": "Provider agent: general-purpose via Qwen 3.5 Plus",
 			"agentType": "provider"
@@ -222,7 +221,7 @@
 	"categories": {
 		"quick-scout": {
 			"provider": "claude",
-			"model": "claude-haiku-4-5",
+			"model": "claude-haiku-4-6",
 			"temperature": 0.3
 		},
 		"review": {
@@ -242,7 +241,7 @@
 		},
 		"ultrabrain": {
 			"provider": "aliyun",
-			"model": "qwen3.5-plus",
+			"model": "qwen3.6-plus",
 			"temperature": 0.1
 		},
 		"deep-coding": {

@@ -65,7 +65,7 @@ const PROVIDER_INFO_ENTRIES: Record<string, ProviderInfo> = {
 	},
 	aliyun: {
 		provider: 'aliyun',
-		defaultModel: 'qwen3.5-plus',
+		defaultModel: 'qwen3.6-plus',
 		name: 'Aliyun',
 		baseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
 		apiKeyEnv: 'ALIYUN_API_KEY',
@@ -110,9 +110,9 @@ const ALIAS_MAP: Record<string, AliasTarget> = {
 	km: { provider: 'kimi', model: 'kimi-for-coding' },
 	kimi: { provider: 'kimi', model: 'kimi-for-coding' },
 	// Aliyun
-	ay: { provider: 'aliyun', model: 'qwen3.5-plus' },
-	ali: { provider: 'aliyun', model: 'qwen3.5-plus' },
-	aliyun: { provider: 'aliyun', model: 'qwen3.5-plus' },
+	ay: { provider: 'aliyun', model: 'qwen3.6-plus' },
+	ali: { provider: 'aliyun', model: 'qwen3.6-plus' },
+	aliyun: { provider: 'aliyun', model: 'qwen3.6-plus' },
 	// OpenRouter (multi-model gateway, free tier available)
 	or: { provider: 'openrouter', model: 'nvidia/nemotron-3-super-120b-a12b:free' },
 	openrouter: { provider: 'openrouter', model: 'nvidia/nemotron-3-super-120b-a12b:free' },
