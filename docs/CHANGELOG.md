@@ -15,6 +15,7 @@ All notable changes to oh-my-claude are documented here.
 
 - **Aliyun MiniMax M2.7 Removed** — Not supported on Aliyun; removed from registry.
 - **Missing Statusline Mappings** — Added Haiku 4.6 and Qwen 3.6+ display entries.
+- **CC Session Exits in IDE Terminals** — Fixed `omc cc` immediately exiting when launched from Cursor/VSCode due to inherited Claude env vars.
 
 ## [2.2.6](changelog/v2.2.6.md) - 2026-04-02
 

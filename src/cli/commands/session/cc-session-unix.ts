@@ -304,6 +304,10 @@ export async function launchInlineSession(options: {
 				ANTHROPIC_BASE_URL: baseUrl,
 				OMC_PROXY_CONTROL_PORT: String(ports.controlPort),
 				...(debug ? { OMC_DEBUG: '1' } : {}),
+				CLAUDECODE: undefined,
+				CLAUDE_CODE_ENTRYPOINT: undefined,
+				CLAUDE_CODE_EXECPATH: undefined,
+				CODEX_COMPANION_SESSION_ID: undefined,
 			},
 			shell,
 		});
@@ -326,7 +330,7 @@ export async function launchInlineSession(options: {
 			...(debug ? ['OMC_DEBUG=1'] : []),
 		].join(' ');
 		const claudeCmd = `claude${claudeArgs.length > 0 ? ' ' + claudeArgs.join(' ') : ''}`;
-		const shellCmd = `unset CLAUDECODE; ${envPrefix} ${claudeCmd}`;
+		const shellCmd = `unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CODEX_COMPANION_SESSION_ID; ${envPrefix} ${claudeCmd}`;
 
 		let result: ReturnType<typeof spawnSync>;
 
@@ -446,6 +450,9 @@ export async function launchInlineSession(options: {
 		OMC_PROXY_CONTROL_PORT: String(ports.controlPort),
 		...(debug ? { OMC_DEBUG: '1' } : {}),
 		CLAUDECODE: undefined,
+		CLAUDE_CODE_ENTRYPOINT: undefined,
+		CLAUDE_CODE_EXECPATH: undefined,
+		CODEX_COMPANION_SESSION_ID: undefined,
 	};
 
 	const result = spawnSync('claude', claudeArgs, {

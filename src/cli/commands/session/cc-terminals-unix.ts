@@ -42,7 +42,7 @@ export function launchInTmux(
 	const killProxy = proxyPid
 		? `; kill ${proxyPid} 2>/dev/null`
 		: '';
-	const shellCmd = `cd '${escapedCwd}' && unset CLAUDECODE && ${envParts.join(' ')} claude${claudeArgsStr}${killProxy}`;
+	const shellCmd = `cd '${escapedCwd}' && unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CODEX_COMPANION_SESSION_ID && ${envParts.join(' ')} claude${claudeArgsStr}${killProxy}`;
 	const escapedShellCmd = shellCmd.replace(/'/g, "'\\''");
 
 	try {
@@ -123,7 +123,7 @@ export function splitCCIntoProxyPane(
 		`OMC_PROXY_CONTROL_PORT=${controlPort}`,
 		'OMC_DEBUG=1',
 	];
-	const ccCmd = `cd '${escapedCwd}' && unset CLAUDECODE && ${envParts.join(' ')} claude${claudeArgsStr}`;
+	const ccCmd = `cd '${escapedCwd}' && unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CODEX_COMPANION_SESSION_ID && ${envParts.join(' ')} claude${claudeArgsStr}`;
 	const wrappedCcCmd = `${ccCmd}; _rc=$?; echo ""; echo "--- claude exited with code: $_rc ---"; sleep 2; tmux kill-window -t '${proxyPaneId}' 2>/dev/null; exit $_rc`;
 	const escapedCmd = wrappedCcCmd.replace(/'/g, "'\\''");
 	const tmuxCmd = `tmux split-window -b -h -t '${proxyPaneId}' -l '65%' -c '${escapedCwd}' '${escapedCmd}'`;

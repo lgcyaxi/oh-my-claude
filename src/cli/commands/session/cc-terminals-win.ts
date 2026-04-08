@@ -128,6 +128,9 @@ process.env.ANTHROPIC_BASE_URL = ${JSON.stringify(opts.baseUrl)};
 process.env.OMC_PROXY_CONTROL_PORT = ${JSON.stringify(String(opts.controlPort))};
 process.env.OMC_DEBUG = "1";
 delete process.env.CLAUDECODE;
+delete process.env.CLAUDE_CODE_ENTRYPOINT;
+delete process.env.CLAUDE_CODE_EXECPATH;
+delete process.env.CODEX_COMPANION_SESSION_ID;
 const r = Bun.spawnSync(${JSON.stringify(['claude', ...claudeArgs])}, {
   stdio: ["inherit", "inherit", "inherit"],
   env: process.env,
@@ -193,6 +196,9 @@ process.env.ANTHROPIC_BASE_URL = ${JSON.stringify(opts.baseUrl)};
 process.env.OMC_PROXY_CONTROL_PORT = ${JSON.stringify(String(opts.controlPort))};
 process.env.OMC_DEBUG = "1";
 delete process.env.CLAUDECODE;
+delete process.env.CLAUDE_CODE_ENTRYPOINT;
+delete process.env.CLAUDE_CODE_EXECPATH;
+delete process.env.CODEX_COMPANION_SESSION_ID;
 const claudeArgs = ${JSON.stringify(['claude', ...opts.claudeArgsStr.trim().split(/\s+/).filter(Boolean)])};
 const claude = Bun.spawnSync(claudeArgs, {
   stdio: ["inherit", "inherit", "inherit"],
@@ -234,6 +240,9 @@ export function buildDebugCoordinatorScript(opts: {
 		`set OMC_PROXY_CONTROL_PORT=${opts.controlPort}`,
 		'set OMC_DEBUG=1',
 		'set CLAUDECODE=',
+		'set CLAUDE_CODE_ENTRYPOINT=',
+		'set CLAUDE_CODE_EXECPATH=',
+		'set CODEX_COMPANION_SESSION_ID=',
 		`claude${opts.claudeArgsStr}`,
 	].join('\r\n');
 	writeFileSync(coordPath, body, 'utf8');
@@ -302,6 +311,9 @@ export function launchInWezterm(
 		`set ANTHROPIC_BASE_URL=${baseUrl}`,
 		`set OMC_PROXY_CONTROL_PORT=${controlPort}`,
 		'set CLAUDECODE=',
+		'set CLAUDE_CODE_ENTRYPOINT=',
+		'set CLAUDE_CODE_EXECPATH=',
+		'set CODEX_COMPANION_SESSION_ID=',
 		...(debug ? ['set OMC_DEBUG=1'] : []),
 		`claude${claudeArgsStr}`,
 		killProxy,
@@ -665,7 +677,7 @@ export function splitCCIntoProxyPane(
 		`set OMC_PROXY_CONTROL_PORT=${controlPort}`,
 		'set OMC_DEBUG=1',
 	];
-	const ccCmd = `cd /d "${cwd}" && set CLAUDECODE= && ${envParts.join(' && ')} && claude${claudeArgsStr}`;
+	const ccCmd = `cd /d "${cwd}" && set CLAUDECODE= && set CLAUDE_CODE_ENTRYPOINT= && set CLAUDE_CODE_EXECPATH= && set CODEX_COMPANION_SESSION_ID= && ${envParts.join(' && ')} && claude${claudeArgsStr}`;
 
 	try {
 		const stdout = execSync(
