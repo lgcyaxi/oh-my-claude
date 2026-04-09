@@ -745,14 +745,149 @@ process.exit(1);
 		}
 
 		// 4b1. Install bundled WezTerm (Windows only)
+		// Uses the same LFS-aware pattern as the menubar installer:
+		// detect LFS pointers → skip during copy → download real binaries from GitHub.
 		try {
 			const srcWeztermDir = join(sourceDir, 'apps', 'wezterm');
 			const installWeztermDir = join(installDir, 'apps', 'wezterm');
 			if (existsSync(srcWeztermDir)) {
+				const weztermLfsFiles: Array<{
+					relativePath: string;
+					destPath: string;
+				}> = [];
+
 				cpSync(srcWeztermDir, installWeztermDir, {
 					recursive: true,
 					force: true,
+					filter: (src) => {
+						// Detect LFS pointer files — real binaries are >1KB, pointers ~130 bytes
+						try {
+							const stat = statSync(src);
+							if (stat.isFile() && stat.size < 1024) {
+								const head = readFileSync(src, {
+									encoding: 'utf-8',
+								}).slice(0, 40);
+								if (
+									head.startsWith(
+										'version https://git-lfs',
+									)
+								) {
+									const rel = src.slice(
+										srcWeztermDir.length + 1,
+									);
+									weztermLfsFiles.push({
+										relativePath: `apps/wezterm/${rel}`,
+										destPath: join(
+											installWeztermDir,
+											rel,
+										),
+									});
+									if (debug)
+										console.log(
+											`[DEBUG] WezTerm LFS pointer detected: ${src}`,
+										);
+									return false;
+								}
+							}
+						} catch {
+							/* stat failed — include file */
+						}
+						return true;
+					},
 				});
+
+				// Download real binaries from GitHub for any LFS pointers found
+				if (weztermLfsFiles.length > 0) {
+					const GITHUB_LFS_BASE =
+						'https://github.com/lgcyaxi/oh-my-claude/raw/dev';
+					for (const { relativePath, destPath } of weztermLfsFiles) {
+						const url = `${GITHUB_LFS_BASE}/${relativePath}`;
+						try {
+							const basename = relativePath.split(/[/\\]/).pop();
+							console.log(
+								`  Downloading WezTerm binary (${basename})...`,
+							);
+							if (debug)
+								console.log(
+									`[DEBUG] WezTerm LFS download: ${url}`,
+								);
+
+							const resp = await fetch(url, {
+								signal: AbortSignal.timeout(120_000),
+								redirect: 'follow',
+							});
+
+							if (resp.ok) {
+								const buffer = Buffer.from(
+									await resp.arrayBuffer(),
+								);
+
+								if (buffer.length < 1024) {
+									if (debug)
+										console.log(
+											`  ⚠ Downloaded WezTerm file too small (${buffer.length} bytes), skipping`,
+										);
+									continue;
+								}
+
+								const destDir = dirname(destPath);
+								if (!existsSync(destDir))
+									mkdirSync(destDir, {
+										recursive: true,
+									});
+								writeFileSync(destPath, buffer, {
+									mode: 0o755,
+								});
+								console.log(
+									`  ✓ Downloaded ${basename} (${(buffer.length / 1024 / 1024).toFixed(1)} MB)`,
+								);
+							} else {
+								if (debug)
+									console.log(
+										`[DEBUG] WezTerm download failed (HTTP ${resp.status}): ${url}`,
+									);
+							}
+						} catch (dlError) {
+							if (debug)
+								console.log(
+									`[DEBUG] WezTerm binary download error: ${dlError}`,
+								);
+						}
+					}
+				}
+
+				// Clean up any pre-existing stale LFS pointer files in the installed dir
+				if (existsSync(installWeztermDir)) {
+					try {
+						const walkDir = (dir: string) => {
+							for (const entry of readdirSync(dir)) {
+								const fullPath = join(dir, entry);
+								const stat = statSync(fullPath);
+								if (stat.isDirectory()) {
+									walkDir(fullPath);
+								} else if (stat.isFile() && stat.size < 1024) {
+									const head = readFileSync(fullPath, {
+										encoding: 'utf-8',
+									}).slice(0, 40);
+									if (
+										head.startsWith(
+											'version https://git-lfs',
+										)
+									) {
+										unlinkSync(fullPath);
+										if (debug)
+											console.log(
+												`[DEBUG] Removed stale WezTerm LFS pointer: ${fullPath}`,
+											);
+									}
+								}
+							}
+						};
+						walkDir(installWeztermDir);
+					} catch {
+						/* best-effort cleanup */
+					}
+				}
 			}
 		} catch (error) {
 			if (debug)

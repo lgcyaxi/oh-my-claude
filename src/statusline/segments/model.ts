@@ -186,16 +186,19 @@ function getModelColor(modelId: string): SegmentData['color'] {
 async function collectModelData(
 	context: SegmentContext,
 ): Promise<SegmentData | null> {
-	// Try to get session-scoped state first, then fall back to global
+	// Try to get session-scoped state first
+	// Only check switch state when a proxy session is active (ANTHROPIC_BASE_URL or OMC_PROXY_CONTROL_PORT set).
+	// Without an active proxy, the file-based state is stale from a previous session.
 	let switchState: ProxySwitchState | null = null;
 	const sessionId = extractSessionId();
+	const hasProxySession = !!(sessionId || process.env.OMC_PROXY_CONTROL_PORT);
 
 	try {
 		if (sessionId) {
 			switchState = await fetchStatusFromControlApi(sessionId);
 		}
-		// Fallback to global file state
-		if (!switchState) {
+		// Only fall back to file state when we know a proxy is running
+		if (!switchState && hasProxySession) {
 			switchState = readSwitchState();
 		}
 	} catch {

@@ -152,11 +152,18 @@ export function resolveWeztermGuiBinary(): string {
  */
 async function commandExists(cmd: string, args: string[]): Promise<boolean> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, {
-      stdio: ["ignore", "ignore", "ignore"],
-      shell: false,
-      windowsHide: true,
-    });
+    let child: ReturnType<typeof spawn>;
+
+    try {
+      child = spawn(cmd, args, {
+        stdio: ["ignore", "ignore", "ignore"],
+        shell: false,
+        windowsHide: true,
+      });
+    } catch {
+      resolve(false);
+      return;
+    }
 
     const timeout = setTimeout(() => {
       child.kill();

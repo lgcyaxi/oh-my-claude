@@ -571,9 +571,9 @@ Each `cc` session gets its own proxy instance with isolated state. Multiple sess
 |----------|-----------|-------------|
 | `-r` | `--resume` | Resume last conversation |
 | `-skip` | `--dangerously-skip-permissions` | Skip permission prompts |
+| `-w` | `--terminal wezterm` | Launch in WezTerm window |
 | `-wt` | `--worktree` | Isolated git worktree session |
 | `-rc` | `claude remote-control` | Mobile access via claude.ai/code |
-OpenCode is a native coworker target. Use `coworker_task(action="send" | "review" | "diff" | "fork" | "approve" | "revert" | "cancel" | "status" | "recent_activity", ...)` for coworker control. OpenCode accepts explicit `agent`, `provider_id`, and `model_id` overrides. Codex is available via the official [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) plugin (auto-installed with `omc install`). For sustained multi-turn provider routing, keep using proxy mode via `oh-my-claude cc`.
 
 **Provider shortcuts for `cc -p`:**
 

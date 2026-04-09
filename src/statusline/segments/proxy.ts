@@ -169,6 +169,7 @@ async function collectProxyData(
 ): Promise<SegmentData | null> {
 	try {
 		const sessionId = extractSessionId();
+		const hasProxySession = !!(sessionId || process.env.OMC_PROXY_CONTROL_PORT);
 
 		// Prefer control API for session-accurate status
 		let state: ProxySwitchState | null = null;
@@ -176,12 +177,13 @@ async function collectProxyData(
 			state = await fetchStatusFromControlApi(sessionId);
 		}
 
-		// Fallback to global file state
-		if (!state) {
+		// Only fall back to file state when a proxy is active.
+		// Without an active proxy, the file is stale from a previous session.
+		if (!state && hasProxySession) {
 			state = readSwitchState();
 		}
 
-		const isSwitched = state.switched;
+		const isSwitched = state?.switched ?? false;
 
 		// Check for auto-spawned memory-only proxy
 		if (!isSwitched && !sessionId) {
@@ -196,7 +198,7 @@ async function collectProxyData(
 		}
 
 		if (sessionId) {
-			if (isSwitched && state.provider) {
+			if (isSwitched && state?.provider) {
 				const providerLabel =
 					PROVIDER_DISPLAY[state.provider] ?? state.provider;
 

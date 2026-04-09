@@ -8,7 +8,7 @@
  * OMC Shortcuts (single dash to differentiate from Claude's double-dash flags):
  *   -r         → --resume (resume last conversation)
  *   -skip      → --dangerously-skip-permissions
- *   -a / -auto → --permission-mode auto (auto accept permissions)
+ *   -w         → --terminal wezterm (launch in WezTerm window)
  *   -wt        → --worktree (isolated git worktree session)
  *   -rc        → launch `claude remote-control` with proxy (mobile access)
  *   -debug     → enable debug mode (visible proxy + logs)
@@ -86,7 +86,7 @@ export function registerCcCommand(program: Command) {
 		.option(
 			'-t, --terminal <mode>',
 			'Terminal launch mode: none (inline), auto, wezterm, tmux',
-			process.platform === 'win32' ? 'auto' : 'none',
+			'none',
 		)
 		.option(
 			'--debug',
@@ -98,7 +98,7 @@ export function registerCcCommand(program: Command) {
 OMC Shortcuts (single dash):
   -r         Resume last conversation (→ --resume)
   -skip      Dangerously skip permissions (→ --dangerously-skip-permissions)
-  -a / -auto Enable auto mode (→ --permission-mode auto)
+  -w         Launch in WezTerm window (→ --terminal wezterm)
   -wt        Create git worktree for isolated session (→ --worktree)
   -rc        Launch Remote Control mode (mobile access via claude.ai/code)
   -debug     Enable debug mode (visible proxy + logs)
@@ -114,8 +114,8 @@ Examples:
   oh-my-claude cc -r               Resume last session with proxy
   oh-my-claude cc -skip            Skip permissions with proxy
   oh-my-claude cc -wt              Isolated git worktree session
-  oh-my-claude cc -a -skip         Auto mode + skip permissions
   oh-my-claude cc -r -skip         Combine shortcuts
+  oh-my-claude cc -w               Launch in WezTerm window
   oh-my-claude cc -rc              Remote Control with proxy routing`,
 		)
 		.allowUnknownOption(true);

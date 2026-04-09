@@ -10,8 +10,6 @@ import { createFormatters } from "../../utils/colors";
 const OMC_SHORTCUTS: Record<string, string[]> = {
   "-r":    ["--resume"],
   "-skip": ["--dangerously-skip-permissions"],
-  "-a":    ["--permission-mode", "auto"],
-  "-auto": ["--permission-mode", "auto"],
   // -wt is handled specially in expandShortcuts (not a simple mapping)
 };
 
@@ -84,8 +82,14 @@ export function expandShortcuts(claudeArgs: string[]): {
       continue;
     }
 
+    // -w → launch in WezTerm (sets terminal to wezterm)
+    if (arg === "-w") {
+      terminal = "wezterm";
+      continue;
+    }
+
     // Also intercept --worktree [name] (native Claude flag used directly)
-    if (arg === "--worktree" || arg === "-w") {
+    if (arg === "--worktree") {
       const next = claudeArgs[i + 1];
       if (next && !next.startsWith("-")) {
         worktreeName = next;
