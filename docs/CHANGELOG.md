@@ -4,11 +4,10 @@ All notable changes to oh-my-claude are documented here. Detailed changelogs are
 
 ## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-09
 
-### Latest: v2.2.8
+### Latest: v2.2.9
 
-- **WezTerm Opt-In** — `omc cc` defaults to inline on all platforms; `-w` for WezTerm
-- **Statusline Stale Fix** — Model segment no longer shows stale provider from previous proxy session
-- **WezTerm LFS Installer** — Detects LFS stubs, downloads real binaries from GitHub
+- **`/omcx-commit` Auto-Commit** — No longer asks for confirmation; invoking the command is the intent
+- **Installer Modularization** — Split 1428-line monolith into 9 focused sub-modules
 
 ### Highlights
 

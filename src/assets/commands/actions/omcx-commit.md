@@ -6,6 +6,8 @@ Smart git commit with conventional commit messages.
 
 Create a well-crafted git commit for the current changes.
 
+**IMPORTANT**: The user invoked `/omcx-commit` which means they want to commit NOW. Do NOT ask for confirmation before committing — proceed directly after staging and generating the message. Skip any "shall I commit?" or "ready to commit?" prompts.
+
 ### Workflow
 
 1. **Check Status**
