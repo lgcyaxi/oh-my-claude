@@ -12,17 +12,6 @@ export async function shouldUseTmuxInline(): Promise<boolean> {
 	return detectTerminalBackend() === 'tmux';
 }
 
-export function launchInWezterm(
-	_baseUrl: string,
-	_controlPort: number,
-	_claudeArgsStr: string,
-	_debug: boolean,
-	_cwd: string,
-	_proxyPid?: number,
-): string | undefined {
-	return undefined;
-}
-
 export function launchInTmux(
 	sessionId: string,
 	baseUrl: string,
@@ -68,7 +57,7 @@ export function launchInTmux(
  * Used by `omc cc --debug` so the user can see proxy output.
  */
 export function spawnVisibleProxy(
-	_terminal: 'wezterm' | 'tmux',
+	_terminal: 'tmux',
 	proxyScript: string,
 	port: number,
 	controlPort: number,
@@ -110,7 +99,7 @@ export function spawnVisibleProxy(
  * Auto-kills the debug window when CC exits.
  */
 export function splitCCIntoProxyPane(
-	_terminal: 'wezterm' | 'tmux',
+	_terminal: 'tmux',
 	proxyPaneId: string,
 	baseUrl: string,
 	controlPort: number,

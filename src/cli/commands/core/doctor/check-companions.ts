@@ -2,7 +2,7 @@
  * Doctor zone: Companion Tools (--detail only)
  *
  * Checks for external companion tools: UI UX Pro Max, OpenCode, Codex,
- * oh-my-opencode, WezTerm, tmux, and output styles.
+ * oh-my-opencode, tmux, and output styles.
  */
 
 import type { DoctorContext } from "./types";
@@ -58,25 +58,12 @@ export async function checkCompanionsZone(ctx: DoctorContext) {
     console.log(`    ${dimText("Install: npm install -g oh-my-opencode")}`);
   }
 
-  // WezTerm
-  const weztermInstalled = isCommandAvailable("wezterm");
-  console.log(`  ${weztermInstalled ? ok("WezTerm") : dimText("○ WezTerm (not installed)")}`);
-  if (!weztermInstalled) {
-    if (process.platform === "win32") {
-      console.log(`    ${dimText("Install: winget install wez.wezterm")}`);
-    } else if (process.platform === "darwin") {
-      console.log(`    ${dimText("Install: brew install --cask wezterm")}`);
-    } else {
-      console.log(`    ${dimText("Install: https://wezfurlong.org/wezterm/installation")}`);
-    }
-  }
-
-  // tmux
+  // tmux (psmux on Windows)
   const tmuxInstalled = isCommandAvailable("tmux");
   console.log(`  ${tmuxInstalled ? ok("tmux") : dimText("○ tmux (not installed)")}`);
   if (!tmuxInstalled) {
     if (process.platform === "win32") {
-      console.log(`    ${dimText("Not available on Windows")}`);
+      console.log(`    ${dimText("Install: winget install psmux")}`);
     } else if (process.platform === "darwin") {
       console.log(`    ${dimText("Install: brew install tmux")}`);
     } else {

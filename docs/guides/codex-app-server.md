@@ -97,10 +97,9 @@ Codex now opens a terminal viewer automatically when the runtime starts, unless:
 
 Viewer spawn order:
 
-1. tmux split
-2. WezTerm split
-3. macOS Terminal fallback
-4. Linux `xterm` fallback
+1. tmux split (psmux on Windows)
+2. macOS Terminal fallback
+3. Linux `xterm` fallback
 
 The viewer tails `omc m codex log`, so what you see is the aggregated coworker
 log view rather than a separate web UI.
@@ -163,7 +162,7 @@ Not yet implemented:
 **Viewer did not open**
 
 - ensure `CODEX_NO_VIEWER` is not set
-- ensure tmux / WezTerm / Terminal / xterm fallback is available
+- ensure tmux / Terminal / xterm fallback is available
 - the task can still complete without the viewer
 
 **Statusline not showing**

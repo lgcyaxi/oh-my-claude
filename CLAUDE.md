@@ -48,7 +48,7 @@ Agents are defined in `src/assets/agents/` and organized by `category` array. Ag
 
 - Use `shell: true` when spawning UWP aliases like `wt.exe`
 - Quote arguments with spaces in shell mode
-- Never use `wezterm cli spawn` without a running mux server — prefer Git Bash-compatible approaches
+- Terminal multiplexer: tmux on all platforms (psmux on Windows via `winget install psmux`)
 - Watch for CRLF vs LF issues in cross-platform scripts
 
 ## Deployment & Testing

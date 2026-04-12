@@ -116,57 +116,6 @@ function spawnTmux(command: string, cwd?: string): ViewerHandle {
 	}
 }
 
-function spawnWezTerm(command: string, cwd?: string): ViewerHandle {
-	try {
-		// Use native Git Bash (MSYS2) on Windows to match Unix behavior:
-		// proper PTY for TUI apps, correct exit codes, and shell operators
-		// (||, &&) work naturally. Avoids WSL bash (old Node.js) and cmd.exe
-		// (no TUI support, mangled exit codes).
-		const args = ['cli', 'split-pane', '--right'];
-		if (cwd) {
-			args.push('--cwd', cwd);
-		}
-		args.push('--');
-
-		if (process.platform === 'win32') {
-			const bash = resolveNativeBash();
-			if (bash) {
-				// Native Git Bash — matches Unix behavior exactly.
-				args.push(bash, '-lc', command);
-			} else {
-				// Fallback if Git Bash not found (unlikely on MSYS2 systems).
-				const hasShellOps = /[|&<>;]/.test(command);
-				if (hasShellOps) {
-					args.push('cmd.exe', '/d', '/s', '/c', `"${command}"`);
-				} else {
-					args.push(...command.split(/\s+/));
-				}
-			}
-		} else {
-			args.push('bash', '-lc', command);
-		}
-
-		const result = spawnSync('wezterm', args, {
-			encoding: 'utf-8',
-			stdio: ['pipe', 'pipe', 'pipe'],
-		});
-		const paneId = (result.stdout ?? '').trim();
-
-		return {
-			attached: paneId.length > 0,
-			close() {
-				try {
-					spawnSync('wezterm', ['cli', 'kill-pane', '--pane-id', paneId], {
-						stdio: 'pipe',
-					});
-				} catch {}
-			},
-		};
-	} catch {
-		return NOOP_VIEWER_HANDLE;
-	}
-}
-
 function spawnMacOSTerminal(command: string, cwd?: string): ViewerHandle {
 	try {
 		const shellCommand = `${withCwd(command, cwd)}; exit`;
@@ -283,16 +232,12 @@ export function spawnCoworkerViewer(options: SpawnViewerOptions): ViewerHandle {
 		return NOOP_VIEWER_HANDLE;
 	}
 
-	// For bash-based viewers (tmux, wezterm, xterm), use the bare command
+	// For bash-based viewers (tmux, xterm), use the bare command
 	// since the binary is in bash's PATH. resolveViewerCommand returns
 	// Windows-style paths (C:\...) from `where` which work but add no value.
 	// For macOS Terminal (AppleScript), resolve the full path for reliability.
 	if (process.env.TMUX) {
 		return spawnTmux(options.command, options.cwd);
-	}
-
-	if (process.env.WEZTERM_PANE) {
-		return spawnWezTerm(options.command, options.cwd);
 	}
 
 	const command = resolveViewerCommand(options.command);

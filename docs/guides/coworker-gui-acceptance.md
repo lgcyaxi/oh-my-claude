@@ -10,7 +10,7 @@ and cross-coworker workflows on **macOS**, **Windows**, and **Linux**.
 |----------|-----------------|---------------|
 | **macOS (tmux)** | `tmux split-window -h` | `TMUX` is set |
 | **macOS (standalone)** | Terminal.app via AppleScript | `process.platform === 'darwin'` |
-| **Windows (WezTerm)** | `wezterm cli split-pane --right` | `WEZTERM_PANE` is set |
+| **Windows (tmux/psmux)** | `tmux split-window -h` | `TMUX` is set |
 | **Linux (tmux)** | `tmux split-window -h` | `TMUX` is set |
 | **Linux (X11)** | xterm | `platform === 'linux'` && `DISPLAY` is set |
 
@@ -28,7 +28,7 @@ Ensure:
 - `CODEX_NO_VIEWER` and `OPENCODE_NO_VIEWER` are **unset**
 - **macOS (tmux):** Running inside tmux (`echo $TMUX` returns a value)
 - **macOS (standalone):** Terminal.app available (default)
-- **Windows:** Running inside WezTerm (`echo $WEZTERM_PANE` returns a value)
+- **Windows:** Running inside tmux via psmux (`echo $TMUX` returns a value)
 - **Linux:** Inside tmux or X11 available (`echo $DISPLAY`)
 
 ## Timeout Reference
@@ -71,8 +71,7 @@ Verify:
 - [ ] `viewerAttached: true` in response meta
 - [ ] **macOS (tmux):** Horizontal split appeared with Codex activity log
 - [ ] **macOS (standalone):** Terminal.app window opened with Codex log
-- [ ] **Windows:** Right-side WezTerm pane appeared with Codex activity log
-- [ ] **Windows:** No "Process didn't exit cleanly" warning from WezTerm
+- [ ] **Windows:** tmux split pane appeared with Codex activity log
 - [ ] Pane auto-closes after idle period
 
 ### OpenCode Viewer
@@ -92,7 +91,7 @@ Verify:
 - [ ] Response returns with `agent`, `provider`, `model` fields populated
 - [ ] **macOS (tmux):** tmux split pane renders TUI correctly
 - [ ] **macOS (standalone):** Terminal.app window shows OpenCode TUI
-- [ ] **Windows:** WezTerm pane via Git Bash renders TUI correctly
+- [ ] **Windows:** tmux pane renders TUI correctly
 
 ### OpenCode with Agent Override
 
@@ -384,12 +383,11 @@ Edge cases:
 
 | Symptom | Platform | Likely cause | Fix |
 |---------|----------|-------------|-----|
-| "Process didn't exit cleanly" in WezTerm | Windows | Exit code 1 from cmd.exe wrapping | Use Git Bash `-lc` (resolveNativeBash) |
 | OpenCode TUI blank/frozen | Windows | cmd.exe lacks PTY for TUI apps | Use Git Bash `-lc` |
 | Terminal.app window doesn't open | macOS | AppleScript permissions denied | Grant Terminal access in System Settings → Privacy → Automation |
 | tmux split doesn't appear | macOS/Linux | Not inside a tmux session | Run inside tmux or set `TMUX` env var |
 | tmux pane renders garbled TUI | macOS/Linux | Terminal doesn't support 256 colors | Set `TERM=xterm-256color` |
-| Viewer pane doesn't appear | Windows | `WEZTERM_PANE` not set | Must run inside WezTerm, not plain terminal |
+| Viewer pane doesn't appear | Windows | `TMUX` not set | Must run inside tmux (psmux), not plain terminal |
 | `TOOL: command output\n<code>` spam | All | tool_activity entries not aggregating | Check toolActivityPrefix-based merge in coworker-log.ts |
 | `resolveNativeBash()` returns null | Windows | Git Bash not found | Check `where git` output, ensure Git is installed |
 | Task times out unexpectedly | All | Insufficient `timeout_ms` | Use `meta.recommended_timeout_ms` for reviews; 120s minimum for sends |
@@ -397,4 +395,4 @@ Edge cases:
 | "timed out after Nms" error | All | Large diff or slow model | Increase `timeout_ms`; for Codex scoped reviews use 240s+ minimum |
 | OpenCode agent not found | All | Invalid agent name | Check available agents via `GET /agent`; use fuzzy name (case-insensitive) |
 | "requires both provider_id and model_id" | All | Only one override specified | Pass both `provider_id` and `model_id` together, or neither |
-| `viewerAvailable: false` | All | No supported viewer environment | Check env vars (`TMUX`, `WEZTERM_PANE`, `DISPLAY`) |
+| `viewerAvailable: false` | All | No supported viewer environment | Check env vars (`TMUX`, `DISPLAY`) |

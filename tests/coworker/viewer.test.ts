@@ -9,8 +9,6 @@ import {
 
 const originalCodexNoViewer = process.env.CODEX_NO_VIEWER;
 const originalTmux = process.env.TMUX;
-const originalWeztermPane = process.env.WEZTERM_PANE;
-
 afterEach(() => {
 	if (originalCodexNoViewer === undefined) {
 		delete process.env.CODEX_NO_VIEWER;
@@ -21,11 +19,6 @@ afterEach(() => {
 		delete process.env.TMUX;
 	} else {
 		process.env.TMUX = originalTmux;
-	}
-	if (originalWeztermPane === undefined) {
-		delete process.env.WEZTERM_PANE;
-	} else {
-		process.env.WEZTERM_PANE = originalWeztermPane;
 	}
 	_resetNativeBashCache();
 });
@@ -48,9 +41,8 @@ test('NOOP_VIEWER_HANDLE has attached=false and a no-op close', () => {
 
 test('viewer returns NOOP when no terminal multiplexer is available on Windows', () => {
 	delete process.env.TMUX;
-	delete process.env.WEZTERM_PANE;
 
-	// On win32 without TMUX or WEZTERM_PANE, there's no viewer path
+	// On win32 without TMUX, there's no viewer path
 	// (macOS Terminal and xterm paths won't trigger on Windows)
 	if (process.platform === 'win32') {
 		const result = spawnCoworkerViewer({

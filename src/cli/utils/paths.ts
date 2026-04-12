@@ -32,8 +32,6 @@ export const SESSIONS_DIR = join(INSTALL_DIR, "sessions");
 /** Proxy session registry for GUI discovery */
 export const PROXY_REGISTRY = join(INSTALL_DIR, "proxy-sessions.json");
 
-/** Bundled WezTerm directory (Windows only) */
-export const BUNDLED_WEZTERM_DIR = join(INSTALL_DIR, "apps", "wezterm", "windows-x64");
 
 /**
  * Returns the Windows-side proxy registry path when running in WSL2.

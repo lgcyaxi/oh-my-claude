@@ -38,7 +38,7 @@ export interface ProxySessionEntry {
 	cwd?: string;
 	/** Terminal pane ID (for cleanup via cc stop) */
 	paneId?: string;
-	/** Terminal backend used ("wezterm" | "tmux") */
+	/** Terminal backend used (e.g., "tmux") */
 	terminalBackend?: string;
 	/** Whether proxy was spawned as a detached daemon */
 	detached?: boolean;

@@ -57,7 +57,7 @@ export function registerManageCommand(program: Command) {
 				`  omc m ollama      ${c.dim}# Manage Ollama embedding models for memory${c.reset}`,
 			);
 			console.log(
-				`  omc m tc          ${c.dim}# Write terminal configuration (tmux, wezterm)${c.reset}`,
+				`  omc m tc          ${c.dim}# Write terminal configuration (tmux)${c.reset}`,
 			);
 			console.log(
 				`  omc m cleanup     ${c.dim}# Clean stale session data and temp files${c.reset}`,
@@ -83,7 +83,7 @@ export function registerManageCommand(program: Command) {
 	registerStatuslineCommand(manageCmd); // manage statusline + preset, toggle
 	registerStyleCommand(manageCmd); // manage style + list, set, show, reset, create
 	registerOllamaCommand(manageCmd); // manage ollama + status, pull, use
-	registerTerminalConfigCommand(manageCmd); // manage terminal-config (tc) + tmux, wezterm
+	registerTerminalConfigCommand(manageCmd); // manage terminal-config (tc) + tmux
 	registerCleanupCommand(manageCmd); // manage cleanup + --dry-run, --force
 	registerOpenCodeLogCommand(manageCmd); // manage opencode log + --print, --follow, --clear
 }

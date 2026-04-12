@@ -3,7 +3,7 @@
  *
  * Platform-specific detection/spawn live in:
  * - cc-routing-unix.ts (tmux + Terminal.app)
- * - cc-routing-win.ts  (wezterm + cmd.exe)
+ * - cc-routing-win.ts  (tmux via psmux)
  */
 
 import { spawnSync } from 'node:child_process';
@@ -17,7 +17,7 @@ const platformImpl = process.platform === 'win32' ? win : unix;
 
 // --- Platform-dispatched exports ---
 
-export type TerminalBackend = 'tmux' | 'wezterm' | 'macos-terminal' | 'none';
+export type TerminalBackend = 'tmux' | 'macos-terminal' | 'none';
 
 export const detectTerminalBackend: () => TerminalBackend =
 	platformImpl.detectTerminalBackend;

@@ -82,12 +82,6 @@ export function expandShortcuts(claudeArgs: string[]): {
       continue;
     }
 
-    // -w → launch in WezTerm (sets terminal to wezterm)
-    if (arg === "-w") {
-      terminal = "wezterm";
-      continue;
-    }
-
     // Also intercept --worktree [name] (native Claude flag used directly)
     if (arg === "--worktree") {
       const next = claudeArgs[i + 1];

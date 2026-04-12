@@ -1,8 +1,10 @@
 /**
- * CC command — Unix session launch paths (macOS/Linux)
+ * CC command — Cross-platform session launch paths
  *
  * Detached: tmux window with optional visible proxy pane (--debug)
- * Inline:   child.kill() cleanup, $SHELL, tmux inline wrapping, Terminal.app debug fallback
+ * Inline:   process cleanup, shell selection, tmux inline wrapping, Terminal.app debug fallback
+ *
+ * All platforms use tmux as the multiplexer (psmux on Windows provides tmux compatibility).
  */
 
 import { spawnSync, execSync } from 'node:child_process';
@@ -48,7 +50,7 @@ function spawnSyncTmuxSession(
 export async function launchDetachedSession(options: {
 	sessionId: string;
 	ports: { port: number; controlPort: number };
-	terminal: 'wezterm' | 'tmux';
+	terminal: 'tmux';
 	claudeArgs: string[];
 	debug: boolean;
 	switchProvider?: string;
@@ -117,13 +119,19 @@ export async function launchDetachedSession(options: {
 		if (proxyPaneId) {
 			if (!proxyPid) {
 				try {
-					proxyPid = parseInt(
-						execSync(
-							`lsof -ti tcp:${ports.port} 2>/dev/null || true`,
-							{ encoding: 'utf-8' },
-						).trim(),
-						10,
-					);
+					const pidCmd = process.platform === 'win32'
+						? `netstat -ano | findstr :${ports.port} | findstr LISTENING`
+						: `lsof -ti tcp:${ports.port} 2>/dev/null || true`;
+					const raw = execSync(pidCmd, { encoding: 'utf-8' }).trim();
+					if (process.platform === 'win32') {
+						const line = raw.split(/\r?\n/).find(l => l.includes(`:${ports.port}`));
+						if (line) {
+							const parts = line.trim().split(/\s+/);
+							proxyPid = parseInt(parts[parts.length - 1] ?? '', 10);
+						}
+					} else {
+						proxyPid = parseInt(raw, 10);
+					}
 				} catch {}
 			}
 
@@ -220,7 +228,6 @@ export async function launchInlineSession(options: {
 	debug: boolean;
 	isRemoteControl: boolean;
 	terminalMode: string;
-	insideWezTerm: boolean;
 	switchProvider?: string;
 	switchModel?: string;
 }): Promise<void> {
@@ -477,10 +484,22 @@ export async function launchInlineSession(options: {
 
 	if (nativeProxySpawned) {
 		try {
-			execSync(`lsof -ti tcp:${ports.port} | xargs kill 2>/dev/null`, {
-				stdio: 'ignore',
-				windowsHide: true,
-			});
+			if (process.platform === 'win32') {
+				const raw = execSync(`netstat -ano | findstr :${ports.port} | findstr LISTENING`, {
+					encoding: 'utf-8',
+					windowsHide: true,
+				}).trim();
+				const line = raw.split(/\r?\n/).find(l => l.includes(`:${ports.port}`));
+				if (line) {
+					const pid = line.trim().split(/\s+/).pop();
+					if (pid) execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore', windowsHide: true });
+				}
+			} else {
+				execSync(`lsof -ti tcp:${ports.port} | xargs kill 2>/dev/null`, {
+					stdio: 'ignore',
+					windowsHide: true,
+				});
+			}
 		} catch {}
 	}
 

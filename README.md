@@ -26,7 +26,7 @@ Route background tasks to multiple AI providers (DeepSeek, ZhiPu GLM, MiniMax, K
 - **Route Directive Auto-Routing** - Subagents embed `[omc-route:provider/model]` directives in their prompts; the proxy extracts and routes automatically at Priority 1 — no manual switching needed
 - **Unified Agent Architecture** - 11 role agents + 6 provider agents (`@kimi`, `@deepseek`, `@qwen`, etc.) run as native Task tool agents with route directives
 - **Semantic Memory** - Three-tier search (hybrid FTS5+vector, FTS5, legacy) with deduplication, snippet-only recall, and structured categories (architecture, convention, decision, debugging, workflow, pattern, reference, session)
-- **Terminal Configuration** - One-command WezTerm/tmux setup with zsh auto-detection and cross-platform clipboard
+- **Terminal Configuration** - One-command tmux setup with cross-platform clipboard (psmux on Windows)
 - **Companion Tools** - One-command setup for UI UX Pro Max, CCometixLine, and more
 
 ## Quick Start
@@ -571,7 +571,6 @@ Each `cc` session gets its own proxy instance with isolated state. Multiple sess
 |----------|-----------|-------------|
 | `-r` | `--resume` | Resume last conversation |
 | `-skip` | `--dangerously-skip-permissions` | Skip permission prompts |
-| `-w` | `--terminal wezterm` | Launch in WezTerm window |
 | `-wt` | `--worktree` | Isolated git worktree session |
 | `-rc` | `claude remote-control` | Mobile access via claude.ai/code |
 
@@ -739,32 +738,22 @@ omc proxy dashboard --stop  # Stop dashboard
 
 ## Terminal Configuration
 
-oh-my-claude provides one-command terminal setup optimized for AI coding sessions (WezTerm and tmux).
+oh-my-claude provides one-command tmux setup optimized for AI coding sessions. On Windows, install [psmux](https://github.com/nickcox/psmux) via `winget install psmux` for tmux compatibility.
 
 <details>
-<summary>View WezTerm and tmux setup details</summary>
-
-### WezTerm
-
-```bash
-oh-my-claude wezterm-config              # Write ~/.wezterm.lua
-oh-my-claude wezterm-config --force      # Overwrite existing config
-oh-my-claude wezterm-config --show       # Preview without writing
-```
-
-**Key settings:** 50k scrollback, JetBrains Mono font, Dracula theme, WebGpu rendering, vi-style copy mode (`Ctrl+Shift+X`), quick select (`Ctrl+Shift+Space`), regex search (`Ctrl+Shift+F`), pane splitting (`Ctrl+Shift+|` / `Ctrl+Shift+_`).
-
-**Shell auto-detection (Windows):** Priority: zsh > Git Bash > PowerShell. If zsh is installed in your Git Bash directory (`bin/` or `usr/bin/`), WezTerm launches it automatically via `bash -i -l -c zsh`. Git Bash location is detected via multiple candidate paths + `where git` fallback.
+<summary>View tmux setup details</summary>
 
 ### tmux
 
 ```bash
-oh-my-claude tmux-config                 # Write to ~/.tmux.conf
-oh-my-claude tmux-config --force         # Overwrite existing config
-oh-my-claude tmux-config --show          # Preview without writing
+oh-my-claude terminal-config tmux        # Write to ~/.tmux.conf
+oh-my-claude terminal-config tmux --force # Overwrite existing config
+oh-my-claude terminal-config tmux --show  # Preview without writing
 ```
 
 **Key settings:** 50k scrollback, mouse mode, 256-color, zero escape delay, vi copy mode. Cross-platform clipboard auto-detection: `pbcopy` (macOS), `clip.exe` (Windows/WSL), `xclip`/`xsel` (Linux).
+
+**Windows:** Install tmux via `winget install psmux`. This provides tmux-compatible commands on Windows, allowing all platforms to share the same configuration.
 
 </details>
 
@@ -883,10 +872,8 @@ npx @lgcyaxi/oh-my-claude memory delete <id>          # Delete a memory (--scope
 npx @lgcyaxi/oh-my-claude memory compact              # Interactive memory compaction guide
 
 # Terminal Configuration
-npx @lgcyaxi/oh-my-claude wezterm-config            # Write WezTerm config (~/.wezterm.lua)
-npx @lgcyaxi/oh-my-claude wezterm-config --force    # Overwrite existing config
-npx @lgcyaxi/oh-my-claude tmux-config               # Write tmux config (~/.tmux.conf)
-npx @lgcyaxi/oh-my-claude tmux-config --force       # Overwrite existing config
+npx @lgcyaxi/oh-my-claude terminal-config tmux        # Write tmux config (~/.tmux.conf)
+npx @lgcyaxi/oh-my-claude terminal-config tmux --force # Overwrite existing config
 
 # Launch Claude Code
 npx @lgcyaxi/oh-my-claude cc                      # Auto-start proxy + launch claude

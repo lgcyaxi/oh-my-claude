@@ -74,18 +74,11 @@ const CLI_TOOLS: CliTool[] = [
     installCmd: "npm install -g oh-my-opencode",
   },
   {
-    name: "WezTerm",
-    value: "wezterm",
-    description: "GPU-accelerated terminal multiplexer for split-pane OMC workflows",
-    binary: "wezterm",
-    installCmd: process.platform === "win32" ? "winget install wez.wezterm" : "brew install --cask wezterm",
-  },
-  {
     name: "tmux",
     value: "tmux",
-    description: "Terminal multiplexer for split-pane OMC workflows (Unix only)",
+    description: "Terminal multiplexer for split-pane OMC workflows (psmux on Windows)",
     binary: "tmux",
-    installCmd: "brew install tmux",
+    installCmd: process.platform === "win32" ? "winget install psmux" : "brew install tmux",
     fallbackCmd: "sudo apt install tmux",
     fallbackNote: "Trying apt...",
   },
@@ -401,7 +394,7 @@ export function registerToolsCommand(program: Command) {
   // ── tools install ────────────────────────────────────────────────────────
   toolsCmd
     .command("install [tool]")
-    .description("Install external CLI tools (opencode, codex, oh-my-opencode, wezterm, tmux)")
+    .description("Install external CLI tools (opencode, codex, oh-my-opencode, tmux)")
     .option("--list", "List available tools without installing")
     .action(async (tool: string | undefined, options: { list?: boolean }) => {
       const { c, ok, fail, dimText, warn } = createFormatters();

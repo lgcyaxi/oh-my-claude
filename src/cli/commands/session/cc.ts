@@ -2,13 +2,12 @@
  * CC command — Launch Claude Code with per-session proxy or direct provider connection
  *
  * Each `oh-my-claude cc` invocation spawns its own proxy on dynamic ports.
- * When a terminal multiplexer is available (WezTerm/tmux), Claude Code launches
+ * When a terminal multiplexer is available (tmux/psmux), Claude Code launches
  * in a new window and the current terminal returns immediately.
  *
  * OMC Shortcuts (single dash to differentiate from Claude's double-dash flags):
  *   -r         → --resume (resume last conversation)
  *   -skip      → --dangerously-skip-permissions
- *   -w         → --terminal wezterm (launch in WezTerm window)
  *   -wt        → --worktree (isolated git worktree session)
  *   -rc        → launch `claude remote-control` with proxy (mobile access)
  *   -debug     → enable debug mode (visible proxy + logs)
@@ -32,8 +31,6 @@ import { detectTerminal } from '../../utils/terminal-detect';
 
 import { expandShortcuts, preCreateWorktree } from './cc-shortcuts';
 import {
-	detectTerminalBackend,
-	runNativeCC,
 	loadApiEnvFile,
 	formatAge,
 } from './cc-routing';
@@ -85,7 +82,7 @@ export function registerCcCommand(program: Command) {
 		)
 		.option(
 			'-t, --terminal <mode>',
-			'Terminal launch mode: none (inline), auto, wezterm, tmux',
+			'Terminal launch mode: none (inline), auto, tmux',
 			'none',
 		)
 		.option(
@@ -98,7 +95,6 @@ export function registerCcCommand(program: Command) {
 OMC Shortcuts (single dash):
   -r         Resume last conversation (→ --resume)
   -skip      Dangerously skip permissions (→ --dangerously-skip-permissions)
-  -w         Launch in WezTerm window (→ --terminal wezterm)
   -wt        Create git worktree for isolated session (→ --worktree)
   -rc        Launch Remote Control mode (mobile access via claude.ai/code)
   -debug     Enable debug mode (visible proxy + logs)
@@ -115,7 +111,6 @@ Examples:
   oh-my-claude cc -skip            Skip permissions with proxy
   oh-my-claude cc -wt              Isolated git worktree session
   oh-my-claude cc -r -skip         Combine shortcuts
-  oh-my-claude cc -w               Launch in WezTerm window
   oh-my-claude cc -rc              Remote Control with proxy routing`,
 		)
 		.allowUnknownOption(true);
@@ -315,43 +310,32 @@ Examples:
 
 		// Detect terminal backend for this session
 		// Debug mode forces auto-detection so the visible proxy pane can be spawned
-		const insideWezTerm = !!process.env.WEZTERM_PANE;
-		let terminal: 'wezterm' | 'tmux' | null = null;
+		let terminal: 'tmux' | null = null;
 
 		if (debug && terminalMode === 'none') {
 			const detected = await detectTerminal();
-			terminal =
-				detected === 'wezterm' || detected === 'tmux' ? detected : null;
+			terminal = detected === 'tmux' ? detected : null;
 			if (terminal) {
 				console.log(
 					dimText(`  Debug: auto-detected terminal ${terminal}`),
 				);
 			}
-		} else if (debug && insideWezTerm) {
-			// Debug inside WezTerm: use detached path for proxy pane splitting.
-			// The normal insideWezTerm guard forces inline (no terminal), but
-			// debug mode needs the terminal backend to create visible panes.
-			terminal = 'wezterm';
 		} else if (
 			terminalMode === 'none' ||
-			insideWezTerm ||
 			isRemoteControl
 		) {
 			terminal = null;
-		} else if (terminalMode === 'wezterm') {
-			terminal = 'wezterm';
 		} else if (terminalMode === 'tmux') {
 			terminal = 'tmux';
 		} else {
 			// auto-detect
 			const detected = await detectTerminal();
-			terminal =
-				detected === 'wezterm' || detected === 'tmux' ? detected : null;
+			terminal = detected === 'tmux' ? detected : null;
 		}
 
 		if (terminal) {
 			// Detached terminal path
-			const result = await launchDetachedSession({
+			await launchDetachedSession({
 				sessionId,
 				ports,
 				terminal,
@@ -391,7 +375,6 @@ Examples:
 				debug,
 				isRemoteControl,
 				terminalMode,
-				insideWezTerm,
 				switchProvider,
 				switchModel,
 			});
