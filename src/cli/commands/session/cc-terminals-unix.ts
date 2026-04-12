@@ -8,7 +8,12 @@ import { spawnSync, execSync } from 'node:child_process';
 import { detectTerminalBackend, appleScriptEscape } from './cc-routing';
 
 export async function shouldUseTmuxInline(): Promise<boolean> {
+	// Already inside tmux/psmux — run inline, let Claude Code use native tmux integration
 	if (process.env.TMUX) return false;
+	// On Windows, don't auto-wrap in tmux. Users should start psmux first,
+	// then run omc cc inside it — Claude Code's native agent teams feature
+	// handles pane management automatically via CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS.
+	if (process.platform === 'win32') return false;
 	return detectTerminalBackend() === 'tmux';
 }
 
