@@ -303,18 +303,6 @@ function checkAllTools(): ToolVersion[] {
     installCommand: getInstallCmd("opencode-ai"),
   });
 
-  const codexInstalled = isInstalled("codex") || isInstalled("codex-cli");
-  const codexVersion = codexInstalled ? (getToolVersion("codex") || getToolVersion("codex-cli")) : undefined;
-  const codexLatest = getLatestNpmVersion("@openai/codex");
-  tools.push({
-    name: "codex",
-    installed: codexInstalled,
-    currentVersion: codexVersion,
-    latestVersion: codexLatest,
-    updateAvailable: codexInstalled && codexLatest !== undefined && codexVersion !== codexLatest,
-    installCommand: getInstallCmd("@openai/codex"),
-  });
-
   const ohmyInstalled = isInstalled("oh-my-opencode");
   const ohmyVersion = ohmyInstalled ? getToolVersion("oh-my-opencode") : undefined;
   const ohmyLatest = getLatestNpmVersion("oh-my-opencode");
@@ -352,8 +340,11 @@ export function registerToolsCommand(program: Command) {
       });
 
       const mcpChoices = Object.values(MCP_SERVERS).map((server) => {
+        const isZai = server.envKey === "Z_AI_API_KEY";
+        const hasKey = isZai ? !!getZaiKey() : (server.envKey ? !!process.env[server.envKey] : true);
+        const keyLabel = isZai ? "Z_AI_API_KEY / ZHIPU_API_KEY" : server.envKey;
         const keyStatus = server.envKey
-          ? (process.env[server.envKey] ? `${c.green}key set${c.reset}` : `${c.dim}${server.envKey} not set${c.reset}`)
+          ? (hasKey ? `${c.green}key set${c.reset}` : `${c.dim}${keyLabel} not set${c.reset}`)
           : `${c.green}no key needed${c.reset}`;
         return {
           name: `[MCP] ${server.name} - ${server.description} (${keyStatus})`,
@@ -361,15 +352,21 @@ export function registerToolsCommand(program: Command) {
         };
       });
 
-      const selected = await checkbox({
-        message: "Select tools and MCP servers to install",
-        choices: [
-          { name: "── CLI Tools ──", value: "__sep1__", disabled: true },
-          ...cliChoices,
-          { name: "── MCP Servers ──", value: "__sep2__", disabled: true },
-          ...mcpChoices,
-        ],
-      });
+      let selected: string[];
+      try {
+        selected = await checkbox({
+          message: "Select tools and MCP servers to install",
+          choices: [
+            { name: "── CLI Tools ──", value: "__sep1__", disabled: true },
+            ...cliChoices,
+            { name: "── MCP Servers ──", value: "__sep2__", disabled: true },
+            ...mcpChoices,
+          ],
+        });
+      } catch {
+        console.log("\nCancelled.");
+        return;
+      }
 
       if (selected.length === 0) {
         console.log("\nNo items selected. Exiting.");
@@ -394,7 +391,7 @@ export function registerToolsCommand(program: Command) {
   // ── tools install ────────────────────────────────────────────────────────
   toolsCmd
     .command("install [tool]")
-    .description("Install external CLI tools (opencode, codex, oh-my-opencode, tmux)")
+    .description("Install external CLI tools (opencode, oh-my-opencode, tmux)")
     .option("--list", "List available tools without installing")
     .action(async (tool: string | undefined, options: { list?: boolean }) => {
       const { c, ok, fail, dimText, warn } = createFormatters();
@@ -441,7 +438,13 @@ export function registerToolsCommand(program: Command) {
         return { name: label, value: t.value };
       });
 
-      const selected = await checkbox({ message: "Select tools to install", choices });
+      let selected: string[];
+      try {
+        selected = await checkbox({ message: "Select tools to install", choices });
+      } catch {
+        console.log("\nCancelled.");
+        return;
+      }
 
       if (selected.length === 0) {
         console.log("\nNo tools selected. Exiting.");
@@ -518,7 +521,13 @@ export function registerToolsCommand(program: Command) {
           };
         });
 
-        const selected = await checkbox({ message: "Select MCP servers to install", choices: mcpChoices });
+        let selected: string[];
+        try {
+          selected = await checkbox({ message: "Select MCP servers to install", choices: mcpChoices });
+        } catch {
+          console.log("\nCancelled.");
+          return;
+        }
         if (selected.length === 0) {
           console.log("\nNo servers selected. Exiting.");
           return;
