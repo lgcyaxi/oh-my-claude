@@ -1,32 +1,18 @@
 # Coworker Smoke Tests
 
-Minimal end-to-end validation for the native coworker runtimes.
+Minimal end-to-end validation for the OpenCode native coworker runtime.
 
 ## Scope
 
 These tests verify that:
 
-- Codex starts `codex app-server`, creates a thread, submits one turn, and
-  returns a response
-- OpenCode starts `opencode serve`, creates a session, records coworker
-  activity, sends one message, and returns a response
+- OpenCode starts `opencode serve`, creates a session, records coworker activity, sends one message,
+  and returns a response
 
-They are intentionally small. They validate startup and one successful task, not
-full feature coverage.
+They are intentionally small. They validate startup and one successful task, not full feature
+coverage.
 
 ## Commands
-
-### Codex
-
-```bash
-bun run test:smoke:codex
-```
-
-Direct form:
-
-```bash
-CODEX_NO_VIEWER=1 OMC_RUN_CODEX_SMOKE=1 bun test tests/coworker/codex-smoke.test.ts
-```
 
 ### OpenCode
 
@@ -40,20 +26,13 @@ Direct form:
 OPENCODE_NO_VIEWER=1 OMC_RUN_OPENCODE_SMOKE=1 bun test tests/coworker/opencode-smoke.test.ts
 ```
 
-### Both
+### All
 
 ```bash
 bun run test:smoke:coworker
 ```
 
 ## Prerequisites
-
-### Codex
-
-- `codex` installed and available on `PATH`
-- authenticated via `codex login` or `omc auth openai`
-- network access to OpenAI/Codex backend
-- writable `~/.codex` directory
 
 ### OpenCode
 
@@ -66,22 +45,20 @@ The OpenCode coworker uses the official server message API shape:
 - `POST /session/{sessionID}/message`
 - body includes `agent` and `parts`
 
-At runtime, oh-my-claude selects agent `build` if available; otherwise it picks
-the first non-`subagent` primary agent. This matches the server/SDK contract
-documented by OpenCode:
+At runtime, oh-my-claude selects agent `build` if available; otherwise it picks the first
+non-`subagent` primary agent. This matches the server/SDK contract documented by OpenCode:
 
 - [OpenCode Server](https://opencode.ai/docs/server/)
 - [OpenCode SDK](https://opencode.ai/docs/sdk/)
 
-After a smoke run, inspect live coworker logs with `omc m codex log` or
-`omc m opencode log`. Use `--raw` on either command to inspect the unaggregated
-event stream, and `omc m opencode viewer` to re-open the OpenCode panel if it
-was closed.
+After a smoke run, inspect live coworker logs with `omc m opencode log`. Use
+`--raw` to inspect the unaggregated event stream, and `omc m opencode viewer` to
+re-open the OpenCode panel if it was closed.
 
 ## CI Usage
 
-These smoke tests are optional by design. They should only run in CI jobs that
-have the required local/runtime dependencies.
+These smoke tests are optional by design. They should only run in CI jobs that have the required
+local/runtime dependencies.
 
 Example:
 
@@ -91,8 +68,8 @@ bun run build
 bun run test:smoke:coworker
 ```
 
-If your CI environment cannot access external services or user config
-directories, keep these smoke tests disabled and run only unit/build checks.
+If your CI environment cannot access external services or user config directories, keep these smoke
+tests disabled and run only unit/build checks.
 
 ## Feature Tests
 

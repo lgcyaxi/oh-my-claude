@@ -22,29 +22,73 @@ export function launchInTmux(
 	proxyPid?: number,
 ): string | undefined {
 	const tmuxSession = `omc-cc-${sessionId}`;
-	const escapedCwd = cwd.replace(/'/g, "'\\''");
-	const envParts = [
-		`ANTHROPIC_BASE_URL=${baseUrl}`,
-		`OMC_PROXY_CONTROL_PORT=${controlPort}`,
-		...(debug ? ['OMC_DEBUG=1'] : []),
-	];
-	const killProxy = proxyPid
-		? `; kill ${proxyPid} 2>/dev/null`
-		: '';
-	const shellCmd = `cd '${escapedCwd}' && unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CODEX_COMPANION_SESSION_ID && ${envParts.join(' ')} claude${claudeArgsStr}${killProxy}`;
-	const escapedShellCmd = shellCmd.replace(/'/g, "'\\''");
+	const isWindows = process.platform === 'win32';
 
 	try {
-		if (process.env.TMUX) {
-			execSync(
-				`tmux new-window -n '${tmuxSession}' -c '${escapedCwd}' '${escapedShellCmd}'`,
-				{ encoding: 'utf-8', windowsHide: true },
-			);
+		if (isWindows) {
+			// psmux on Windows: cmd.exe is the default shell, shell-command arg is ignored.
+			// Create session first, then inject commands via send-keys.
+			// psmux send-keys requires full session:window target format.
+			let target: string;
+			if (process.env.TMUX) {
+				execSync(`tmux new-window -n '${tmuxSession}'`, {
+					encoding: 'utf-8',
+					windowsHide: true,
+				});
+				// Get current session name for the full target
+				const currentSession = execSync("tmux display-message -p '#{session_name}'", {
+					encoding: 'utf-8',
+					windowsHide: true,
+				}).trim();
+				target = `${currentSession}:${tmuxSession}`;
+			} else {
+				execSync(`tmux new-session -d -s ${tmuxSession}`, {
+					encoding: 'utf-8',
+					windowsHide: true,
+				});
+				target = tmuxSession;
+			}
+			const setCmds = [
+				`set "ANTHROPIC_BASE_URL=${baseUrl}"`,
+				`set "OMC_PROXY_CONTROL_PORT=${controlPort}"`,
+				...(debug ? ['set "OMC_DEBUG=1"'] : []),
+				'set "CLAUDECODE="',
+				'set "CLAUDE_CODE_ENTRYPOINT="',
+				'set "CLAUDE_CODE_EXECPATH="',
+				'set "CODEX_COMPANION_SESSION_ID="',
+			];
+			const killProxy = proxyPid
+				? ` & taskkill /F /PID ${proxyPid} >nul 2>&1`
+				: '';
+			const winCmd = `cd /d "${cwd}" && ${setCmds.join(' && ')} && claude${claudeArgsStr}${killProxy}`;
+			spawnSync('tmux', ['send-keys', '-t', target, winCmd, 'Enter'], {
+				stdio: 'ignore',
+				windowsHide: true,
+			});
 		} else {
-			execSync(
-				`tmux new-session -d -s ${tmuxSession} -c '${escapedCwd}' '${escapedShellCmd}'`,
-				{ encoding: 'utf-8', windowsHide: true },
-			);
+			const escapedCwd = cwd.replace(/'/g, "'\\''");
+			const envParts = [
+				`ANTHROPIC_BASE_URL=${baseUrl}`,
+				`OMC_PROXY_CONTROL_PORT=${controlPort}`,
+				...(debug ? ['OMC_DEBUG=1'] : []),
+			];
+			const killProxy = proxyPid
+				? `; kill ${proxyPid} 2>/dev/null`
+				: '';
+			const shellCmd = `cd '${escapedCwd}' && unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CODEX_COMPANION_SESSION_ID && ${envParts.join(' ')} claude${claudeArgsStr}${killProxy}`;
+			const escapedShellCmd = shellCmd.replace(/'/g, "'\\''");
+
+			if (process.env.TMUX) {
+				execSync(
+					`tmux new-window -n '${tmuxSession}' -c '${escapedCwd}' '${escapedShellCmd}'`,
+					{ encoding: 'utf-8', windowsHide: true },
+				);
+			} else {
+				execSync(
+					`tmux new-session -d -s ${tmuxSession} -c '${escapedCwd}' '${escapedShellCmd}'`,
+					{ encoding: 'utf-8', windowsHide: true },
+				);
+			}
 		}
 		return tmuxSession;
 	} catch {

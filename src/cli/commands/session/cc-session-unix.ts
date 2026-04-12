@@ -36,14 +36,30 @@ import {
 function spawnSyncTmuxSession(
 	sessionName: string,
 	shellCmd: string,
+	env?: Record<string, string | undefined>,
 ): ReturnType<typeof spawnSync> {
-	spawnSync('tmux', ['new-session', '-d', '-s', sessionName, shellCmd], {
-		stdio: 'ignore',
-		env: process.env,
-	});
+	if (process.platform === 'win32') {
+		// psmux on Windows defaults to cmd.exe and ignores the shell-command arg.
+		// Create the session, then inject the command via send-keys.
+		spawnSync('tmux', ['new-session', '-d', '-s', sessionName], {
+			stdio: 'ignore',
+			env: env ?? process.env,
+		});
+		// Build a cmd.exe-compatible command: set env vars with `set`, then run claude.
+		// The shellCmd is Unix-style, so we reconstruct from env + claudeCmd.
+		spawnSync('tmux', ['send-keys', '-t', sessionName, shellCmd, 'Enter'], {
+			stdio: 'ignore',
+			env: env ?? process.env,
+		});
+	} else {
+		spawnSync('tmux', ['new-session', '-d', '-s', sessionName, shellCmd], {
+			stdio: 'ignore',
+			env: env ?? process.env,
+		});
+	}
 	return spawnSync('tmux', ['attach-session', '-t', sessionName], {
 		stdio: 'inherit',
-		env: process.env,
+		env: env ?? process.env,
 	});
 }
 
@@ -351,13 +367,29 @@ export async function launchInlineSession(options: {
 		);
 
 		const tmuxSession = `omc-cc-${sessionId}`;
-		const envPrefix = [
-			`ANTHROPIC_BASE_URL=${baseUrl}`,
-			`OMC_PROXY_CONTROL_PORT=${ports.controlPort}`,
-			...(debug ? ['OMC_DEBUG=1'] : []),
-		].join(' ');
 		const claudeCmd = `claude${claudeArgs.length > 0 ? ' ' + claudeArgs.join(' ') : ''}`;
-		const shellCmd = `unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CODEX_COMPANION_SESSION_ID; ${envPrefix} ${claudeCmd}`;
+
+		let shellCmd: string;
+		if (process.platform === 'win32') {
+			// psmux on Windows uses cmd.exe — use `set` for env vars and `&&` chaining
+			const setCmds = [
+				`set "ANTHROPIC_BASE_URL=${baseUrl}"`,
+				`set "OMC_PROXY_CONTROL_PORT=${ports.controlPort}"`,
+				...(debug ? ['set "OMC_DEBUG=1"'] : []),
+				'set "CLAUDECODE="',
+				'set "CLAUDE_CODE_ENTRYPOINT="',
+				'set "CLAUDE_CODE_EXECPATH="',
+				'set "CODEX_COMPANION_SESSION_ID="',
+			];
+			shellCmd = `${setCmds.join(' && ')} && ${claudeCmd}`;
+		} else {
+			const envPrefix = [
+				`ANTHROPIC_BASE_URL=${baseUrl}`,
+				`OMC_PROXY_CONTROL_PORT=${ports.controlPort}`,
+				...(debug ? ['OMC_DEBUG=1'] : []),
+			].join(' ');
+			shellCmd = `unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CODEX_COMPANION_SESSION_ID; ${envPrefix} ${claudeCmd}`;
+		}
 
 		let result: ReturnType<typeof spawnSync>;
 
