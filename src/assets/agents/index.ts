@@ -94,39 +94,3 @@ export const taskAgents = [
 	...providerAgentList,
 ];
 
-/**
- * Get agent by name
- */
-export function getAgent(name: string): AgentDefinition | undefined {
-	return agents[name.toLowerCase()];
-}
-
-/**
- * Agents that support native execution via Claude subscription (Task tool)
- */
-export const nativeAgents = [
-	sisyphusAgent,
-	prometheusAgent,
-	claudeReviewerAgent,
-	claudeScoutAgent,
-	uiDesignerAgent,
-	analystAgent,
-	librarianAgent,
-	documentWriterAgent,
-	oracleAgent,
-	navigatorAgent,
-	hephaestusAgent,
-	...providerAgentList,
-];
-
-/**
- * Provider agents only (agents bound to specific providers, not role-specialized)
- */
-export { providerAgentList as providerAgents };
-
-/**
- * Check if agent uses Claude subscription (Task tool)
- */
-export function isTaskAgent(agent: AgentDefinition): boolean {
-	return agent.executionMode === 'task';
-}

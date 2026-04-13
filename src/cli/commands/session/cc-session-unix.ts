@@ -442,7 +442,7 @@ export async function launchInlineSession(options: {
 	console.log(ok(`Launching Claude Code${argsLabel}...\n`));
 
 	let nativeProxySpawned = false;
-	if (debug) {
+	if (debug && process.platform === 'darwin') {
 		proxyResult.child.kill();
 		nativeProxySpawned = spawnProxyInNativeTerminal(
 			PROXY_SCRIPT,
@@ -478,6 +478,25 @@ export async function launchInlineSession(options: {
 				console.log(dimText(`  Log: ${fallback.logFile}`));
 			}
 		}
+	} else if (debug) {
+		// Non-macOS: spawnProxyInNativeTerminal always returns false,
+		// so skip Terminal.app and go straight to hidden proxy fallback
+		proxyResult.child.kill();
+		const fallback = await spawnSessionProxy({
+			...ports,
+			debug,
+			sessionId,
+			provider: switchProvider,
+			model: switchModel,
+		});
+		if (!fallback || !fallback.healthy) {
+			console.log(fail('Fallback proxy failed to start.'));
+			process.exit(1);
+		}
+		proxyResult.child = fallback.child;
+		if (fallback.logFile) {
+			console.log(dimText(`  Log: ${fallback.logFile}`));
+		}
 	}
 
 	const shell = process.env.SHELL || 'bash';
@@ -508,23 +527,12 @@ export async function launchInlineSession(options: {
 	cleanup();
 
 	if (nativeProxySpawned) {
+		// macOS-only: kill the Terminal.app proxy process
 		try {
-			if (process.platform === 'win32') {
-				const raw = execSync(`netstat -ano | findstr :${ports.port} | findstr LISTENING`, {
-					encoding: 'utf-8',
-					windowsHide: true,
-				}).trim();
-				const line = raw.split(/\r?\n/).find(l => l.includes(`:${ports.port}`));
-				if (line) {
-					const pid = line.trim().split(/\s+/).pop();
-					if (pid) execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore', windowsHide: true });
-				}
-			} else {
-				execSync(`lsof -ti tcp:${ports.port} | xargs kill 2>/dev/null`, {
-					stdio: 'ignore',
-					windowsHide: true,
-				});
-			}
+			execSync(`lsof -ti tcp:${ports.port} | xargs kill 2>/dev/null`, {
+				stdio: 'ignore',
+				windowsHide: true,
+			});
 		} catch {}
 	}
 

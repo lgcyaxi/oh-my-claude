@@ -144,6 +144,19 @@ const CLI_TOOLS: CliTool[] = [
     fallbackCmd: process.platform === "linux" ? "sudo snap install go --classic" : undefined,
     fallbackNote: "Trying snap...",
   },
+  {
+    name: "Chezmoi",
+    value: "chezmoi",
+    description: "Manage your dotfiles across multiple machines",
+    binary: "chezmoi",
+    installCmd: process.platform === "win32"
+      ? "winget install twpayne.chezmoi"
+      : process.platform === "darwin"
+        ? "brew install chezmoi"
+        : "sudo apt install chezmoi",
+    fallbackCmd: process.platform === "linux" ? "sudo snap install chezmoi --classic" : undefined,
+    fallbackNote: "Trying snap...",
+  },
 ];
 
 // ─── MCP server definitions ───────────────────────────────────────────────────

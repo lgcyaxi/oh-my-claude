@@ -176,13 +176,15 @@ function resolveMemoryProvider(
 
 	// 4. First available from priority list
 	const priority = memCfg?.aiProviderPriority ?? [
-		'zhipu',
 		'minimax',
+			'minimax-cn',
+		'zhipu',
 		'deepseek',
 	];
 	const defaultModels: Record<string, string> = {
 		zhipu: 'glm-5.1',
 		minimax: 'MiniMax-M2.7',
+			'minimax-cn': 'MiniMax-M2.7',
 		deepseek: 'deepseek-chat',
 		kimi: 'kimi-for-coding',
 		aliyun: 'qwen3.6-plus',
