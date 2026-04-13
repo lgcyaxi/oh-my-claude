@@ -39,18 +39,35 @@ const REGISTRY_FILE = join(REGISTRY_DIR, 'proxy-instances.json');
 /** Stale instance TTL: 5 minutes without heartbeat */
 const STALE_TTL_MS = 5 * 60 * 1000;
 
-/** Read all registered instances, filtering out stale entries */
+/** Check if a PID is alive */
+function isPidAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** Read all registered instances, filtering out stale and dead entries */
 export function readInstances(): ProxyInstance[] {
 	if (!existsSync(REGISTRY_FILE)) return [];
 	try {
 		const data = JSON.parse(readFileSync(REGISTRY_FILE, 'utf-8'));
 		const instances: ProxyInstance[] = Array.isArray(data) ? data : [];
 		const now = Date.now();
-		// Filter out stale entries
-		return instances.filter((i) => {
+		// Filter out stale entries (heartbeat expired) and dead processes
+		const alive = instances.filter((i) => {
 			const heartbeat = new Date(i.lastHeartbeat).getTime();
-			return now - heartbeat < STALE_TTL_MS;
+			if (now - heartbeat >= STALE_TTL_MS) return false;
+			if (!isPidAlive(i.pid)) return false;
+			return true;
 		});
+		// Write back cleaned list if any were removed
+		if (alive.length < instances.length) {
+			writeInstances(alive);
+		}
+		return alive;
 	} catch {
 		return [];
 	}

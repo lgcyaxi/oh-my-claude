@@ -9,6 +9,7 @@
 
 import {
 	readInstances,
+	deregisterInstance,
 	type ProxyInstance,
 } from '../state/instance-registry';
 import { jsonResponse } from './helpers';
@@ -71,7 +72,16 @@ export async function handleInstancesRequest(
 	const registered = readInstances();
 
 	// Probe all instances in parallel
-	const instances = await Promise.all(registered.map(probeInstance));
+	const allInstances = await Promise.all(registered.map(probeInstance));
+
+	// Clean up dead instances from registry
+	const deadInstances = allInstances.filter((i) => !i.alive);
+	for (const dead of deadInstances) {
+		deregisterInstance(dead.sessionId);
+	}
+
+	// Only return alive instances to the dashboard
+	const instances = allInstances.filter((i) => i.alive);
 
 	// Aggregate totals
 	const totalSessions = instances.reduce(
@@ -82,7 +92,7 @@ export async function handleInstancesRequest(
 		(sum, i) => sum + (i.health?.requestCount ?? 0),
 		0,
 	);
-	const aliveCount = instances.filter((i) => i.alive).length;
+	const aliveCount = instances.length;
 
 	return jsonResponse(
 		{

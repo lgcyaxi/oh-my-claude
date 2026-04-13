@@ -34,6 +34,7 @@ import {
 	loadApiEnvFile,
 	formatAge,
 } from './cc-routing';
+import { readInstances } from '../../../proxy/state/instance-registry';
 import { killTerminalPane } from './cc-terminals';
 import { launchDetachedSession, launchInlineSession } from './cc-session';
 import {
@@ -83,7 +84,7 @@ export function registerCcCommand(program: Command) {
 		.option(
 			'-t, --terminal <mode>',
 			'Terminal launch mode: none (inline), auto, tmux',
-			'none',
+			'auto',
 		)
 		.option(
 			'--debug',
@@ -97,6 +98,7 @@ OMC Shortcuts (single dash):
   -skip      Dangerously skip permissions (→ --dangerously-skip-permissions)
   -wt        Create git worktree for isolated session (→ --worktree)
   -rc        Launch Remote Control mode (mobile access via claude.ai/code)
+  -nf        No flicker mode (sets CLAUDE_CODE_NO_FLICKER=1)
   -debug     Enable debug mode (visible proxy + logs)
 
 Direct Provider Connection:
@@ -109,8 +111,9 @@ Direct Provider Connection:
 Examples:
   oh-my-claude cc -r               Resume last session with proxy
   oh-my-claude cc -skip            Skip permissions with proxy
+  oh-my-claude cc -nf              No flicker mode
   oh-my-claude cc -wt              Isolated git worktree session
-  oh-my-claude cc -r -skip         Combine shortcuts
+  oh-my-claude cc -r -skip -nf     Combine shortcuts
   oh-my-claude cc -rc              Remote Control with proxy routing`,
 		)
 		.allowUnknownOption(true);
@@ -206,6 +209,7 @@ Examples:
 			isRemoteControl,
 			worktreeName,
 			debugMode,
+			noFlicker,
 			provider: rescuedProvider,
 			terminal: rescuedTerminal,
 		} = expandShortcuts(rawClaudeArgs);
@@ -299,7 +303,23 @@ Examples:
 
 		const debug = !!options.debug || debugMode;
 		const terminalMode: string = options.terminal ?? 'auto';
-		const sessionId = randomBytes(4).toString('hex');
+		let sessionId = randomBytes(4).toString('hex');
+
+		// Reuse last sessionId for --continue/--resume so Claude Code finds prior conversation
+		// (Claude keys conversations by ANTHROPIC_BASE_URL which includes the sessionId)
+		const wantsContinue = claudeArgs.includes('--continue') || claudeArgs.includes('--resume');
+		if (wantsContinue) {
+			const instances = readInstances();
+			if (instances.length > 0) {
+				// Most recent instance (by startedAt) is the last session
+				const sorted = [...instances].sort(
+					(a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+				);
+				const lastSessionId = sorted[0]!.sessionId;
+				console.log(ok(`Reusing session ${c.cyan}${lastSessionId}${c.reset} for --continue`));
+				sessionId = lastSessionId;
+			}
+		}
 
 		console.log(
 			dimText(
@@ -341,14 +361,15 @@ Examples:
 				terminal,
 				claudeArgs,
 				debug,
+				noFlicker,
 				switchProvider,
 				switchModel,
 			});
 
-			// Debug mode: make the tmux session visible
-			if (debug && terminal === 'tmux') {
+			// Switch to the tmux window (or attach if outside tmux)
+			if (terminal === 'tmux') {
 				if (process.env.TMUX) {
-					// Inside tmux: switch to the debug window
+					// Inside tmux: switch to the CC window
 					try {
 						execSync(
 							`tmux select-window -t 'omc-cc-${sessionId}'`,
@@ -359,7 +380,7 @@ Examples:
 						);
 					} catch {}
 				} else {
-					// Outside tmux: attach to the debug session
+					// Outside tmux: attach to the session
 					spawnSync('tmux', ['attach', '-t', `omc-cc-${sessionId}`], {
 						stdio: 'inherit',
 					});
@@ -373,6 +394,7 @@ Examples:
 				ports,
 				claudeArgs,
 				debug,
+				noFlicker,
 				isRemoteControl,
 				terminalMode,
 				switchProvider,

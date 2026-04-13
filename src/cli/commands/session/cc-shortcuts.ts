@@ -26,12 +26,14 @@ export function expandShortcuts(claudeArgs: string[]): {
   isRemoteControl: boolean;
   worktreeName: string | null;
   debugMode: boolean;
+  noFlicker: boolean;
   provider?: string;
   terminal?: string;
 } {
   let isRemoteControl = false;
   let worktreeName: string | null = null;
   let debugMode = false;
+  let noFlicker = false;
   let provider: string | undefined;
   let terminal: string | undefined;
   const expanded: string[] = [];
@@ -46,6 +48,11 @@ export function expandShortcuts(claudeArgs: string[]): {
 
     if (arg === "-debug" || arg === "--debug") {
       debugMode = true;
+      continue;
+    }
+
+    if (arg === "-nf" || arg === "--no-flicker") {
+      noFlicker = true;
       continue;
     }
 
@@ -104,7 +111,7 @@ export function expandShortcuts(claudeArgs: string[]): {
     }
   }
 
-  return { args: expanded, isRemoteControl, worktreeName, debugMode, provider, terminal };
+  return { args: expanded, isRemoteControl, worktreeName, debugMode, noFlicker, provider, terminal };
 }
 
 /**

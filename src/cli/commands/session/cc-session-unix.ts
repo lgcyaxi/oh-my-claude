@@ -39,15 +39,13 @@ function spawnSyncTmuxSession(
 	env?: Record<string, string | undefined>,
 ): ReturnType<typeof spawnSync> {
 	if (process.platform === 'win32') {
-		// psmux on Windows defaults to cmd.exe and ignores the shell-command arg.
-		// Create the session, then inject the command via send-keys.
+		// psmux on Windows: shell-command arg is ignored, use send-keys with bash syntax
+		// Append '; exit' so window closes when command exits (matching Unix behavior)
 		spawnSync('tmux', ['new-session', '-d', '-s', sessionName], {
 			stdio: 'ignore',
 			env: env ?? process.env,
 		});
-		// Build a cmd.exe-compatible command: set env vars with `set`, then run claude.
-		// The shellCmd is Unix-style, so we reconstruct from env + claudeCmd.
-		spawnSync('tmux', ['send-keys', '-t', sessionName, shellCmd, 'Enter'], {
+		spawnSync('tmux', ['send-keys', '-t', sessionName, `${shellCmd}; exit`, 'Enter'], {
 			stdio: 'ignore',
 			env: env ?? process.env,
 		});
@@ -69,6 +67,7 @@ export async function launchDetachedSession(options: {
 	terminal: 'tmux';
 	claudeArgs: string[];
 	debug: boolean;
+	noFlicker?: boolean;
 	switchProvider?: string;
 	switchModel?: string;
 }): Promise<{ paneId?: string }> {
@@ -78,6 +77,7 @@ export async function launchDetachedSession(options: {
 		terminal,
 		claudeArgs,
 		debug,
+		noFlicker,
 		switchProvider,
 		switchModel,
 	} = options;
@@ -174,6 +174,7 @@ export async function launchDetachedSession(options: {
 				debug,
 				cwd,
 				proxyPid,
+				noFlicker,
 			);
 		}
 	} else {
@@ -210,6 +211,7 @@ export async function launchDetachedSession(options: {
 			debug,
 			cwd,
 			proxyPid,
+			noFlicker,
 		);
 	}
 
@@ -242,6 +244,7 @@ export async function launchInlineSession(options: {
 	ports: { port: number; controlPort: number };
 	claudeArgs: string[];
 	debug: boolean;
+	noFlicker?: boolean;
 	isRemoteControl: boolean;
 	terminalMode: string;
 	switchProvider?: string;
@@ -252,6 +255,7 @@ export async function launchInlineSession(options: {
 		ports,
 		claudeArgs,
 		debug,
+		noFlicker,
 		isRemoteControl,
 		terminalMode,
 		switchProvider,
@@ -347,6 +351,7 @@ export async function launchInlineSession(options: {
 				ANTHROPIC_BASE_URL: baseUrl,
 				OMC_PROXY_CONTROL_PORT: String(ports.controlPort),
 				...(debug ? { OMC_DEBUG: '1' } : {}),
+				...(noFlicker ? { CLAUDE_CODE_NO_FLICKER: '1' } : {}),
 				CLAUDECODE: undefined,
 				CLAUDE_CODE_ENTRYPOINT: undefined,
 				CLAUDE_CODE_EXECPATH: undefined,
@@ -369,27 +374,14 @@ export async function launchInlineSession(options: {
 		const tmuxSession = `omc-cc-${sessionId}`;
 		const claudeCmd = `claude${claudeArgs.length > 0 ? ' ' + claudeArgs.join(' ') : ''}`;
 
-		let shellCmd: string;
-		if (process.platform === 'win32') {
-			// psmux on Windows uses cmd.exe — use `set` for env vars and `&&` chaining
-			const setCmds = [
-				`set "ANTHROPIC_BASE_URL=${baseUrl}"`,
-				`set "OMC_PROXY_CONTROL_PORT=${ports.controlPort}"`,
-				...(debug ? ['set "OMC_DEBUG=1"'] : []),
-				'set "CLAUDECODE="',
-				'set "CLAUDE_CODE_ENTRYPOINT="',
-				'set "CLAUDE_CODE_EXECPATH="',
-				'set "CODEX_COMPANION_SESSION_ID="',
-			];
-			shellCmd = `${setCmds.join(' && ')} && ${claudeCmd}`;
-		} else {
-			const envPrefix = [
-				`ANTHROPIC_BASE_URL=${baseUrl}`,
-				`OMC_PROXY_CONTROL_PORT=${ports.controlPort}`,
-				...(debug ? ['OMC_DEBUG=1'] : []),
-			].join(' ');
-			shellCmd = `unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CODEX_COMPANION_SESSION_ID; ${envPrefix} ${claudeCmd}`;
-		}
+		// psmux on Windows now uses bash (via terminal-config), so all platforms use bash syntax
+		const envPrefix = [
+			`ANTHROPIC_BASE_URL=${baseUrl}`,
+			`OMC_PROXY_CONTROL_PORT=${ports.controlPort}`,
+			...(debug ? ['OMC_DEBUG=1'] : []),
+			...(noFlicker ? ['CLAUDE_CODE_NO_FLICKER=1'] : []),
+		].join(' ');
+		const shellCmd = `unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_EXECPATH CODEX_COMPANION_SESSION_ID; ${envPrefix} ${claudeCmd}`;
 
 		let result: ReturnType<typeof spawnSync>;
 
@@ -500,6 +492,7 @@ export async function launchInlineSession(options: {
 		ANTHROPIC_BASE_URL: baseUrl,
 		OMC_PROXY_CONTROL_PORT: String(ports.controlPort),
 		...(debug ? { OMC_DEBUG: '1' } : {}),
+		...(noFlicker ? { CLAUDE_CODE_NO_FLICKER: '1' } : {}),
 		CLAUDECODE: undefined,
 		CLAUDE_CODE_ENTRYPOINT: undefined,
 		CLAUDE_CODE_EXECPATH: undefined,
