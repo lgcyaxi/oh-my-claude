@@ -133,6 +133,9 @@ export async function handleDailyOperation(
 		error?: string;
 	}> = [];
 
+	let lastProvider: string | undefined;
+	let lastModel: string | undefined;
+
 	for (const date of datesToProcess) {
 		const entries = dateGroups.get(date)!;
 
@@ -140,6 +143,8 @@ export async function handleDailyOperation(
 
 		try {
 			const result = await callAI(controlPort, prompt, body, 4000);
+			lastProvider = result.provider;
+			lastModel = result.model;
 
 			// Determine where to write the narrative
 			// Use the first entry's directory to keep it in the same scope
@@ -242,6 +247,8 @@ ${result.content}`;
 			analysis: analysisParts.join('\n'),
 			memoriesAnalyzed: sessionEntries.length,
 			datesProcessed: datesToProcess.length,
+			provider: lastProvider,
+			model: lastModel,
 			results,
 		},
 		200,

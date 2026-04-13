@@ -281,25 +281,30 @@ export async function handleInternalComplete(
 			`[internal/complete] Provider ${resolved.provider} failed: ${message}`,
 		);
 
-		// Fallback to Anthropic passthrough if configured provider fails
-		try {
-			return await handleAnthropicPassthrough(
-				messages,
-				'claude-sonnet-4-20250514',
-				temperature,
-				maxTokens,
-				corsHeaders,
-			);
-		} catch (fallbackError) {
-			return jsonResponse(
-				{
-					error: `All providers failed. Last: ${message}`,
-					provider: resolved.provider,
-				},
-				502,
-				corsHeaders,
-			);
+		// Fallback to Anthropic passthrough only if API key is available
+		const anthropicKey = process.env.ANTHROPIC_API_KEY ?? process.env.CLAUDE_API_KEY ?? '';
+		if (anthropicKey) {
+			try {
+				return await handleAnthropicPassthrough(
+					messages,
+					'claude-sonnet-4-20250514',
+					temperature,
+					maxTokens,
+					corsHeaders,
+				);
+			} catch {
+				// Anthropic fallback also failed — fall through to error response
+			}
 		}
+
+		return jsonResponse(
+			{
+				error: `AI failed: ${message}`,
+				provider: resolved.provider,
+			},
+			502,
+			corsHeaders,
+		);
 	}
 }
 
