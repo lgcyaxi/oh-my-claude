@@ -24,20 +24,43 @@ export function looksLikeValidPath(p: string): boolean {
  * Extract real project path from the first JSONL file's `cwd` field.
  * Folder names like "D--Github-blog" are ambiguous (can't distinguish
  * path separators from literal hyphens), so we read the actual cwd.
+ *
+ * Checks both flat JSONL files at root and subagent JSONL inside session dirs.
  */
 export async function resolveProjectPath(folder: string): Promise<string> {
 	const dirPath = join(PROJECTS_DIR, folder);
 	try {
-		const files = await readdir(dirPath);
-		const jsonlFiles = files.filter((f) => f.endsWith('.jsonl'));
-		if (jsonlFiles.length === 0) return folder;
+		const entries = await readdir(dirPath, { withFileTypes: true });
 
-		// Try up to 5 JSONL files to find a cwd (some may be empty stubs)
-		for (const jsonl of jsonlFiles.slice(0, 5)) {
+		// Collect candidate JSONL paths: flat files first, then subagent files
+		const candidates: string[] = [];
+		for (const entry of entries) {
+			if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+				candidates.push(join(dirPath, entry.name));
+			}
+		}
+		// If no flat JSONL, try subagent JSONL inside session directories
+		if (candidates.length === 0) {
+			for (const entry of entries) {
+				if (!entry.isDirectory() || entry.name === 'memory') continue;
+				const subagentsDir = join(dirPath, entry.name, 'subagents');
+				try {
+					const subFiles = await readdir(subagentsDir);
+					for (const sf of subFiles) {
+						if (sf.endsWith('.jsonl')) {
+							candidates.push(join(subagentsDir, sf));
+							break; // one per session dir is enough
+						}
+					}
+				} catch { /* no subagents dir */ }
+				if (candidates.length >= 3) break;
+			}
+		}
+
+		// Try up to 5 JSONL files to find a cwd
+		for (const jsonlPath of candidates.slice(0, 5)) {
 			const rl = createInterface({
-				input: createReadStream(join(dirPath, jsonl), {
-					encoding: 'utf-8',
-				}),
+				input: createReadStream(jsonlPath, { encoding: 'utf-8' }),
 				crlfDelay: Infinity,
 			});
 
@@ -79,27 +102,63 @@ export async function readSessionIndex(
 	}
 }
 
-/** Scan JSONL files in a project folder and return session IDs */
+/** UUID v4 pattern for session directory names */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export interface SessionFileEntry {
+	sessionId: string;
+	/** Path to the main JSONL file, or null for directory-only sessions */
+	filePath: string | null;
+	mtime: Date;
+	/** true = directory-based session (may lack main conversation JSONL) */
+	isDirectory: boolean;
+}
+
+/**
+ * Scan sessions in a project folder — supports both formats:
+ * - Legacy flat: {sessionId}.jsonl files at root
+ * - Directory-based: {sessionId}/ directories (Claude Code 2.1+)
+ */
 export async function scanJsonlFiles(
 	folder: string,
-): Promise<Array<{ sessionId: string; filePath: string; mtime: Date }>> {
+): Promise<SessionFileEntry[]> {
 	const dirPath = join(PROJECTS_DIR, folder);
-	const entries = await readdir(dirPath);
-	const results: Array<{
-		sessionId: string;
-		filePath: string;
-		mtime: Date;
-	}> = [];
+	const entries = await readdir(dirPath, { withFileTypes: true });
+	const results: SessionFileEntry[] = [];
+	const seenIds = new Set<string>();
 
-	for (const name of entries) {
-		if (!name.endsWith('.jsonl')) continue;
-		const sessionId = name.replace('.jsonl', '');
-		const filePath = join(dirPath, name);
+	// Pass 1: flat JSONL files (active sessions)
+	for (const entry of entries) {
+		if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
+		const sessionId = entry.name.replace('.jsonl', '');
+		const filePath = join(dirPath, entry.name);
 		try {
 			const st = await stat(filePath);
-			results.push({ sessionId, filePath, mtime: st.mtime });
+			results.push({ sessionId, filePath, mtime: st.mtime, isDirectory: false });
+			seenIds.add(sessionId);
 		} catch {
 			// skip unreadable files
+		}
+	}
+
+	// Pass 2: UUID directories (directory-based sessions)
+	for (const entry of entries) {
+		if (!entry.isDirectory()) continue;
+		if (!UUID_RE.test(entry.name)) continue;
+		if (entry.name === 'memory') continue; // skip special dirs
+		if (seenIds.has(entry.name)) continue; // already found as flat JSONL
+
+		const sessionDir = join(dirPath, entry.name);
+		try {
+			const st = await stat(sessionDir);
+			results.push({
+				sessionId: entry.name,
+				filePath: null, // no main JSONL for directory-based sessions
+				mtime: st.mtime,
+				isDirectory: true,
+			});
+		} catch {
+			// skip unreadable
 		}
 	}
 

@@ -71,6 +71,26 @@ export async function checkCompanionsZone(ctx: DoctorContext) {
     }
   }
 
+  // psmux bash config (Windows only — required for team agents)
+  if (process.platform === "win32" && tmuxInstalled) {
+    const psmuxConf = join(homedir(), ".psmux.conf");
+    const hasPsmuxConf = existsSync(psmuxConf);
+    if (hasPsmuxConf) {
+      const { readFileSync } = await import("node:fs");
+      const content = readFileSync(psmuxConf, "utf-8");
+      const hasShellConfig = content.includes("default-shell") && content.includes("bash");
+      if (hasShellConfig) {
+        console.log(`  ${ok("psmux bash config (team agents)")}`);
+      } else {
+        console.log(`  ${c.yellow}⚠${c.reset} psmux config exists but no bash shell set`);
+        console.log(`    ${dimText("Run: oh-my-claude terminal-config psmux")}`);
+      }
+    } else {
+      console.log(`  ${c.yellow}⚠${c.reset} psmux bash config missing (team agents won't work)`);
+      console.log(`    ${dimText("Run: oh-my-claude terminal-config psmux")}`);
+    }
+  }
+
   // Output styles
   const stylesDir = join(homedir(), ".claude", "output-styles");
   const stylesExist = existsSync(stylesDir);
