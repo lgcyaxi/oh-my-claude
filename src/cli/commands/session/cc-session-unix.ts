@@ -395,7 +395,8 @@ export async function launchInlineSession(options: {
 		process.exit(result.status ?? 0);
 	}
 
-	const useTmuxInline = await shouldUseTmuxInline();
+	// Only use tmux inline wrapping when terminal mode allows it (not 'none')
+	const useTmuxInline = terminalMode !== 'none' && await shouldUseTmuxInline();
 
 	if (useTmuxInline) {
 		console.log(

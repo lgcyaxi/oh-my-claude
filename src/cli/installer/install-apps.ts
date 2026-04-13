@@ -28,7 +28,8 @@ export async function installApps(ctx: InstallContext): Promise<void> {
 			mkdirSync(cliDistDir, { recursive: true });
 		}
 
-		const builtCliPath = join(ctx.sourceDir, 'dist', 'cli.js');
+		// bun build outputs to dist/cli/cli.js (preserves subdirectory structure)
+		const builtCliPath = join(ctx.sourceDir, 'dist', 'cli', 'cli.js');
 		const installedCliPath = join(cliDistDir, 'cli.js');
 		if (existsSync(builtCliPath)) {
 			copyFileSync(builtCliPath, installedCliPath);

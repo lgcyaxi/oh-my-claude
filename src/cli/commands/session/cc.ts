@@ -106,7 +106,7 @@ export function registerCcCommand(program: Command) {
 		.option(
 			'-t, --terminal <mode>',
 			'Terminal launch mode: none (inline), auto, tmux',
-			'auto',
+			process.platform === 'win32' ? 'none' : 'auto',
 		)
 		.option(
 			'--debug',
@@ -320,7 +320,7 @@ Examples:
 		}
 
 		const debug = !!options.debug || debugMode;
-		const terminalMode: string = options.terminal ?? 'auto';
+		const terminalMode: string = options.terminal ?? (process.platform === 'win32' ? 'none' : 'auto');
 
 		// --- Session identity: deterministic from CWD for stable ANTHROPIC_BASE_URL ---
 		// Same project → same sessionId + preferred ports → /continue works across relaunches
