@@ -544,9 +544,10 @@ export function getMemory(
 export function updateMemory(
 	id: string,
 	updates: Partial<Pick<MemoryEntry, 'title' | 'content' | 'tags'>>,
+	projectRoot?: string,
 ): MemoryResult<MemoryEntry> {
 	try {
-		const existing = getMemory(id);
+		const existing = getMemory(id, 'all', projectRoot);
 		if (!existing.success || !existing.data) {
 			return {
 				success: false,

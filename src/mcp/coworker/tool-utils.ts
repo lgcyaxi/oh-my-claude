@@ -1,5 +1,6 @@
 import type { CallToolResult } from '../shared/types';
 import type { CoworkerReviewTarget } from '../../coworker/types';
+import { toErrorMessage } from '../../shared/utils';
 
 export type CoworkerTaskAction =
 	| 'send'
@@ -30,7 +31,7 @@ export function errorResult(
 				type: 'text',
 				text: JSON.stringify({
 					error:
-						error instanceof Error ? error.message : String(error),
+						toErrorMessage(error),
 					target,
 					...(meta ? { meta } : {}),
 				}),

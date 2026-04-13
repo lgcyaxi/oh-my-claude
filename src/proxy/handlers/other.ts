@@ -14,6 +14,7 @@ import {
 	isDebug,
 	cacheUsageResponse,
 } from './stats';
+import { toErrorMessage } from '../../shared/utils';
 
 export async function handleOtherRequest(
 	req: Request,
@@ -56,7 +57,7 @@ export async function handleOtherRequest(
 
 		return createStreamingResponse(upstreamResponse);
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = toErrorMessage(error);
 		console.error(`[proxy #${reqId}] Error: ${message}`);
 		return new Response(
 			JSON.stringify({ error: { type: 'proxy_error', message } }),

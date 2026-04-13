@@ -5,6 +5,7 @@
 import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { jsonResponse } from '../helpers';
+import { toErrorMessage } from '../../../shared/utils';
 import type { MemoryEntryWithPath } from './types';
 import { parseFrontmatter } from './io';
 import { collectMemoryEntries } from './query';
@@ -227,7 +228,7 @@ ${result.content}`;
 				sessionsConsolidated: entries.length,
 				narrativePath: '',
 				deletedFiles: [],
-				error: error instanceof Error ? error.message : String(error),
+				error: toErrorMessage(error),
 			});
 		}
 	}
@@ -384,7 +385,7 @@ ${mergedContent}`;
 
 				results.push({ title: group.title, merged: entries.length, newFile: newId, deleted });
 			} catch (error) {
-				results.push({ title: group.title, merged: 0, newFile: '', deleted: [], error: error instanceof Error ? error.message : String(error) });
+				results.push({ title: group.title, merged: 0, newFile: '', deleted: [], error: toErrorMessage(error) });
 			}
 		}
 
@@ -447,7 +448,7 @@ ${filteredEntries.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created})
 			memoriesAnalyzed: filteredEntries.length,
 		}, 200, corsHeaders);
 	} catch (error) {
-		return jsonResponse({ error: `Compact failed: ${error instanceof Error ? error.message : String(error)}` }, 500, corsHeaders);
+		return jsonResponse({ error: `Compact failed: ${toErrorMessage(error)}` }, 500, corsHeaders);
 	}
 }
 
@@ -482,7 +483,7 @@ export async function handleClearOperation(
 				await unlink(entry.filePath);
 				results.push({ id, title: entry.title, deleted: true });
 			} catch (error) {
-				results.push({ id, title: entry.title, deleted: false, error: error instanceof Error ? error.message : String(error) });
+				results.push({ id, title: entry.title, deleted: false, error: toErrorMessage(error) });
 			}
 		}
 
@@ -533,7 +534,7 @@ ${allEntries.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created}): ${e
 			memoriesAnalyzed: allEntries.length,
 		}, 200, corsHeaders);
 	} catch (error) {
-		return jsonResponse({ error: `Clear failed: ${error instanceof Error ? error.message : String(error)}` }, 500, corsHeaders);
+		return jsonResponse({ error: `Clear failed: ${toErrorMessage(error)}` }, 500, corsHeaders);
 	}
 }
 
@@ -669,6 +670,6 @@ Create a chronological timeline of key events, decisions, and activities. Preser
 			memoriesAnalyzed: recent.length, typeFilter,
 		}, 200, corsHeaders);
 	} catch (error) {
-		return jsonResponse({ error: `Summarize failed: ${error instanceof Error ? error.message : String(error)}` }, 500, corsHeaders);
+		return jsonResponse({ error: `Summarize failed: ${toErrorMessage(error)}` }, 500, corsHeaders);
 	}
 }

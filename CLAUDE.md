@@ -87,7 +87,7 @@ oh-my-claude menubar --build  # Build Tauri app from installed source
 
 Commands are defined in `src/assets/commands/` subfolders:
 
-- `orchestration/` — workflow commands: sisyphus, plan, start-work, pend, ulw
+- `orchestration/` — workflow commands: sisyphus, plan, start-work, ulw
 - `memory/` — memory management: mem-clear, mem-compact, mem-daily, mem-summary
 - `runtime/` — runtime & infra: status, opencode, pref
 - `actions/` — quick actions: commit, implement, refactor, docs, issue
@@ -136,7 +136,6 @@ npm publish --access public
 - `src/mcp/server/manager.ts` - MCP server manager (lifecycle and orchestration)
 - `src/mcp/memory/ai-ops.ts` - Memory AI operations (compaction and cleanup workflows)
 - `src/mcp/coworker/index.ts` - Coworker MCP flow (`coworker_send`, `coworker_status`)
-- `src/mcp/tasks/run.ts` - Task runner execution flow
 - `src/mcp/shared/types.ts` - Shared MCP domain types
 - `src/assets/agents/index.ts` - Agent registry: `agents`, `taskAgents`, `nativeAgents`
 - `src/assets/agents/types.ts` - AgentDefinition type (category, executionMode, prompt, provider, model)
@@ -155,13 +154,17 @@ npm publish --access public
 - `src/hooks/stop/context-memory.ts` - Unified session writer (PostToolUse checkpoint + Stop session-end)
 - `src/hooks/user-prompt-submit/memory-awareness.ts` - UserPromptSubmit hook for proactive memory usage
 - `src/proxy/server.ts` - Proxy server entry point (Bun.serve dual server)
-- `src/proxy/handler.ts` - Proxy request handler (passthrough vs switched routing orchestrator)
-- `src/proxy/model-resolver.ts` - Model resolution for switched provider requests (`resolveEffectiveModel`)
-- `src/proxy/provider-forward.ts` - Provider forwarding (OpenAI-format vs Anthropic-format upstream dispatch)
-- `src/proxy/response-builders.ts` - Response conversion (OpenAI/Responses API SSE → Anthropic format)
-- `src/proxy/control.ts` - Proxy control API (health, status, switch, revert)
-- `src/proxy/state.ts` - Signal file IPC (proxy-switch.json)
-- `src/proxy/auth.ts` - Proxy auth (dual mode: api-key / oauth)
+- `src/proxy/daemon.ts` - Proxy daemon management (spawn, health, lifecycle)
+- `src/proxy/handlers/` - Request handlers (passthrough, switched, directive, display, stats, models)
+- `src/proxy/routing/model-resolver.ts` - Model resolution for switched provider requests (`resolveEffectiveModel`)
+- `src/proxy/routing/provider-forward.ts` - Provider forwarding (OpenAI-format vs Anthropic-format upstream dispatch)
+- `src/proxy/converters/` - Stream format converters (OpenAI SSE, Responses API SSE → Anthropic format)
+- `src/proxy/response/builders.ts` - Response construction and stream piping
+- `src/proxy/response/cache.ts` - Response caching for session display
+- `src/proxy/control/` - Control API (health, status, switch, revert, sessions, memory, providers)
+- `src/proxy/state/switch.ts` - Signal file IPC (proxy-switch.json)
+- `src/proxy/auth/auth.ts` - Proxy auth (dual mode: api-key / oauth)
+- `src/proxy/sanitize.ts` + `src/proxy/sanitizers/` - Request sanitization
 - `src/assets/commands/memory/omc-mem-compact.md` - Slash command for AI-assisted memory compaction
 - `src/assets/commands/memory/omc-mem-clear.md` - Slash command for AI-powered selective memory cleanup
 - `src/assets/commands/memory/omc-mem-summary.md` - Slash command for date-range memory timeline consolidation
@@ -200,5 +203,5 @@ Use the documented smoke scripts when changing native coworker runtimes:
 - `bun run test:smoke:opencode`
 - `bun run test:smoke:coworker`
 
-See [docs/guides/coworker-smoke-tests.md](/Users/axiba/Downloads/Gits/oh-my-claude/docs/guides/coworker-smoke-tests.md) for prerequisites and CI usage.
-See [docs/guides/coworker-gui-acceptance.md](/Users/axiba/Downloads/Gits/oh-my-claude/docs/guides/coworker-gui-acceptance.md) for cross-platform GUI acceptance testing.
+See [docs/guides/coworker-smoke-tests.md](docs/guides/coworker-smoke-tests.md) for prerequisites and CI usage.
+See [docs/guides/coworker-gui-acceptance.md](docs/guides/coworker-gui-acceptance.md) for cross-platform GUI acceptance testing.

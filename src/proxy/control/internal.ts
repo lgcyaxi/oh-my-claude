@@ -15,6 +15,7 @@ import {
 } from '../../shared/config';
 import { routeByModel } from '../../shared/providers/router';
 import { jsonResponse } from './helpers';
+import { toErrorMessage } from '../../shared/utils';
 
 // ---- Memory model runtime state ----
 
@@ -273,7 +274,7 @@ export async function handleInternalComplete(
 			corsHeaders,
 		);
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = toErrorMessage(error);
 		console.error(
 			`[internal/complete] Provider ${resolved.provider} failed: ${message}`,
 		);

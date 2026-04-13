@@ -30,7 +30,3 @@ export const providerAgentList: AgentDefinition[] = [
 	qwenAgent,
 	zhipuAgent,
 ];
-
-/** Provider agents as a record keyed by name */
-export const providerAgentMap: Record<string, AgentDefinition> =
-	Object.fromEntries(providerAgentList.map((a) => [a.name, a]));

@@ -22,5 +22,3 @@ export function createDeepSeekClient(): AnthropicCompatibleClient {
     "deepseek-chat"
   );
 }
-
-export const deepseekClient = createDeepSeekClient();

@@ -9,6 +9,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import { getInstallDir } from './index';
+import { toErrorMessage } from '../../shared/utils';
 
 /**
  * Beta channel marker file info
@@ -174,8 +175,7 @@ export async function installFromGitHub(
 			resolvedRef,
 		};
 	} catch (error) {
-		const errorMessage =
-			error instanceof Error ? error.message : String(error);
+		const errorMessage = toErrorMessage(error);
 
 		// Check for common error patterns
 		if (
@@ -257,8 +257,7 @@ export async function checkForNewerBeta(
 			latestDate,
 		};
 	} catch (error) {
-		const errorMessage =
-			error instanceof Error ? error.message : String(error);
+		const errorMessage = toErrorMessage(error);
 
 		if (errorMessage.includes('rate limit')) {
 			return {

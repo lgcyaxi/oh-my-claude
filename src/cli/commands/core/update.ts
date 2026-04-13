@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import { createFormatters } from '../../utils/colors';
 import { INSTALL_DIR } from '../../utils/paths';
+import { toErrorMessage } from '../../../shared/utils';
 
 export function registerUpdateCommand(program: Command) {
 	program
@@ -204,8 +205,7 @@ export function registerUpdateCommand(program: Command) {
 					);
 				} catch (error) {
 					console.log(`\n${fail('Beta installation failed')}`);
-					const errMsg =
-						error instanceof Error ? error.message : String(error);
+					const errMsg = toErrorMessage(error);
 					if (
 						errMsg.includes('404') ||
 						errMsg.includes('Not Found')

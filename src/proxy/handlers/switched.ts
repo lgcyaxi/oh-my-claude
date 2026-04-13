@@ -24,6 +24,7 @@ import { recordSessionProviderRequest } from '../state/session';
 import { handlePassthrough } from './passthrough';
 import { RESPONSES_API_PROVIDERS, trackProviderRequest } from './stats';
 import { displayModel } from './display';
+import { toErrorMessage } from '../../shared/utils';
 
 export async function handleSwitched(
 	req: Request,
@@ -131,7 +132,7 @@ export async function handleSwitched(
 
 		return wrapWithCapture(result, sessionId, provider, effectiveModel);
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = toErrorMessage(error);
 		console.error(
 			`[proxy #${reqId}]${sessionTag} Provider "${provider}" request failed: ${message}, ` +
 				`falling back to native Claude`,

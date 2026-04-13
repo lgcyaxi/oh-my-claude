@@ -19,6 +19,7 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import type { ProxyAuthConfig } from '../state/types';
 import { loadConfig } from '../../shared/config';
+import { toErrorMessage } from '../../shared/utils';
 
 /** Path to the proxy auth config file */
 export function getAuthConfigPath(): string {
@@ -196,7 +197,7 @@ export async function getProviderAuth(
 				providerType: providerConfig.type,
 			};
 		} catch (error) {
-			const msg = error instanceof Error ? error.message : String(error);
+			const msg = toErrorMessage(error);
 			throw new Error(
 				`OAuth token resolution failed for "${providerName}": ${msg}. ` +
 					`Run 'oh-my-claude auth login ${providerName}' to authenticate.`,

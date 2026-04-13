@@ -14,6 +14,7 @@ import type {
 	StatusLineConfig,
 	StyleConfig,
 } from './types';
+import { toErrorMessage } from '../../shared/utils';
 import {
 	ALL_SEGMENT_IDS,
 	PRESETS,
@@ -35,7 +36,7 @@ function logSegmentError(segmentId: string, error: unknown): void {
 		}
 		const logPath = join(logDir, 'statusline-debug.log');
 		const timestamp = new Date().toISOString();
-		const errorMsg = error instanceof Error ? error.message : String(error);
+		const errorMsg = toErrorMessage(error);
 		const logLine = `[${timestamp}] Segment "${segmentId}" failed: ${errorMsg}\n`;
 		appendFileSync(logPath, logLine);
 	} catch {

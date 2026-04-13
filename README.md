@@ -1,6 +1,6 @@
 # oh-my-claude
 
-[English](README.md) | [中文](README.zh-CN.md)
+[English](README.md) | [中文](docs/README.zh-CN.md)
 
 Multi-provider MCP server for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with specialized agent workflows.
 
@@ -151,12 +151,8 @@ oh-my-claude provides slash commands for quick actions (`/omcx-*`) and agent act
 | `/omc-start-work` | Begin work on an existing plan |
 | `/omc-status` | Display proxy + coworker status via `coworker_task(action="status")` |
 | `/omc-switch` | Switch model to external provider (e.g., `/omc-switch ds-r`) |
-| `/omc-opencode` | Activate OpenCode for refactoring and UI design |
 | `/omc-opencode` | Assign a self-contained task to the OpenCode coworker |
 | `/omc-pref` | Manage persistent preferences (always/never rules) |
-| `/omc-up` | Upvote — mark a response as helpful |
-| `/omc-down` | Downvote — mark a response as unhelpful |
-| `/omc-pend` | Pending — pause current task for later |
 | `/omc-mem-compact` | Compact memories with AI-assisted grouping |
 | `/omc-mem-clear` | AI-powered selective memory cleanup |
 | `/omc-mem-summary` | Consolidate memories into timeline summary |

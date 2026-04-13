@@ -13,8 +13,13 @@ import type { ChatMessage, ChatCompletionResponse } from "../../shared/providers
 import { writeFileSync } from "node:fs";
 import { getSessionStatusPath, ensureSessionDir, cleanupStaleSessions } from "../../statusline/session";
 
-// Cleanup stale sessions on server startup
-cleanupStaleSessions(60 * 60 * 1000); // 1 hour
+// Cleanup stale sessions lazily on first use (avoid side effects at import time)
+let sessionsCleanedUp = false;
+function ensureSessionsCleanedUp(): void {
+  if (sessionsCleanedUp) return;
+  sessionsCleanedUp = true;
+  cleanupStaleSessions(60 * 60 * 1000); // 1 hour
+}
 
 // ── Proxy routing helpers ───────────────────────────────────────────
 
@@ -39,12 +44,9 @@ export async function isProxyAvailable(): Promise<boolean> {
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
     const res = await fetch(`http://localhost:${PROXY_CONTROL_PORT}/health`, {
-      signal: controller.signal,
+      signal: AbortSignal.timeout(2000),
     });
-    clearTimeout(timeout);
     const available = res.ok;
     proxyHealthCache = { available, checkedAt: now };
     return available;
@@ -231,6 +233,7 @@ export function convertAnthropicResponseToChat(data: Record<string, unknown>): C
  */
 export function updateStatusFile(): void {
   try {
+    ensureSessionsCleanedUp();
     ensureSessionDir();
     const statusPath = getSessionStatusPath();
 

@@ -29,6 +29,7 @@ import { handleMemoryRequest } from './memory/index';
 import { handlePreferencesRequest } from './preferences';
 import { jsonResponse } from './helpers';
 import { serveWebAsset } from './web-static';
+import { toErrorMessage } from '../../shared/utils';
 
 // Re-export registerShutdown for server.ts
 export { registerShutdown } from './switch';
@@ -303,7 +304,7 @@ export async function handleControl(req: Request): Promise<Response> {
 				);
 		}
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = toErrorMessage(error);
 		console.error(`[control] Error: ${message}`);
 		return jsonResponse({ error: message }, 500, corsHeaders);
 	}

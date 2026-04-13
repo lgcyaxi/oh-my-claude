@@ -25,6 +25,7 @@ import { recordSessionProviderRequest } from '../state/session';
 import { handlePassthrough } from './passthrough';
 import { RESPONSES_API_PROVIDERS, trackProviderRequest } from './stats';
 import { displayModel } from './display';
+import { toErrorMessage } from '../../shared/utils';
 
 export async function handleDirectiveRoute(
 	req: Request,
@@ -134,7 +135,7 @@ export async function handleDirectiveRoute(
 
 		return wrapWithCapture(result, sessionId, provider, model);
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = toErrorMessage(error);
 		console.error(
 			`[proxy #${reqId}]${sessionTag} Route directive ${displayModel(provider, model)} failed: ${message}, ` +
 				`falling back to passthrough`,

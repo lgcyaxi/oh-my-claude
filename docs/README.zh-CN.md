@@ -1,6 +1,6 @@
 # oh-my-claude
 
-[English](README.md) | [中文](README.zh-CN.md)
+[English](../README.md) | [中文](README.zh-CN.md)
 
 为 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 打造的多供应商 MCP 服务器，提供专业化的智能体工作流。
 
@@ -151,12 +151,8 @@ oh-my-claude 提供快捷操作命令（`/omcx-*`）和智能体激活命令（`
 | `/omc-start-work` | 开始执行现有计划 |
 | `/omc-status` | 显示 MCP 后台智能体状态仪表板 |
 | `/omc-switch` | 切换到外部供应商模型（如 `/omc-switch dr`） |
-| `/omc-opencode` | 激活 OpenCode 进行重构和 UI 设计 |
 | `/omc-opencode` | 将自包含任务分派给 OpenCode 协作者 |
 | `/omc-pref` | 管理持久偏好设置（始终/禁止规则） |
-| `/omc-up` | 点赞 — 标记响应为有帮助 |
-| `/omc-down` | 点踩 — 标记响应为无帮助 |
-| `/omc-pend` | 挂起 — 暂停当前任务稍后继续 |
 | `/omc-mem-compact` | AI 辅助记忆压缩 |
 | `/omc-mem-clear` | AI 驱动选择性记忆清理 |
 | `/omc-mem-summary` | 按日期范围整合记忆为时间线 |

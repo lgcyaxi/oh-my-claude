@@ -12,6 +12,7 @@ import { readFileSync, writeFileSync, existsSync, renameSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { jsonResponse } from './helpers';
+import { toErrorMessage } from '../../shared/utils';
 
 interface ModelEntry {
 	id: string;
@@ -203,7 +204,7 @@ export async function handleRegistryRequest(
 				);
 		}
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = toErrorMessage(error);
 		return jsonResponse({ error: message }, 500, corsHeaders);
 	}
 }

@@ -27,5 +27,3 @@ export function createMiniMaxClient(): AnthropicCompatibleClient {
     "MiniMax-M2.7"
   );
 }
-
-export const minimaxClient = createMiniMaxClient();

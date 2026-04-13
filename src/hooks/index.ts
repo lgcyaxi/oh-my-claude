@@ -51,14 +51,6 @@ export const HOOKS = {
 		matcher: '.*',
 		source: './post-tool-use/post-tool.ts',
 	},
-	// Legacy hooks kept for backward compat build (source files still exist)
-	'session-logger': {
-		name: 'session-logger',
-		description: '(Legacy — replaced by post-tool)',
-		type: 'PostToolUse',
-		matcher: '.*',
-		source: './post-tool-use/session-logger.ts',
-	},
 } as const;
 
 export type HookName = keyof typeof HOOKS;

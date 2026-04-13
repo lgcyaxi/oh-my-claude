@@ -24,5 +24,3 @@ export function createZhiPuClient(): AnthropicCompatibleClient {
     "glm-5.1"
   );
 }
-
-export const zhipuClient = createZhiPuClient();

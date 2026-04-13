@@ -8,6 +8,7 @@
 
 import type { Command } from "commander";
 import { createFormatters } from "../../utils/colors";
+import { toErrorMessage } from "../../../shared/utils";
 import { listCredentials, getCredential } from "../../../shared/auth/store";
 import { hasMiniMaxCredential } from "../../../shared/auth/minimax";
 import { hasKimiCredential, loginKimi } from "../../../shared/auth/kimi";
@@ -55,7 +56,7 @@ export function registerAuthCommand(program: Command) {
           console.log(`Run ${c.cyan}omc auth <provider>${c.reset} to authenticate.`);
           console.log(`Supported: ${c.cyan}minimax-cn${c.reset} (quota), ${c.cyan}kimi${c.reset} (quota), ${c.cyan}aliyun${c.reset} (quota)`);
         } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
+          const msg = toErrorMessage(error);
           console.log(fail(`Failed to check credentials: ${msg}`));
         }
         return;

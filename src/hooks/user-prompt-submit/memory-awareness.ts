@@ -30,7 +30,6 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 import {
-	shortHash,
 	resolveCanonicalRoot,
 	logUserPrompt,
 	getTimelineContent,
@@ -157,8 +156,8 @@ function getClaudeNativeMemory(projectCwd?: string): string | null {
 		if (!existsSync(claudeProjectsDir)) return null;
 
 		// Claude uses the full project path with slashes replaced
-		const projectKey = projectCwd.replace(/\//g, '-').replace(/^-/, '');
-		const memoryFile = join(claudeProjectsDir, projectKey, 'CLAUDE.md');
+		const projectKey = projectCwd.replace(/[\\/]/g, '-').replace(/^-/, '');
+		const memoryFile = join(claudeProjectsDir, projectKey, 'MEMORY.md');
 
 		if (existsSync(memoryFile)) {
 			const content = readFileSync(memoryFile, 'utf-8').trim();
@@ -435,7 +434,6 @@ function scanCompletionSignals(): string[] {
 			const filePath = join(SIGNALS_DIR, file);
 			try {
 				const signal = JSON.parse(readFileSync(filePath, 'utf-8'));
-				const icon = signal.status === 'completed' ? '+' : '!';
 				notifications.push(`[@] ${signal.agentName}: ${signal.status}`);
 				unlinkSync(filePath); // consume signal
 			} catch {

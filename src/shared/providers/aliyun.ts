@@ -31,5 +31,3 @@ export function createAliyunClient(): AnthropicCompatibleClient {
     "qwen3.6-plus"
   );
 }
-
-export const aliyunClient = createAliyunClient();

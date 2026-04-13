@@ -30,6 +30,7 @@ import { handleDirectiveRoute } from './directive';
 import { loadConfig, isProviderConfigured } from '../../shared/config';
 import type { ProxySwitchState } from '../state/types';
 import { displayModel } from './display';
+import { toErrorMessage } from '../../shared/utils';
 
 // Re-export all handler functions for consumers
 export { handlePassthrough } from './passthrough';
@@ -186,7 +187,7 @@ export async function handleMessages(
 			sessionTag,
 		);
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = toErrorMessage(error);
 		console.error(`[proxy #${reqId}]${sessionTag} Error: ${message}`);
 
 		try {
@@ -195,10 +196,7 @@ export async function handleMessages(
 			);
 			return await handlePassthrough(req, reqId, bodyText, sessionTag);
 		} catch (fallbackError) {
-			const fbMsg =
-				fallbackError instanceof Error
-					? fallbackError.message
-					: String(fallbackError);
+			const fbMsg = toErrorMessage(fallbackError);
 			return new Response(
 				JSON.stringify({
 					error: { type: 'proxy_error', message: fbMsg },

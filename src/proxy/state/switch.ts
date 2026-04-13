@@ -7,7 +7,7 @@
  * Path: ~/.claude/oh-my-claude/proxy-switch.json
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { ProxySwitchState } from './types';
@@ -65,7 +65,6 @@ export function writeSwitchState(state: ProxySwitchState): void {
 	const tmpPath = `${statePath}.tmp`;
 	writeFileSync(tmpPath, JSON.stringify(state, null, 2), 'utf-8');
 
-	const { renameSync } = require('node:fs') as typeof import('node:fs');
 	renameSync(tmpPath, statePath);
 }
 

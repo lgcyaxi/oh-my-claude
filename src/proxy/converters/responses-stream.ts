@@ -145,7 +145,8 @@ export class ResponsesToAnthropicStreamConverter extends TransformStream<
 				const delta = (data.delta as string) ?? '';
 				if (!delta) break;
 
-				this.outputTokens++;
+				// Estimate tokens from text length (~4 chars/token) since chunks != tokens
+				this.outputTokens += Math.max(1, Math.ceil(delta.length / 4));
 
 				const itemId = (data.item_id as string) ?? '';
 				let blockIdx = this.outputItemToBlock.get(itemId);

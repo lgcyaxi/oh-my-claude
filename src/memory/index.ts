@@ -96,7 +96,7 @@ export { checkDuplicate, DEFAULT_DEDUP_CONFIG } from './dedup';
 export type { DedupResult, NearDuplicate, DedupConfig } from './dedup';
 
 // AI Client (proxy-routed)
-export { callMemoryAI, callMemoryAIWithMessages } from './ai-client';
+export { callMemoryAI } from './ai-client';
 export type { MemoryAIResponse } from './ai-client';
 
 // Timeline

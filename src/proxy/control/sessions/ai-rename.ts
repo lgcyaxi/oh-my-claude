@@ -6,6 +6,7 @@ import { readFile, writeFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { jsonResponse } from '../helpers';
+import { toErrorMessage } from '../../../shared/utils';
 import type { SessionIndex } from './types';
 import { PROJECTS_DIR, resolveProjectPath } from './path';
 import { extractQuickMeta } from './parser';
@@ -211,7 +212,7 @@ export async function handleAiRename(
 	} catch (error) {
 		return jsonResponse(
 			{
-				error: `AI rename failed: ${error instanceof Error ? error.message : String(error)}`,
+				error: `AI rename failed: ${toErrorMessage(error)}`,
 			},
 			500,
 			corsHeaders,

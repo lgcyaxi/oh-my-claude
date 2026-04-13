@@ -7,6 +7,7 @@
 
 import type { Command } from "commander";
 import { createFormatters } from "../../utils/colors";
+import { toErrorMessage } from "../../../shared/utils";
 import { readProxyRegistry, cleanupStaleEntries, type ProxySessionEntry } from "../../../proxy/registry";
 import { startDashboard, stopDaemon, isRunning, getPid } from "../../../proxy/daemon";
 
@@ -468,7 +469,7 @@ export function registerProxyCommand(program: Command) {
         console.log(`  ${c.cyan}http://localhost:${result.port}/web/${c.reset}`);
         console.log(dimText("\nStop with: oh-my-claude proxy dashboard --stop"));
       } catch (error) {
-        console.log(fail(`Failed to start dashboard: ${error instanceof Error ? error.message : String(error)}`));
+        console.log(fail(`Failed to start dashboard: ${toErrorMessage(error)}`));
         process.exit(1);
       }
     });

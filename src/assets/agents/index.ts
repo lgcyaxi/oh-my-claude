@@ -36,7 +36,7 @@ export { deepseekAgent } from './providers/deepseek';
 export { deepseekRAgent } from './providers/deepseek-r';
 export { qwenAgent } from './providers/qwen';
 export { zhipuAgent } from './providers/zhipu';
-export { providerAgentList, providerAgentMap } from './providers';
+export { providerAgentList } from './providers';
 
 // Re-export individual agents
 import { sisyphusAgent } from './sisyphus';

@@ -59,7 +59,7 @@ export function mergeHybridResults(
 	// Process FTS results
 	for (const fts of ftsResults) {
 		// BM25 rank normalization: lower rank = better, convert to 0-1 score
-		const textScore = 1 / (1 + Math.max(0, fts.rank));
+		const textScore = 1 / (1 + Math.abs(fts.rank));
 
 		merged.set(fts.chunkId, {
 			chunkId: fts.chunkId,

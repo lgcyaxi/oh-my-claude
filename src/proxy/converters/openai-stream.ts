@@ -72,6 +72,14 @@ export class OpenAIToAnthropicStreamConverter extends TransformStream<
 		data: Record<string, unknown>,
 		controller: TransformStreamDefaultController<Uint8Array>,
 	): void {
+		// Use provider-reported usage if available (final chunk with stream_options.include_usage)
+		const usage = data.usage as
+			| { completion_tokens?: number; prompt_tokens?: number }
+			| undefined;
+		if (usage?.completion_tokens) {
+			this.outputTokens = usage.completion_tokens;
+		}
+
 		const choices = data.choices as
 			| Array<Record<string, unknown>>
 			| undefined;
@@ -123,7 +131,8 @@ export class OpenAIToAnthropicStreamConverter extends TransformStream<
 					this.sentBlockStart = true;
 				}
 
-				this.outputTokens++;
+				// Estimate tokens from text length (~4 chars/token) since chunks != tokens
+				this.outputTokens += Math.max(1, Math.ceil(content.length / 4));
 				this.emitEvent(controller, 'content_block_delta', {
 					type: 'content_block_delta',
 					index: this.contentBlockIndex,
@@ -145,7 +154,6 @@ export class OpenAIToAnthropicStreamConverter extends TransformStream<
 		const fn = tc.function as Record<string, unknown> | undefined;
 		if (!fn) return;
 
-		const index = (tc.index as number) ?? 0;
 		const id = tc.id as string | undefined;
 		const name = fn.name as string | undefined;
 		const args = fn.arguments as string | undefined;

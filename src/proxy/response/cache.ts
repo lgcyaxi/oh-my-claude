@@ -243,10 +243,6 @@ export class SSECaptureTransformStream extends TransformStream<
 								appendText(sessionId, seq, delta.text);
 							}
 						} else if (type === 'message_delta') {
-							const delta = data.delta as
-								| Record<string, unknown>
-								| undefined;
-							// Also capture stop_reason for edge cases
 							const usage = data.usage as
 								| Record<string, unknown>
 								| undefined;
@@ -349,12 +345,6 @@ export function wrapWithCapture(
 					if (done) break;
 					if (value) chunks.push(value);
 				}
-				const text = new TextDecoder().decode(
-					new Uint8Array(
-						chunks.reduce((acc, c) => acc + c.length, 0),
-					),
-				);
-
 				// Extract text content from Anthropic Messages API JSON
 				try {
 					const body = JSON.parse(

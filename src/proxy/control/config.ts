@@ -8,6 +8,7 @@
 
 import { loadConfig, isProviderConfigured } from '../../shared/config';
 import { jsonResponse } from './helpers';
+import { toErrorMessage } from '../../shared/utils';
 
 export async function handleConfigRequest(
 	_req: Request,
@@ -87,7 +88,7 @@ export async function handleConfigRequest(
 
 		return jsonResponse({ error: 'Not found' }, 404, corsHeaders);
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = toErrorMessage(error);
 		return jsonResponse({ error: message }, 500, corsHeaders);
 	}
 }

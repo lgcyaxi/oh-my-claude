@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
+import { toErrorMessage } from '../../shared/utils';
 
 export interface OpenCodeGlobalEvent {
 	directory?: string;
@@ -136,7 +137,7 @@ export class OpenCodeServerProcess {
 
 		this.proc.once('error', (error) => {
 			process.stderr.write(
-				`[opencode-server] failed: ${error instanceof Error ? error.message : String(error)}\n`,
+				`[opencode-server] failed: ${toErrorMessage(error)}\n`,
 			);
 		});
 

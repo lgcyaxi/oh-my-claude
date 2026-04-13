@@ -473,7 +473,7 @@ async function convertChunkResults(
  * BM25 rank is negative; more negative = better match.
  */
 function normalizeRank(rank: number): number {
-	return 1 / (1 + Math.max(0, rank));
+	return 1 / (1 + Math.abs(rank));
 }
 
 function tokenize(query: string): string[] {
