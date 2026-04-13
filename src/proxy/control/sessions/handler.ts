@@ -14,7 +14,7 @@ import {
 	readSessionIndex,
 	scanJsonlFiles,
 } from './path';
-import { extractQuickMeta, parseConversation } from './parser';
+import { extractQuickMeta, parseConversation, countMessages } from './parser';
 import { handleAiRename } from './ai-rename';
 
 /* ── Route dispatcher ── */
@@ -530,11 +530,12 @@ async function handleRenameSession(
 			} else if (hasDir) {
 				fileMtime = (await stat(sessionDir)).mtime;
 			}
+			const msgCount = hasJsonl ? await countMessages(jsonlPath) : 0;
 			index.entries.push({
 				sessionId,
 				firstPrompt: meta?.firstPrompt ?? '',
 				summary: newSummary,
-				messageCount: meta?.messageCount ?? 0,
+				messageCount: msgCount,
 				created: meta?.created ?? fileMtime.toISOString(),
 				modified: fileMtime.toISOString(),
 				gitBranch: meta?.gitBranch ?? '',
@@ -554,6 +555,7 @@ async function handleRenameSession(
 		} else if (hasDir) {
 			fileMtime = (await stat(sessionDir)).mtime;
 		}
+		const msgCount = hasJsonl ? await countMessages(jsonlPath) : 0;
 		const newIndex: SessionIndex = {
 			version: 1,
 			entries: [
@@ -561,7 +563,7 @@ async function handleRenameSession(
 					sessionId,
 					firstPrompt: meta?.firstPrompt ?? '',
 					summary: newSummary,
-					messageCount: meta?.messageCount ?? 0,
+					messageCount: msgCount,
 					created: meta?.created ?? fileMtime.toISOString(),
 					modified: fileMtime.toISOString(),
 					gitBranch: meta?.gitBranch ?? '',

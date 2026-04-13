@@ -87,11 +87,36 @@ export async function extractQuickMeta(
 			created,
 			modified: fileMtime.toISOString(),
 			gitBranch,
-			messageCount: 0, // unknown without full scan; UI will show "—"
+			messageCount: 0, // Use countMessages() separately for accurate count
 		};
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Lightweight message count — streams the file counting user+assistant entries.
+ * Uses fast string matching (no full JSON.parse per line).
+ *
+ * Call this separately when creating/updating index entries that need accurate counts.
+ * Not included in extractQuickMeta to keep listing fast.
+ */
+export async function countMessages(filePath: string): Promise<number> {
+	let count = 0;
+	try {
+		const rl = createInterface({
+			input: createReadStream(filePath, { encoding: 'utf-8' }),
+			crlfDelay: Infinity,
+		});
+		for await (const line of rl) {
+			if (line.includes('"type":"user"') || line.includes('"type":"assistant"')) {
+				count++;
+			}
+		}
+	} catch {
+		// File unreadable
+	}
+	return count;
 }
 
 /** Parse JSONL file into conversation entries, filtering to renderable types */

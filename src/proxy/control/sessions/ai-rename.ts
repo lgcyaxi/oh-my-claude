@@ -9,8 +9,7 @@ import { jsonResponse } from '../helpers';
 import { toErrorMessage } from '../../../shared/utils';
 import type { SessionIndex } from './types';
 import { PROJECTS_DIR, resolveProjectPath } from './path';
-import { extractQuickMeta } from './parser';
-import { parseConversation } from './parser';
+import { extractQuickMeta, parseConversation, countMessages } from './parser';
 
 /**
  * POST /api/sessions/:folder/:id/ai-rename
@@ -153,11 +152,12 @@ export async function handleAiRename(
 			} else {
 				const fileMtime = (await stat(jsonlPath)).mtime;
 				const meta = await extractQuickMeta(jsonlPath, fileMtime);
+				const msgCount = await countMessages(jsonlPath);
 				index.entries.push({
 					sessionId,
 					firstPrompt: meta?.firstPrompt ?? '',
 					summary,
-					messageCount: meta?.messageCount ?? 0,
+					messageCount: msgCount,
 					created: meta?.created ?? fileMtime.toISOString(),
 					modified: fileMtime.toISOString(),
 					gitBranch: meta?.gitBranch ?? '',
@@ -175,6 +175,7 @@ export async function handleAiRename(
 		} catch {
 			const fileMtime = (await stat(jsonlPath)).mtime;
 			const meta = await extractQuickMeta(jsonlPath, fileMtime);
+			const msgCount = await countMessages(jsonlPath);
 			const newIndex: SessionIndex = {
 				version: 1,
 				entries: [
@@ -182,7 +183,7 @@ export async function handleAiRename(
 						sessionId,
 						firstPrompt: meta?.firstPrompt ?? '',
 						summary,
-						messageCount: meta?.messageCount ?? 0,
+						messageCount: msgCount,
 						created: meta?.created ?? fileMtime.toISOString(),
 						modified: fileMtime.toISOString(),
 						gitBranch: meta?.gitBranch ?? '',

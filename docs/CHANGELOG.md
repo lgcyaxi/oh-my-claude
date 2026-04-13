@@ -4,9 +4,10 @@ All notable changes to oh-my-claude are documented here. Detailed changelogs are
 
 ## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-13
 
-### Latest: v2.2.11
+### Latest: v2.2.12
 
-- **Shared AI Ops Engine** — Extracted duplicated prompt/merge/parse logic from MCP and proxy ai-ops into `src/memory/ai-ops-shared.ts`
+- **`/resume` Fix** — Sessions created via omc proxy now have proper `messageCount` in `sessions-index.json`, fixing Claude Code's `/resume` discovery
+- **Shared AI Ops Engine** — Extracted duplicated prompt/merge/parse logic into `src/memory/ai-ops-shared.ts`
 - **Dead Code Cleanup** — Removed ~840 lines of orphaned segments, dead hooks, unused functions
 
 ### Highlights
