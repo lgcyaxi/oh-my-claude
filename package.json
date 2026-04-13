@@ -1,6 +1,6 @@
 {
   "name": "@lgcyaxi/oh-my-claude",
-  "version": "2.2.12",
+  "version": "2.2.13",
   "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
   "type": "module",
   "workspaces": [

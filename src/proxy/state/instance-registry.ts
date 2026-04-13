@@ -27,6 +27,8 @@ export interface ProxyInstance {
 	startedAt: string;
 	/** Last heartbeat (ISO timestamp) */
 	lastHeartbeat: string;
+	/** Working directory of the session */
+	cwd?: string;
 	/** Pre-switched provider (if any) */
 	provider?: string;
 	/** Pre-switched model (if any) */

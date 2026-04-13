@@ -36,12 +36,36 @@ function findFreePort(): Promise<number> {
 }
 
 /**
- * Find two available TCP ports for proxy + control.
+ * Check if a specific TCP port is free.
  */
-export async function findFreePorts(): Promise<{
+function isPortFree(port: number): Promise<boolean> {
+	return new Promise((resolve) => {
+		const srv = createServer();
+		srv.once('error', () => resolve(false));
+		srv.listen(port, () => srv.close(() => resolve(true)));
+	});
+}
+
+/**
+ * Find two available TCP ports for proxy + control.
+ * If preferred ports are given and both are free, use them (enables stable URLs).
+ */
+export async function findFreePorts(
+	preferredPort?: number,
+	preferredControlPort?: number,
+): Promise<{
 	port: number;
 	controlPort: number;
 }> {
+	if (preferredPort && preferredControlPort) {
+		const [portFree, controlFree] = await Promise.all([
+			isPortFree(preferredPort),
+			isPortFree(preferredControlPort),
+		]);
+		if (portFree && controlFree) {
+			return { port: preferredPort, controlPort: preferredControlPort };
+		}
+	}
 	const port = await findFreePort();
 	const controlPort = await findFreePort();
 	return { port, controlPort };

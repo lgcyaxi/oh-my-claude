@@ -202,6 +202,7 @@ async function main() {
 			controlPort,
 			pid: process.pid,
 			startedAt: new Date().toISOString(),
+			cwd: process.cwd(),
 			provider: state.switched ? state.provider : undefined,
 			model: state.switched ? state.model : undefined,
 		});

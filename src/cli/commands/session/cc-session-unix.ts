@@ -39,8 +39,11 @@ function spawnSyncTmuxSession(
 	env?: Record<string, string | undefined>,
 ): ReturnType<typeof spawnSync> {
 	if (process.platform === 'win32') {
-		// psmux on Windows: shell-command arg is ignored, use send-keys with bash syntax
-		// Append '; exit' so window closes when command exits (matching Unix behavior)
+		// psmux: always create a dedicated session (not a window in an existing
+		// session) so that when Claude exits and `; exit` closes the shell,
+		// the session has no windows left and the attach ends — allowing the
+		// caller's cleanup() to run and kill the proxy.
+		// Session-reuse is only used in the detached path (launchInTmux).
 		spawnSync('tmux', ['new-session', '-d', '-s', sessionName], {
 			stdio: 'ignore',
 			env: env ?? process.env,
@@ -68,6 +71,7 @@ export async function launchDetachedSession(options: {
 	claudeArgs: string[];
 	debug: boolean;
 	noFlicker?: boolean;
+	reuseProxy?: boolean;
 	switchProvider?: string;
 	switchModel?: string;
 }): Promise<{ paneId?: string }> {
@@ -78,6 +82,7 @@ export async function launchDetachedSession(options: {
 		claudeArgs,
 		debug,
 		noFlicker,
+		reuseProxy,
 		switchProvider,
 		switchModel,
 	} = options;
@@ -92,7 +97,20 @@ export async function launchDetachedSession(options: {
 	let paneId: string | undefined;
 	let proxyPid: number | undefined;
 
-	if (debug) {
+	if (reuseProxy) {
+		// Proxy already running for this CWD — skip spawning, just launch Claude Code
+		console.log(ok('Using existing proxy'));
+		paneId = launchInTmux(
+			sessionId,
+			baseUrl,
+			ports.controlPort,
+			claudeArgsStr,
+			debug,
+			cwd,
+			undefined, // no proxyPid to kill — proxy outlives this session
+			noFlicker,
+		);
+	} else if (debug) {
 		const proxyPaneId = spawnVisibleProxy(
 			terminal,
 			PROXY_SCRIPT,
@@ -215,17 +233,19 @@ export async function launchDetachedSession(options: {
 		);
 	}
 
-	registerProxySession({
-		sessionId,
-		port: ports.port,
-		controlPort: ports.controlPort,
-		pid: proxyPid ?? 0,
-		startedAt: Date.now(),
-		cwd,
-		paneId,
-		terminalBackend: terminal,
-		detached: true,
-	});
+	if (!reuseProxy) {
+		registerProxySession({
+			sessionId,
+			port: ports.port,
+			controlPort: ports.controlPort,
+			pid: proxyPid ?? 0,
+			startedAt: Date.now(),
+			cwd,
+			paneId,
+			terminalBackend: terminal,
+			detached: true,
+		});
+	}
 
 	const argsLabel = claudeArgs.length > 0 ? ` (${claudeArgs.join(' ')})` : '';
 	console.log(ok(`Session: ${c.cyan}${sessionId}${c.reset}`));
@@ -245,6 +265,7 @@ export async function launchInlineSession(options: {
 	claudeArgs: string[];
 	debug: boolean;
 	noFlicker?: boolean;
+	reuseProxy?: boolean;
 	isRemoteControl: boolean;
 	terminalMode: string;
 	switchProvider?: string;
@@ -256,6 +277,7 @@ export async function launchInlineSession(options: {
 		claudeArgs,
 		debug,
 		noFlicker,
+		reuseProxy,
 		isRemoteControl,
 		terminalMode,
 		switchProvider,
@@ -271,46 +293,55 @@ export async function launchInlineSession(options: {
 		);
 	}
 
-	const proxyResult = await spawnSessionProxy({
-		...ports,
-		debug,
-		sessionId,
-		provider: switchProvider,
-		model: switchModel,
-	});
+	let proxyChild: import('node:child_process').ChildProcess | undefined;
 
-	if (!proxyResult) {
-		console.log(fail('Proxy server script not found.'));
-		console.log(dimText("Run 'oh-my-claude install' first."));
-		process.exit(1);
+	if (reuseProxy) {
+		console.log(ok('Using existing proxy'));
+	} else {
+		const proxyResult = await spawnSessionProxy({
+			...ports,
+			debug,
+			sessionId,
+			provider: switchProvider,
+			model: switchModel,
+		});
+
+		if (!proxyResult) {
+			console.log(fail('Proxy server script not found.'));
+			console.log(dimText("Run 'oh-my-claude install' first."));
+			process.exit(1);
+		}
+
+		if (!proxyResult.healthy) {
+			console.log(fail('Per-session proxy failed to start within 3s.'));
+			proxyChild?.kill();
+			process.exit(1);
+		}
+
+		proxyChild = proxyResult.child;
+		console.log(ok(`Proxy started (PID: ${proxyChild.pid})`));
+		if (debug && proxyResult.logFile) {
+			console.log(dimText(`  Log: ${proxyResult.logFile}`));
+		}
+
+		registerProxySession({
+			sessionId,
+			port: ports.port,
+			controlPort: ports.controlPort,
+			pid: proxyChild.pid!,
+			startedAt: Date.now(),
+			cwd: process.cwd(),
+		});
 	}
-
-	if (!proxyResult.healthy) {
-		console.log(fail('Per-session proxy failed to start within 3s.'));
-		proxyResult.child.kill();
-		process.exit(1);
-	}
-
-	console.log(ok(`Proxy started (PID: ${proxyResult.child.pid})`));
-	if (debug && proxyResult.logFile) {
-		console.log(dimText(`  Log: ${proxyResult.logFile}`));
-	}
-
-	registerProxySession({
-		sessionId,
-		port: ports.port,
-		controlPort: ports.controlPort,
-		pid: proxyResult.child.pid!,
-		startedAt: Date.now(),
-		cwd: process.cwd(),
-	});
 
 	let cleanedUp = false;
 	const cleanup = () => {
 		if (cleanedUp) return;
 		cleanedUp = true;
-		unregisterProxySession(sessionId);
-		proxyResult.child.kill();
+		if (!reuseProxy) {
+			unregisterProxySession(sessionId);
+			proxyChild?.kill();
+		}
 	};
 
 	process.on('SIGINT', () => {
@@ -385,8 +416,8 @@ export async function launchInlineSession(options: {
 
 		let result: ReturnType<typeof spawnSync>;
 
-		if (debug) {
-			proxyResult.child.kill();
+		if (debug && !reuseProxy) {
+			proxyChild?.kill();
 
 			const proxyPaneId = spawnVisibleProxy(
 				'tmux',
@@ -442,8 +473,8 @@ export async function launchInlineSession(options: {
 	console.log(ok(`Launching Claude Code${argsLabel}...\n`));
 
 	let nativeProxySpawned = false;
-	if (debug && process.platform === 'darwin') {
-		proxyResult.child.kill();
+	if (debug && !reuseProxy && process.platform === 'darwin') {
+		proxyChild?.kill();
 		nativeProxySpawned = spawnProxyInNativeTerminal(
 			PROXY_SCRIPT,
 			ports.port,
@@ -473,15 +504,15 @@ export async function launchInlineSession(options: {
 				console.log(fail('Fallback proxy failed to start.'));
 				process.exit(1);
 			}
-			proxyResult.child = fallback.child;
+			proxyChild = fallback.child;
 			if (fallback.logFile) {
 				console.log(dimText(`  Log: ${fallback.logFile}`));
 			}
 		}
-	} else if (debug) {
+	} else if (debug && !reuseProxy) {
 		// Non-macOS: spawnProxyInNativeTerminal always returns false,
 		// so skip Terminal.app and go straight to hidden proxy fallback
-		proxyResult.child.kill();
+		proxyChild?.kill();
 		const fallback = await spawnSessionProxy({
 			...ports,
 			debug,
@@ -493,7 +524,7 @@ export async function launchInlineSession(options: {
 			console.log(fail('Fallback proxy failed to start.'));
 			process.exit(1);
 		}
-		proxyResult.child = fallback.child;
+		proxyChild = fallback.child;
 		if (fallback.logFile) {
 			console.log(dimText(`  Log: ${fallback.logFile}`));
 		}

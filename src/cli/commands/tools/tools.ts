@@ -76,7 +76,7 @@ const CLI_TOOLS: CliTool[] = [
   {
     name: "tmux",
     value: "tmux",
-    description: "Terminal multiplexer for split-pane OMC workflows (psmux on Windows)",
+    description: "Terminal multiplexer (optional — enables split-pane workflows)",
     binary: "tmux",
     installCmd: process.platform === "win32" ? "winget install psmux" : "brew install tmux",
     fallbackCmd: "sudo apt install tmux",

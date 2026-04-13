@@ -4,11 +4,11 @@ All notable changes to oh-my-claude are documented here. Detailed changelogs are
 
 ## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-13
 
-### Latest: v2.2.12
+### Latest: v2.2.13
 
-- **`/resume` Fix** — Sessions created via omc proxy now have proper `messageCount` in `sessions-index.json`, fixing Claude Code's `/resume` discovery
-- **Shared AI Ops Engine** — Extracted duplicated prompt/merge/parse logic into `src/memory/ai-ops-shared.ts`
-- **Dead Code Cleanup** — Removed ~840 lines of orphaned segments, dead hooks, unused functions
+- **Session Identity Fix** — Deterministic session ID from CWD (SHA-256 hash) so `/continue` finds prior conversation history; fixed cross-project session leak in resume
+- **Proxy Reuse** — Reuses healthy proxy already running for the same project instead of spawning a new one
+- **tmux Improvements** — Session reuse on Windows, correct attach outside tmux, preferred port allocation for stable URLs
 
 ### Highlights
 

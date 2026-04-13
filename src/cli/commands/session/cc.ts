@@ -19,9 +19,10 @@
 
 import type { Command } from 'commander';
 import { execSync, spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { createFormatters } from '../../utils/colors';
 import { findFreePorts, ensureDashboard } from '../../utils/proxy-lifecycle';
+import { checkHealth } from '../../utils/health';
 import {
 	readProxyRegistry,
 	unregisterProxySession,
@@ -34,13 +35,34 @@ import {
 	loadApiEnvFile,
 	formatAge,
 } from './cc-routing';
-import { readInstances } from '../../../proxy/state/instance-registry';
 import { killTerminalPane } from './cc-terminals';
 import { launchDetachedSession, launchInlineSession } from './cc-session';
 import {
 	resolveAlias,
 	buildProviderMap,
 } from '../../../shared/providers/aliases';
+
+/**
+ * Derive deterministic session identity from CWD.
+ * Same project directory → same sessionId + preferred ports → stable ANTHROPIC_BASE_URL.
+ * This ensures Claude Code's /continue works across proxy relaunches.
+ */
+function deriveSessionIdentity(cwd: string): {
+	sessionId: string;
+	preferredPort: number;
+	preferredControlPort: number;
+} {
+	const hash = createHash('sha256').update(cwd).digest();
+	// 8-char hex session ID from first 4 bytes
+	const sessionId = hash.subarray(0, 4).toString('hex');
+	// Preferred ports in 20000-49999 range (30000 range from bytes 4-5)
+	const port = 20000 + (hash.readUInt16BE(4) % 30000);
+	return {
+		sessionId,
+		preferredPort: port,
+		preferredControlPort: port + 1,
+	};
+}
 
 export function listSessionsAction() {
 	const { c, ok, dimText } = createFormatters();
@@ -95,6 +117,7 @@ export function registerCcCommand(program: Command) {
 			`
 OMC Shortcuts (single dash):
   -r         Resume last conversation (→ --resume)
+  -n         Force new session (fresh session ID + random ports)
   -skip      Dangerously skip permissions (→ --dangerously-skip-permissions)
   -wt        Create git worktree for isolated session (→ --worktree)
   -rc        Launch Remote Control mode (mobile access via claude.ai/code)
@@ -109,7 +132,9 @@ Direct Provider Connection:
   oh-my-claude cc -p km            Connect to Kimi
 
 Examples:
+  oh-my-claude cc                  Launch with stable session (same URL per project)
   oh-my-claude cc -r               Resume last session with proxy
+  oh-my-claude cc -n               Force fresh session (new ID + random ports)
   oh-my-claude cc -skip            Skip permissions with proxy
   oh-my-claude cc -nf              No flicker mode
   oh-my-claude cc -wt              Isolated git worktree session
@@ -210,6 +235,7 @@ Examples:
 			worktreeName,
 			debugMode,
 			noFlicker,
+			newSession,
 			provider: rescuedProvider,
 			terminal: rescuedTerminal,
 		} = expandShortcuts(rawClaudeArgs);
@@ -286,14 +312,6 @@ Examples:
 
 		// --- Launch routing: omc cc always spawns a per-session proxy ---
 		// terminalBackend only controls WINDOW BEHAVIOR (new window vs inline), not proxy availability.
-		// --- Per-session proxy path ---
-		let ports: { port: number; controlPort: number };
-		try {
-			ports = await findFreePorts();
-		} catch {
-			console.log(fail('Failed to allocate ports for session proxy.'));
-			process.exit(1);
-		}
 
 		// Auto-start dashboard server on port 18920 if not running
 		const dashboardUrl = await ensureDashboard();
@@ -303,21 +321,75 @@ Examples:
 
 		const debug = !!options.debug || debugMode;
 		const terminalMode: string = options.terminal ?? 'auto';
-		let sessionId = randomBytes(4).toString('hex');
 
-		// Reuse last sessionId for --continue/--resume so Claude Code finds prior conversation
-		// (Claude keys conversations by ANTHROPIC_BASE_URL which includes the sessionId)
-		const wantsContinue = claudeArgs.includes('--continue') || claudeArgs.includes('--resume');
-		if (wantsContinue) {
-			const instances = readInstances();
-			if (instances.length > 0) {
-				// Most recent instance (by startedAt) is the last session
-				const sorted = [...instances].sort(
-					(a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+		// --- Session identity: deterministic from CWD for stable ANTHROPIC_BASE_URL ---
+		// Same project → same sessionId + preferred ports → /continue works across relaunches
+		const currentCwd = process.cwd();
+		cleanupStaleEntries();
+		const existingEntry = readProxyRegistry().find(
+			(e) => e.cwd === currentCwd,
+		);
+
+		let sessionId: string;
+		let ports: { port: number; controlPort: number };
+		let reuseProxy = false;
+
+		if (newSession) {
+			// -n / --new: force fresh random identity
+			sessionId = randomBytes(4).toString('hex');
+			try {
+				ports = await findFreePorts();
+			} catch {
+				console.log(fail('Failed to allocate ports.'));
+				process.exit(1);
+			}
+		} else if (existingEntry) {
+			// Running proxy for this CWD — check if it's actually healthy
+			let healthy = false;
+			try {
+				const h = await checkHealth(String(existingEntry.controlPort));
+				if (h?.status === 'ok') healthy = true;
+			} catch {}
+
+			if (healthy) {
+				sessionId = existingEntry.sessionId;
+				ports = {
+					port: existingEntry.port,
+					controlPort: existingEntry.controlPort,
+				};
+				reuseProxy = true;
+				console.log(
+					ok(
+						`Reusing proxy ${c.cyan}${sessionId}${c.reset} (port ${ports.port})`,
+					),
 				);
-				const lastSessionId = sorted[0]!.sessionId;
-				console.log(ok(`Reusing session ${c.cyan}${lastSessionId}${c.reset} for --continue`));
-				sessionId = lastSessionId;
+			} else {
+				// Stale entry — use deterministic identity
+				unregisterProxySession(existingEntry.sessionId);
+				const identity = deriveSessionIdentity(currentCwd);
+				sessionId = identity.sessionId;
+				try {
+					ports = await findFreePorts(
+						identity.preferredPort,
+						identity.preferredControlPort,
+					);
+				} catch {
+					console.log(fail('Failed to allocate ports.'));
+					process.exit(1);
+				}
+			}
+		} else {
+			// No running session — use deterministic identity
+			const identity = deriveSessionIdentity(currentCwd);
+			sessionId = identity.sessionId;
+			try {
+				ports = await findFreePorts(
+					identity.preferredPort,
+					identity.preferredControlPort,
+				);
+			} catch {
+				console.log(fail('Failed to allocate ports.'));
+				process.exit(1);
 			}
 		}
 
@@ -362,6 +434,7 @@ Examples:
 				claudeArgs,
 				debug,
 				noFlicker,
+				reuseProxy,
 				switchProvider,
 				switchModel,
 			});
@@ -380,8 +453,31 @@ Examples:
 						);
 					} catch {}
 				} else {
-					// Outside tmux: attach to the session
-					spawnSync('tmux', ['attach', '-t', `omc-cc-${sessionId}`], {
+					// Outside tmux: find which session owns our window,
+					// pre-select the CC window, then attach to the session.
+					// attach-session only accepts session targets, not session:window.
+					let attachSession = `omc-cc-${sessionId}`;
+					try {
+						const windowInfo = execSync(
+							`tmux list-windows -a -F '#{session_name}:#{window_name}'`,
+							{ encoding: 'utf-8', windowsHide: true },
+						).trim();
+						const match = windowInfo.split(/\r?\n/).find(
+							(l) => l.endsWith(`:omc-cc-${sessionId}`),
+						);
+						if (match) {
+							const ownerSession = match.split(':')[0]!;
+							// Select the CC window before attaching
+							try {
+								execSync(
+									`tmux select-window -t '${ownerSession}:omc-cc-${sessionId}'`,
+									{ encoding: 'utf-8', windowsHide: true },
+								);
+							} catch {}
+							attachSession = ownerSession;
+						}
+					} catch {}
+					spawnSync('tmux', ['attach', '-t', attachSession], {
 						stdio: 'inherit',
 					});
 				}
@@ -395,6 +491,7 @@ Examples:
 				claudeArgs,
 				debug,
 				noFlicker,
+				reuseProxy,
 				isRemoteControl,
 				terminalMode,
 				switchProvider,
