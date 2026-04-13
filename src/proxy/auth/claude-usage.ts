@@ -12,7 +12,7 @@
  * The utilization values are 0-100 (percentage).
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, platform } from 'node:os';
 import { execSync } from 'node:child_process';
@@ -29,14 +29,6 @@ export interface UsageResponse {
 	five_hour: { utilization: number; resets_at?: string };
 	seven_day: { utilization: number; resets_at?: string };
 }
-
-const CACHE_PATH = join(
-	homedir(),
-	'.claude',
-	'oh-my-claude',
-	'cache',
-	'api_usage.json',
-);
 
 /** Track rate-limit backoff to avoid wasting requests */
 let rateLimitedUntil = 0;
@@ -130,29 +122,3 @@ export async function fetchClaudeUsage(
 	}
 }
 
-/**
- * Fetch and write to cache file
- */
-export async function pollAndCacheClaudeUsage(
-	timeoutMs = 5000,
-): Promise<boolean> {
-	const data = await fetchClaudeUsage(timeoutMs);
-	if (!data?.five_hour) return false;
-
-	try {
-		const cacheDir = join(homedir(), '.claude', 'oh-my-claude', 'cache');
-		mkdirSync(cacheDir, { recursive: true });
-		writeFileSync(
-			CACHE_PATH,
-			JSON.stringify({
-				timestamp: Date.now(),
-				five_hour: data.five_hour,
-				seven_day: data.seven_day,
-			}),
-			'utf-8',
-		);
-		return true;
-	} catch {
-		return false;
-	}
-}

@@ -4,10 +4,10 @@ All notable changes to oh-my-claude are documented here. Detailed changelogs are
 
 ## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-13
 
-### Latest: v2.2.10
+### Latest: v2.2.11
 
-- **Dashboard Session Scanner** — Supports directory-based and index-only archive sessions (Claude Code 2.1+ format)
-- **psmux Bash Config** — `terminal-config psmux` fixes team agent spawn on Windows
+- **Shared AI Ops Engine** — Extracted duplicated prompt/merge/parse logic from MCP and proxy ai-ops into `src/memory/ai-ops-shared.ts`
+- **Dead Code Cleanup** — Removed ~840 lines of orphaned segments, dead hooks, unused functions
 
 ### Highlights
 

@@ -6,6 +6,13 @@ import {
 	listMemories,
 	getDefaultWriteScope,
 	callMemoryAI,
+	parseAIJsonResult,
+	mergeMemoryContent,
+	deduplicateTags,
+	resolveLatestDate,
+	buildCompactAnalyzePrompt,
+	buildClearAnalyzePrompt,
+	buildSummarizeAnalyzePrompt,
 } from '../../memory';
 import type { MemoryScope } from '../../memory';
 import { parseStringArray, getConfiguredWriteScope } from '../shared/utils';
@@ -71,32 +78,7 @@ export async function handleMemoryAiOp(
 					scope: (e as any)._scope,
 				}));
 
-				const analysisPrompt = `You are a memory organization assistant. Analyze these ${typeFilter === 'all' ? '' : typeFilter + ' '}memories and suggest groups that can be merged together.
-
-## Memories to analyze:
-${JSON.stringify(memorySummaries, null, 2)}
-
-## Task:
-1. Find memories that cover the same topic, are duplicates, or are closely related
-2. Group them for merging (each group should have 2+ memories)
-3. Suggest a title for each merged memory
-
-## Rules:
-- Only group memories that are truly related
-- Keep distinct topics separate
-- Prefer quality over quantity of groups
-
-## Output format (JSON only, no explanation):
-{
-  "groups": [
-    {
-      "ids": ["memory-id-1", "memory-id-2"],
-      "title": "Suggested merged title",
-      "reason": "Brief reason for grouping"
-    }
-  ],
-  "ungrouped": ["memory-ids-that-should-stay-separate"]
-}`;
+				const analysisPrompt = buildCompactAnalyzePrompt(memorySummaries, typeFilter);
 
 				let analysisResult: any = null;
 				let usedProvider: string | null = null;
@@ -105,11 +87,8 @@ ${JSON.stringify(memorySummaries, null, 2)}
 					const aiResponse = await callMemoryAI(analysisPrompt, {
 						temperature: 0.1,
 					});
-					const jsonMatch = aiResponse.content.match(/\{[\s\S]*\}/);
-					if (jsonMatch) {
-						analysisResult = JSON.parse(jsonMatch[0]);
-						usedProvider = aiResponse.provider;
-					}
+					analysisResult = parseAIJsonResult(aiResponse.content);
+					usedProvider = aiResponse.provider;
 				} catch (error) {
 					// AI call failed
 				}
@@ -190,37 +169,9 @@ ${JSON.stringify(memorySummaries, null, 2)}
 							continue;
 						}
 
-						// Merge content — strip duplicate title headings from each memory
-						const mergedContent = memories
-							.map((m) => {
-								let content = m.content;
-								// If the content starts with a ## heading that matches (or is similar to) the memory title,
-								// strip it to avoid duplication since we add our own section heading
-								const headingMatch =
-									content.match(/^##\s+(.+)\n/);
-								if (headingMatch) {
-									// Strip the first heading — we'll add a clean one
-									content = content.replace(
-										/^##\s+.+\n+/,
-										'',
-									);
-								}
-								return `### ${m.title}\n\n${content.trim()}`;
-							})
-							.join('\n\n---\n\n');
-
-						// Merge tags (unique)
-						const mergedTags = [
-							...new Set(memories.flatMap((m) => m.tags)),
-						];
-
-						// Use the latest createdAt from the group (preserve original date context)
-						const latestCreatedAt =
-							memories
-								.map((m) => m.createdAt)
-								.filter(Boolean)
-								.sort()
-								.pop() || new Date().toISOString();
+						const mergedContent = mergeMemoryContent(memories);
+						const mergedTags = deduplicateTags(memories.map((m) => m.tags));
+						const latestCreatedAt = resolveLatestDate(memories.map((m) => m.createdAt));
 
 						// Create new merged memory
 						const createResult = createMemory(
@@ -366,42 +317,7 @@ ${JSON.stringify(memorySummaries, null, 2)}
 					scope: (e as any)._scope,
 				}));
 
-				const analysisPrompt = `You are a memory cleanup assistant. Analyze these memories and identify ones that should be deleted because they are outdated, redundant, or no longer useful.
-
-## Memories to analyze:
-${JSON.stringify(memorySummaries, null, 2)}
-
-## Task:
-1. Identify memories that are outdated (old session logs, stale context)
-2. Identify memories that are redundant (duplicates, superseded by newer info)
-3. Identify memories that are trivial or no longer useful
-4. Provide a clear reason for each deletion candidate
-
-## Rules:
-- Be conservative — only suggest deletion for clearly unneeded memories
-- Session memories older than 14 days are good candidates
-- Keep architectural decisions, conventions, and important patterns
-- Keep memories that document bugs, fixes, or lessons learned
-- If unsure, do NOT suggest deletion
-
-## Output format (JSON only, no explanation):
-{
-  "candidates": [
-    {
-      "id": "memory-id",
-      "title": "Memory Title",
-      "reason": "Why this should be deleted",
-      "confidence": "high" | "medium"
-    }
-  ],
-  "keep": [
-    {
-      "id": "memory-id",
-      "title": "Memory Title",
-      "reason": "Why this should be kept"
-    }
-  ]
-}`;
+				const analysisPrompt = buildClearAnalyzePrompt(memorySummaries);
 
 				let analysisResult: any = null;
 				let usedProvider: string | null = null;
@@ -410,11 +326,8 @@ ${JSON.stringify(memorySummaries, null, 2)}
 					const aiResponse = await callMemoryAI(analysisPrompt, {
 						temperature: 0.1,
 					});
-					const jsonMatch = aiResponse.content.match(/\{[\s\S]*\}/);
-					if (jsonMatch) {
-						analysisResult = JSON.parse(jsonMatch[0]);
-						usedProvider = aiResponse.provider;
-					}
+					analysisResult = parseAIJsonResult(aiResponse.content);
+					usedProvider = aiResponse.provider;
 				} catch {
 					// AI call failed
 				}
@@ -680,89 +593,17 @@ ${JSON.stringify(memorySummaries, null, 2)}
 				}));
 
 				const dateRangeLabel = `${startDate.slice(0, 10)} to ${endDate.slice(0, 10)}`;
-				// Collect all existing tags from original memories for keyword aggregation
 				const allOriginalTags = new Set<string>();
 				for (const m of memoryDetails) {
 					if (m.tags) for (const t of m.tags) allOriginalTags.add(t);
 				}
 
-				// Choose prompt based on narrative mode
-				const summarizePrompt = narrative
-					? `You are creating a daily session narrative. Merge these session summaries from ${dateRangeLabel} into ONE chronological story.
-
-## Sessions to consolidate:
-${JSON.stringify(memoryDetails, null, 2)}
-
-## Task:
-Create a chronological narrative that tells the story of what happened during this day.
-
-## Output format:
-### Session Flow
-Describe what happened first, then what happened next, in chronological order based on session timestamps.
-
-### Key Accomplishments
-- Bullet list of concrete achievements
-
-### Decisions Made
-- Bullet list of architectural or design decisions with rationale
-
-### Patterns & Gotchas Discovered
-- Bullet list of reusable knowledge
-
-## Rules:
-- Maintain chronological flow based on session timestamps
-- Deduplicate repeated content
-- Preserve specific technical details (file paths, commands, APIs)
-- Remove redundant "session started" or "session ended" phrasing
-- Keep it concise but actionable (400-800 words max)
-
-## Tags (CRITICAL for retrieval):
-Include all important keywords from the sessions: ${[...allOriginalTags].join(', ') || '(none)'}
-
-## Output format (JSON only):
-{
-  "title": "Daily Narrative: ${dateRangeLabel.split(' to ')[0]}",
-  "summary": "## Daily Narrative: ...\\n\\n### Session Flow\\n...",
-  "tags": ["keyword1", "keyword2", ...],
-  "memoriesIncluded": <count>
-}`
-					: `You are a memory summarization assistant. Create a consolidated timeline summary of these memories.
-
-## Date Range: ${dateRangeLabel}
-
-## Memories to summarize:
-${JSON.stringify(memoryDetails, null, 2)}
-
-## Task:
-1. Create a chronological timeline of key events, decisions, and activities
-2. Group related items together
-3. Highlight important decisions and outcomes
-4. Keep the summary concise but comprehensive
-
-## Rules:
-- Use markdown format with date-based sections
-- Preserve important technical details and decisions
-- Merge related session entries into coherent narratives
-- The summary should stand alone — someone reading it should understand the full context
-
-## Tags (CRITICAL for retrieval):
-The tags array is the PRIMARY way this summary will be found later. You MUST include:
-1. ALL tags from the original memories: ${[...allOriginalTags].join(', ') || '(none)'}
-2. Key technical terms mentioned in the content (library names, tools, APIs, patterns)
-3. Feature/component names discussed
-4. Action types (bug-fix, refactor, architecture, config, etc.)
-5. Project names and identifiers
-
-Do NOT use generic tags like "summary" or "timeline" — those are useless for retrieval.
-Aim for 8-20 specific, searchable tags.
-
-## Output format (JSON only):
-{
-  "title": "Summary: <concise topic description>",
-  "summary": "# Timeline Summary\\n\\n## <Date>\\n\\n- ...",
-  "tags": ["keyword1", "keyword2", ...],
-  "memoriesIncluded": <count>
-}`;
+				const summarizePrompt = buildSummarizeAnalyzePrompt(
+					memoryDetails,
+					dateRangeLabel,
+					allOriginalTags,
+					narrative,
+				);
 
 				let summaryResult: any = null;
 				let usedProvider: string | null = null;
@@ -771,11 +612,8 @@ Aim for 8-20 specific, searchable tags.
 					const aiResponse = await callMemoryAI(summarizePrompt, {
 						temperature: 0.3,
 					});
-					const jsonMatch = aiResponse.content.match(/\{[\s\S]*\}/);
-					if (jsonMatch) {
-						summaryResult = JSON.parse(jsonMatch[0]);
-						usedProvider = aiResponse.provider;
-					}
+					summaryResult = parseAIJsonResult(aiResponse.content);
+					usedProvider = aiResponse.provider;
 				} catch {
 					// AI call failed
 				}

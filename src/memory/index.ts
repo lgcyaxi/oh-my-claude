@@ -99,6 +99,20 @@ export type { DedupResult, NearDuplicate, DedupConfig } from './dedup';
 export { callMemoryAI } from './ai-client';
 export type { MemoryAIResponse } from './ai-client';
 
+// AI Ops Shared (prompt builders, JSON parsing, merge utilities)
+export {
+	parseAIJsonResult,
+	mergeMemoryContent,
+	deduplicateTags,
+	resolveLatestDate,
+	buildCompactAnalyzePrompt,
+	buildClearAnalyzePrompt,
+	buildSummarizeAnalyzePrompt,
+	buildDailyNarrativePrompt,
+	BOILERPLATE_TAGS,
+} from './ai-ops-shared';
+export type { MemorySummaryEntry } from './ai-ops-shared';
+
 // Timeline
 export {
 	generateTimeline,

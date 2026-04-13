@@ -6,6 +6,15 @@ import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { jsonResponse } from '../helpers';
 import { toErrorMessage } from '../../../shared/utils';
+import {
+	parseAIJsonResult,
+	deduplicateTags,
+	buildCompactAnalyzePrompt,
+	buildClearAnalyzePrompt,
+	buildSummarizeAnalyzePrompt,
+	buildDailyNarrativePrompt,
+	BOILERPLATE_TAGS,
+} from '../../../memory/ai-ops-shared';
 import type { MemoryEntryWithPath } from './types';
 import { parseFrontmatter } from './io';
 import { collectMemoryEntries } from './query';
@@ -127,35 +136,7 @@ export async function handleDailyOperation(
 	for (const date of datesToProcess) {
 		const entries = dateGroups.get(date)!;
 
-		// Build prompt with FULL content for detail preservation
-		const prompt = `You are a technical session historian. Generate a comprehensive daily narrative for ${date} from these ${entries.length} session memories. Preserve ALL important details including:
-- Decisions made and their rationale
-- Bugs found and how they were fixed
-- Architecture/design choices
-- Key code changes and files modified
-- Patterns discovered or gotchas encountered
-
-Write as a structured markdown narrative:
-
-## Daily Narrative: ${date}
-
-### Session Flow
-[Chronological story of what happened across all sessions]
-
-### Key Decisions
-[Important decisions with rationale]
-
-### Technical Details
-[Specific bugs, fixes, patterns, file changes worth remembering]
-
-### Accomplishments
-[What was achieved]
-
-Here are the full session contents:
-
-${entries
-	.map((e) => `=== Session: ${e.title} (${e.created}) ===\n${e.content}`)
-	.join('\n\n')}`;
+		const prompt = buildDailyNarrativePrompt(date, entries);
 
 		try {
 			const result = await callAI(controlPort, prompt, body, 4000);
@@ -170,26 +151,14 @@ ${entries
 			const narrativePath = join(targetDir, `${narrativeId}.md`);
 
 			// Collect meaningful tags from all source entries (tags + concepts)
-			// Filter out generic auto-capture boilerplate tags
-			const boilerplateTags = new Set(['auto-capture', 'session-end', 'context-threshold']);
-			const allTags = new Set<string>(['daily-narrative']);
+			const entryTagArrays: string[][] = [['daily-narrative']];
 			for (const e of entries) {
 				const raw = await readFile(e.filePath, 'utf-8').catch(() => '');
 				const { meta } = parseFrontmatter(raw);
-				if (Array.isArray(meta.tags)) {
-					for (const t of meta.tags) {
-						const tag = String(t).trim();
-						if (tag && !boilerplateTags.has(tag)) allTags.add(tag);
-					}
-				}
-				// Also include concepts (the meaningful topic keywords)
-				if (Array.isArray(meta.concepts)) {
-					for (const c of meta.concepts) {
-						const concept = String(c).trim();
-						if (concept) allTags.add(concept);
-					}
-				}
+				if (Array.isArray(meta.tags)) entryTagArrays.push(meta.tags.map(String));
+				if (Array.isArray(meta.concepts)) entryTagArrays.push(meta.concepts.map(String));
 			}
+			const allTags = new Set(deduplicateTags(entryTagArrays, BOILERPLATE_TAGS));
 
 			const narrativeContent = `---
 title: "Daily Narrative: ${date}"
@@ -331,21 +300,14 @@ export async function handleCompactOperation(
 					.join('\n\n---\n\n');
 
 				// Collect tags from all sources (filter boilerplate)
-				const boilerplate = new Set(['auto-capture', 'session-end', 'context-threshold']);
-				const mergedTags = new Set<string>();
+				const tagArrays: string[][] = [];
 				for (const e of entries) {
 					const raw = await readFile(e.filePath, 'utf-8').catch(() => '');
 					const { meta } = parseFrontmatter(raw);
-					if (Array.isArray(meta.tags)) {
-						for (const t of meta.tags) {
-							const tag = String(t).trim();
-							if (tag && !boilerplate.has(tag)) mergedTags.add(tag);
-						}
-					}
-					if (Array.isArray(meta.concepts)) {
-						for (const c of meta.concepts) mergedTags.add(String(c).trim());
-					}
+					if (Array.isArray(meta.tags)) tagArrays.push(meta.tags.map(String));
+					if (Array.isArray(meta.concepts)) tagArrays.push(meta.concepts.map(String));
 				}
+				const mergedTags = new Set(deduplicateTags(tagArrays, BOILERPLATE_TAGS));
 
 				// Determine output type: if all entries are sessions → session, otherwise note
 				const allSessions = entries.every((e) => e.type === 'session');
@@ -413,32 +375,19 @@ ${mergedContent}`;
 		}, 200, corsHeaders);
 	}
 
-	const typeLabel = typeFilter === 'all' ? '' : `${typeFilter} `;
-	const prompt = `You are a memory organization assistant. Analyze these ${typeLabel}memories and suggest groups that can be merged.
-
-## Memories:
-${filteredEntries.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created}): ${e.content.slice(0, 200)}`).join('\n')}
-
-## Rules:
-- Only group memories that are truly related or overlapping
-- Each group needs 2+ memories
-- Keep distinct topics separate
-
-## Output format (JSON only, no markdown):
-{
-  "groups": [
-    { "ids": ["id1", "id2"], "title": "Merged title", "reason": "Why these belong together" }
-  ]
-}`;
+	const summaries = filteredEntries.map((e) => ({
+		id: e.id,
+		title: e.title,
+		type: e.type,
+		created: e.created,
+		preview: e.content.slice(0, 200),
+	}));
+	const prompt = buildCompactAnalyzePrompt(summaries, typeFilter);
 
 	try {
 		const result = await callAI(controlPort, prompt, body);
-		// Try to parse JSON from AI response
-		const jsonMatch = result.content.match(/\{[\s\S]*\}/);
-		let groups: any[] = [];
-		if (jsonMatch) {
-			try { groups = JSON.parse(jsonMatch[0]).groups || []; } catch { /* keep raw */ }
-		}
+		const parsed = parseAIJsonResult<{ groups?: any[] }>(result.content);
+		const groups = parsed?.groups ?? [];
 
 		return jsonResponse({
 			ok: true, action: 'compact', mode: 'analyze',
@@ -500,31 +449,19 @@ export async function handleClearOperation(
 	}
 
 	// Analyze mode: AI identifies candidates
-	const prompt = `You are a memory cleanup assistant. Identify memories that should be deleted.
-
-## Memories:
-${allEntries.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created}): ${e.content.slice(0, 200)}`).join('\n')}
-
-## Rules:
-- Be conservative — only suggest clearly unneeded memories
-- Session memories older than 14 days without unique insights are good candidates
-- Keep architectural decisions, conventions, important patterns
-- Keep bug fixes and lessons learned
-
-## Output format (JSON only, no markdown):
-{
-  "candidates": [
-    { "id": "memory-id", "title": "Title", "reason": "Why delete", "confidence": "high" }
-  ]
-}`;
+	const clearSummaries = allEntries.map((e) => ({
+		id: e.id,
+		title: e.title,
+		type: e.type,
+		created: e.created,
+		preview: e.content.slice(0, 200),
+	}));
+	const prompt = buildClearAnalyzePrompt(clearSummaries);
 
 	try {
 		const result = await callAI(controlPort, prompt, body);
-		const jsonMatch = result.content.match(/\{[\s\S]*\}/);
-		let candidates: any[] = [];
-		if (jsonMatch) {
-			try { candidates = JSON.parse(jsonMatch[0]).candidates || []; } catch { /* keep raw */ }
-		}
+		const parsed = parseAIJsonResult<{ candidates?: any[] }>(result.content);
+		const candidates = parsed?.candidates ?? [];
 
 		return jsonResponse({
 			ok: true, action: 'clear', mode: 'analyze',
@@ -633,31 +570,25 @@ ${summary}`;
 		}, 200, corsHeaders);
 	}
 
-	const prompt = `You are a memory summarization assistant. Create a consolidated timeline summary.
-
-## Date Range: Last ${days} days (since ${cutoff.slice(0, 10)})
-
-## ${typeLabel ? typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1) + 'memories' : 'Memories'}:
-${recent.map((e) => `- [${e.id}] "${e.title}" (${e.type}, ${e.created}): ${e.content.slice(0, 500)}`).join('\n\n')}
-
-## Task:
-Create a chronological timeline of key events, decisions, and activities. Preserve important technical details.
-
-## Output format (JSON only, no markdown):
-{
-  "title": "Summary: <concise topic>",
-  "summary": "# Timeline Summary\\n\\n## <Date>\\n\\n- ...",
-  "tags": ["keyword1", "keyword2"],
-  "originalIds": [${recent.map((e) => `"${e.id}"`).join(', ')}]
-}`;
+	const summaryDetails = recent.map((e) => ({
+		id: e.id,
+		title: e.title,
+		type: e.type,
+		created: e.created,
+		content: e.content.slice(0, 500),
+	}));
+	const allTags = new Set<string>();
+	for (const e of recent) {
+		const raw = await readFile(e.filePath, 'utf-8').catch(() => '');
+		const { meta } = parseFrontmatter(raw);
+		if (Array.isArray(meta.tags)) for (const t of meta.tags) allTags.add(String(t).trim());
+	}
+	const dateRangeLabel = `${cutoff.slice(0, 10)} to ${new Date().toISOString().slice(0, 10)}`;
+	const prompt = buildSummarizeAnalyzePrompt(summaryDetails, dateRangeLabel, allTags);
 
 	try {
 		const result = await callAI(controlPort, prompt, body, 4000);
-		const jsonMatch = result.content.match(/\{[\s\S]*\}/);
-		let parsed: any = {};
-		if (jsonMatch) {
-			try { parsed = JSON.parse(jsonMatch[0]); } catch { /* keep raw */ }
-		}
+		const parsed = parseAIJsonResult<any>(result.content) ?? {};
 
 		return jsonResponse({
 			ok: true, action: 'summarize', mode: 'analyze',

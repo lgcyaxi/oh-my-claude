@@ -138,22 +138,6 @@ export function resolveProviderName(alias: string): string {
 	return target ? target.provider : alias;
 }
 
-/**
- * Get full provider info by config provider name.
- * Returns undefined for unknown providers.
- */
-export function getProviderInfo(
-	providerName: string,
-): ProviderInfo | undefined {
-	return PROVIDER_INFO_ENTRIES[providerName];
-}
-
-/**
- * Get all provider info entries (for building CLI PROVIDER_MAP-compatible structures).
- */
-export function getAllProviderInfo(): Record<string, ProviderInfo> {
-	return { ...PROVIDER_INFO_ENTRIES };
-}
 
 /**
  * Build a PROVIDER_MAP-compatible record keyed by alias.
