@@ -102,18 +102,45 @@ When adding new commands:
 
 ## Release Process
 
+### Dev-channel beta release (dev branch only)
+
+The `dev` branch tracks a prebuilt `dist/` bundle (force-added past `.gitignore`)
+so that `bun add -g .../tarball/dev` works on machines where bun skips the
+`prepare` lifecycle or where a conflicting sibling global package (e.g.
+`oh-my-opencode`'s `zod@^4`) displaces our pinned `zod@^3`. Without a
+pre-shipped `dist/`, our TS source tries to runtime-resolve `zod` from bun's
+flat global `node_modules` and crashes at `zod/v3/types.js:1:1`. Version 2.2.14-beta.7 onwards ships the bundle to sidestep both issues.
+
 ```bash
-# 1. Update version in package.json and src/cli.ts
-# 2. Create changelog in changelog/vX.X.X.md
-# 3. Update CHANGELOG.md
-# 4. Commit to dev branch
-# 5. Squash merge to main
+# 1. Bump version in package.json (src/cli/cli.ts reads it dynamically)
+# 2. Rebuild dist/ with the new version baked in
+bun run build:all
+# 3. Force-add dist/ (bypasses .gitignore once; subsequent edits auto-stage)
+git add -f dist/
+# 4. Update changelogs (docs/changelog/v2.2.x.md + docs/CHANGELOG.md)
+# 5. Commit everything as the release in a single commit, then push
+git add docs/ CLAUDE.md package.json
+git commit -m "release: vX.X.X-beta.Y - description"
+git push origin dev
+```
+
+### Stable release (main branch + npm publish)
+
+`main` stays source-only; its `prepare` lifecycle rebuilds `dist/` at
+`npm publish` time via the `files` allowlist in `package.json`. When
+squash-merging `dev` → `main`, drop `dist/` from the squash to keep `main`
+clean:
+
+```bash
 git checkout main && git merge --squash dev
+# IMPORTANT: dist/ came across with the squash because dev tracks it; untrack
+# it on main so the stable branch stays source-only.
+git rm -r --cached dist/
 git commit -m "release: vX.X.X - description"
 git tag vX.X.X
 git push origin main --tags
 
-# 6. Publish to npm
+# Publish to npm (prepare script rebuilds dist/ from source during packaging)
 npm publish --access public
 ```
 

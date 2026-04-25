@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>oh-my-claude Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Apply saved theme before paint to prevent flash
+      const t = localStorage.getItem('omc-theme');
+      if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    </script>
+    <script type="module" crossorigin src="/web/assets/index-DAcVtKKU.js"></script>
+    <link rel="stylesheet" crossorigin href="/web/assets/index-CUgAtzaf.css">
+  </head>
+  <body class="bg-bg-primary text-text-primary font-sans antialiased">
+    <div id="root"></div>
+  </body>
+</html>
