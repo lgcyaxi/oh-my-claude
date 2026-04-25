@@ -467,9 +467,12 @@ export function registerProxyCommand(program: Command) {
         return;
       }
 
-      // Start the dashboard-only server (no proxy port)
+      // Start the dashboard-only server (no proxy port).
+      // origin=manual makes the dashboard immune to auto-teardown when the
+      // last `omc cc` session exits — the user asked for it explicitly, so
+      // it must stay up until they run `omc proxy dashboard --stop`.
       try {
-        const result = await startDashboard({ port: controlPort });
+        const result = await startDashboard({ port: controlPort, origin: "manual" });
         console.log(ok(`Dashboard started (PID ${result.pid})`));
         console.log(`  ${c.cyan}http://localhost:${result.port}/web/${c.reset}`);
         console.log(dimText("\nStop with: oh-my-claude proxy dashboard --stop"));

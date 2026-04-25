@@ -17,8 +17,25 @@ export const CLAUDE_DIR = join(homedir(), ".claude");
 /** Proxy server script path */
 export const PROXY_SCRIPT = join(INSTALL_DIR, "dist", "proxy", "server.js");
 
-/** Proxy PID file path */
-export const PID_FILE = join(INSTALL_DIR, "proxy.pid");
+/** Dashboard script path (single global web dashboard on port 18920) */
+export const DASHBOARD_SCRIPT = join(INSTALL_DIR, "dist", "proxy", "dashboard.js");
+
+/** Dashboard daemon PID file */
+export const DASHBOARD_PID_FILE = join(INSTALL_DIR, "dashboard.pid");
+
+/**
+ * Dashboard origin marker. Written alongside `dashboard.pid` to record how
+ * the dashboard was launched:
+ *  - "auto"   — spawned implicitly by `omc cc` via `ensureDashboard()`.
+ *               Eligible for ref-counted auto-teardown when the last
+ *               `omc cc` session exits.
+ *  - "manual" — spawned explicitly by the user (e.g. `omc proxy dashboard`)
+ *               and must NEVER be torn down automatically.
+ *
+ * Origin is sticky: once "manual" is recorded, a later implicit
+ * `ensureDashboard({ origin: "auto" })` call must not downgrade it.
+ */
+export const DASHBOARD_ORIGIN_FILE = join(INSTALL_DIR, "dashboard.origin");
 
 /** Claude settings.json path */
 export const SETTINGS_PATH = join(CLAUDE_DIR, "settings.json");

@@ -35,23 +35,30 @@ interface HookResponse {
 	reason?: string;
 }
 
-// Comment patterns to check
+// Comment patterns to check.
+//
+// IMPORTANT: These patterns must NOT carry the `g` (global) flag. When a
+// RegExp with `g` is reused across calls to `.test()`, V8 caches a
+// `lastIndex` cursor that can cause the SECOND call to miss a match that
+// appears earlier in the new input, producing flaky hook decisions
+// (false negatives on odd-numbered calls). The `g` flag is only useful
+// with `.exec()` or `.matchAll()` — neither of which we use here.
 const COMMENT_PATTERNS = [
 	// Excessive inline comments
-	/\/\/\s*TODO:/gi,
-	/\/\/\s*FIXME:/gi,
-	/\/\/\s*NOTE:/gi,
-	/\/\/\s*HACK:/gi,
+	/\/\/\s*TODO:/i,
+	/\/\/\s*FIXME:/i,
+	/\/\/\s*NOTE:/i,
+	/\/\/\s*HACK:/i,
 	// AI slop comments
-	/\/\/\s*This (function|method|class|code)/gi,
-	/\/\/\s*Here we/gi,
-	/\/\/\s*The following/gi,
-	/\/\*\*?\s*@description/gi,
+	/\/\/\s*This (function|method|class|code)/i,
+	/\/\/\s*Here we/i,
+	/\/\/\s*The following/i,
+	/\/\*\*?\s*@description/i,
 	// Obvious comments
-	/\/\/\s*(increment|decrement|add|subtract|return|set|get)\s+(the\s+)?(\w+)/gi,
-	/\/\/\s*(loop|iterate)\s+(through|over)/gi,
-	/\/\/\s*declare\s+/gi,
-	/\/\/\s*initialize\s+/gi,
+	/\/\/\s*(increment|decrement|add|subtract|return|set|get)\s+(the\s+)?(\w+)/i,
+	/\/\/\s*(loop|iterate)\s+(through|over)/i,
+	/\/\/\s*declare\s+/i,
+	/\/\/\s*initialize\s+/i,
 ];
 
 // Check if content has excessive comments

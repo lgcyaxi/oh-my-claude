@@ -5,9 +5,39 @@
  * without overwriting user customizations.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+	existsSync,
+	readFileSync,
+	writeFileSync,
+	mkdirSync,
+	copyFileSync,
+} from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+
+/**
+ * Thrown by `loadSettings()` when `~/.claude/settings.json` exists but is not
+ * valid JSON. The original file is copied to `settings.json.corrupt-<unix-ts>.bak`
+ * before throwing so the user can repair it. Callers MUST NOT fall back to `{}`
+ * in this case — silently overwriting a user's settings.json is the precise
+ * failure mode this class exists to prevent.
+ */
+export class SettingsCorruptError extends Error {
+	readonly settingsPath: string;
+	readonly backupPath: string;
+	constructor(settingsPath: string, backupPath: string, cause?: unknown) {
+		super(
+			`Aborted: settings.json is invalid JSON; backup written to ${backupPath}. ` +
+				`Fix or delete the file and retry.`,
+		);
+		this.name = 'SettingsCorruptError';
+		this.settingsPath = settingsPath;
+		this.backupPath = backupPath;
+		if (cause !== undefined) {
+			(this as unknown as { cause?: unknown }).cause = cause;
+		}
+	}
+}
 
 interface ClaudeSettings {
 	hooks?: {
@@ -111,7 +141,16 @@ function cleanupLegacyMcpName(): void {
 }
 
 /**
- * Load existing Claude Code settings
+ * Load existing Claude Code settings.
+ *
+ * Returns `{}` when the file does not exist (fresh install).
+ *
+ * Throws `SettingsCorruptError` when the file exists but cannot be parsed as
+ * JSON. Before throwing we copy the original file to
+ * `settings.json.corrupt-<unix-ts>.bak` so the user can recover — previously
+ * this code silently returned `{}`, which caused `saveSettings()` to
+ * overwrite the corrupt file with an empty object, destroying the user's
+ * configuration.
  */
 export function loadSettings(): ClaudeSettings {
 	const settingsPath = getSettingsPath();
@@ -120,12 +159,25 @@ export function loadSettings(): ClaudeSettings {
 		return {};
 	}
 
+	const content = readFileSync(settingsPath, 'utf-8');
 	try {
-		const content = readFileSync(settingsPath, 'utf-8');
 		return JSON.parse(content);
 	} catch (error) {
-		console.error('Failed to parse settings.json:', error);
-		return {};
+		const backupPath = `${settingsPath}.corrupt-${Date.now()}.bak`;
+		try {
+			copyFileSync(settingsPath, backupPath);
+		} catch (copyErr) {
+			const message =
+				copyErr instanceof Error ? copyErr.message : String(copyErr);
+			console.error(
+				`Failed to back up corrupt settings.json to ${backupPath}: ${message}`,
+			);
+		}
+		console.error(
+			`settings.json at ${settingsPath} is not valid JSON. ` +
+				`Original copied to ${backupPath}. Aborting to avoid overwriting user config.`,
+		);
+		throw new SettingsCorruptError(settingsPath, backupPath, error);
 	}
 }
 

@@ -21,7 +21,11 @@ import type { Command } from 'commander';
 import { execSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { createFormatters } from '../../utils/colors';
-import { findFreePorts, ensureDashboard } from '../../utils/proxy-lifecycle';
+import {
+	findFreePorts,
+	ensureDashboard,
+	maybeStopDashboard,
+} from '../../utils/proxy-lifecycle';
 import { checkHealth } from '../../utils/health';
 import {
 	readProxyRegistry,
@@ -187,18 +191,36 @@ Examples:
 				return;
 			}
 
-			try {
-				if (process.platform === 'win32') {
-					execSync(`taskkill /F /PID ${target.pid}`, {
-						stdio: 'ignore',
-						windowsHide: true,
-					});
-				} else {
-					process.kill(target.pid, 'SIGTERM');
+			// Guard against a poisoned registry entry (pid=0 on POSIX is the
+			// current process, on Windows taskkill would reject it, but better
+			// to refuse loudly than to randomly terminate this CLI).
+			if (!Number.isInteger(target.pid) || target.pid <= 0) {
+				console.log(
+					fail(
+						`Refusing to kill invalid PID ${target.pid} for session ${target.sessionId}.`,
+					),
+				);
+				console.log(
+					dimText(
+						`Entry will be purged by 'oh-my-claude proxy status' / next cleanup sweep.`,
+					),
+				);
+			} else {
+				try {
+					if (process.platform === 'win32') {
+						execSync(`taskkill /F /PID ${target.pid}`, {
+							stdio: 'ignore',
+							windowsHide: true,
+						});
+					} else {
+						process.kill(target.pid, 'SIGTERM');
+					}
+					console.log(ok(`Killed proxy (PID: ${target.pid})`));
+				} catch {
+					console.log(
+						dimText(`Proxy (PID: ${target.pid}) already dead`),
+					);
 				}
-				console.log(ok(`Killed proxy (PID: ${target.pid})`));
-			} catch {
-				console.log(dimText(`Proxy (PID: ${target.pid}) already dead`));
 			}
 
 			if (target.paneId && target.terminalBackend) {
@@ -218,6 +240,16 @@ Examples:
 			console.log(
 				ok(`Session ${c.cyan}${target.sessionId}${c.reset} stopped.`),
 			);
+
+			// Ref-counted dashboard teardown: if this was the last live cc
+			// session and the dashboard was auto-started, shut it down.
+			try {
+				if (maybeStopDashboard('cc-stop')) {
+					console.log(ok('Dashboard torn down (no active sessions).'));
+				}
+			} catch {
+				// Defensive: never fail `cc stop` on dashboard teardown errors.
+			}
 		});
 
 	// --- Main action: launch Claude Code ---

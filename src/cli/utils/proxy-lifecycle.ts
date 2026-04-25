@@ -18,7 +18,14 @@ import { createServer } from 'node:net';
 import { PROXY_SCRIPT, INSTALL_DIR } from './paths';
 import { checkHealth } from './health';
 import { resolveBunPath } from './bun';
-import { startDashboard, isRunning } from '../../proxy/daemon';
+import {
+	startDashboard,
+	stopDaemon,
+	isRunning,
+	readDashboardOrigin,
+} from '../../proxy/daemon';
+import { readInstances } from '../../proxy/state/instance-registry';
+import { readProxyRegistry, cleanupStaleEntries } from '../../proxy/registry';
 
 /**
  * Find an available TCP port by binding to port 0.
@@ -215,6 +222,12 @@ export async function spawnDetachedProxy(
  * Ensure the dashboard server is running on port 18920.
  * Auto-starts it as a daemon if not already running.
  *
+ * Always records `origin: "auto"` for any implicitly-started dashboard so
+ * that `maybeStopDashboard()` can later tear it down when no cc sessions
+ * remain. If the dashboard was previously started by `omc proxy dashboard`
+ * (origin=manual), the origin write inside `startDashboard` is a no-op —
+ * manual mode is sticky.
+ *
  * @returns The dashboard URL, or null if it couldn't be started
  */
 export async function ensureDashboard(): Promise<string | null> {
@@ -238,9 +251,61 @@ export async function ensureDashboard(): Promise<string | null> {
 
 	// Start the dashboard-only server (no proxy port needed)
 	try {
-		await startDashboard({ port: DASHBOARD_CONTROL_PORT });
+		await startDashboard({ port: DASHBOARD_CONTROL_PORT, origin: 'auto' });
 		return `http://localhost:${DASHBOARD_CONTROL_PORT}/web/`;
 	} catch {
 		return null;
+	}
+}
+
+/**
+ * Ref-counted dashboard teardown.
+ *
+ * Invoked from every `omc cc` exit path (inline cleanup + `omc cc stop`).
+ * Tears the dashboard down only when ALL of these hold:
+ *   1. Dashboard is actually running (PID file points to a live process).
+ *   2. Dashboard was started implicitly (`origin === "auto"`). A manually
+ *      launched dashboard (`omc proxy dashboard`) is never auto-killed.
+ *   3. No live proxy instances remain in `proxy-instances.json`
+ *      (filtered by 5-minute heartbeat TTL inside `readInstances`).
+ *   4. No live `omc cc` sessions remain in `proxy-sessions.json`
+ *      (filtered by PID liveness inside `cleanupStaleEntries`).
+ *
+ * `reason` is used purely for logging so we can trace teardown decisions
+ * during smoke tests and incident investigation.
+ *
+ * Self-healing: if a second `omc cc` is starting concurrently with an exit,
+ * its `ensureDashboard()` call re-launches the dashboard on the next line.
+ */
+export function maybeStopDashboard(reason = 'cc-exit'): boolean {
+	if (!isRunning()) return false;
+
+	const origin = readDashboardOrigin();
+	if (origin === 'manual') {
+		return false;
+	}
+
+	cleanupStaleEntries();
+	const liveSessions = readProxyRegistry();
+	const liveInstances = readInstances();
+
+	if (liveSessions.length > 0 || liveInstances.length > 0) {
+		return false;
+	}
+
+	try {
+		const stopped = stopDaemon();
+		if (stopped) {
+			console.error(
+				`[lifecycle] dashboard torn down (${reason}; origin=${origin ?? 'unknown'})`,
+			);
+		}
+		return stopped;
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		console.error(
+			`[lifecycle] dashboard teardown failed (${reason}): ${message}`,
+		);
+		return false;
 	}
 }

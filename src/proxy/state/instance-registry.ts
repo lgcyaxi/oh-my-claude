@@ -10,7 +10,15 @@
  * Each proxy calls heartbeat() every 60 seconds to stay registered.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import {
+	readFileSync,
+	writeFileSync,
+	existsSync,
+	mkdirSync,
+	openSync,
+	closeSync,
+	unlinkSync,
+} from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
@@ -37,9 +45,101 @@ export interface ProxyInstance {
 
 const REGISTRY_DIR = join(homedir(), '.claude', 'oh-my-claude');
 const REGISTRY_FILE = join(REGISTRY_DIR, 'proxy-instances.json');
+const LOCK_FILE = join(REGISTRY_DIR, 'proxy-instances.lock');
 
 /** Stale instance TTL: 5 minutes without heartbeat */
 const STALE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Acquire a tiny advisory lock on the instance registry to serialize
+ * read-modify-write cycles across concurrent proxy processes.
+ *
+ * Uses `openSync(path, 'wx')` (O_CREAT|O_EXCL) which atomically fails when
+ * another process already holds the lock. We retry with a small jitter to
+ * absorb typical RMW contention (~ms) without spinning.
+ *
+ * The lock auto-expires after `LOCK_STALE_MS` in case a holder crashes
+ * mid-operation: a stale lock is unlinked and the caller retries.
+ */
+const LOCK_RETRIES = 10;
+const LOCK_BASE_BACKOFF_MS = 20;
+const LOCK_STALE_MS = 5_000;
+
+function sleepBlockingMs(ms: number): void {
+	const end = Date.now() + ms;
+	while (Date.now() < end) {
+		// Intentional busy-wait — these are all sub-second waits during
+		// contention; `await` is not an option because every public RMW
+		// function in this file is synchronous (called from request hot paths).
+	}
+}
+
+function acquireRegistryLock(): number | null {
+	for (let i = 0; i < LOCK_RETRIES; i++) {
+		try {
+			if (!existsSync(REGISTRY_DIR)) {
+				mkdirSync(REGISTRY_DIR, { recursive: true });
+			}
+			return openSync(LOCK_FILE, 'wx');
+		} catch (err: unknown) {
+			const code = (err as NodeJS.ErrnoException | undefined)?.code;
+			if (code !== 'EEXIST') {
+				// Permission / I/O problem — give up; fall back to lockless RMW
+				// which is still a correctness improvement over the previous
+				// behaviour (readInstances already self-heals stale entries).
+				return null;
+			}
+			// Check for stale lock: hold time > LOCK_STALE_MS means the prior
+			// holder likely crashed. Remove and retry.
+			try {
+				const stat = require('fs').statSync(LOCK_FILE) as {
+					mtimeMs: number;
+				};
+				if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
+					try {
+						unlinkSync(LOCK_FILE);
+					} catch {
+						/* ignore */
+					}
+					continue;
+				}
+			} catch {
+				// statSync races with another unlink; just retry.
+			}
+			sleepBlockingMs(LOCK_BASE_BACKOFF_MS + Math.random() * LOCK_BASE_BACKOFF_MS);
+		}
+	}
+	return null;
+}
+
+function releaseRegistryLock(fd: number | null): void {
+	if (fd === null) return;
+	try {
+		closeSync(fd);
+	} catch {
+		// Ignore
+	}
+	try {
+		unlinkSync(LOCK_FILE);
+	} catch {
+		// Already removed or inaccessible — nothing to do.
+	}
+}
+
+/**
+ * Run a read-modify-write closure under the advisory lock. If the lock
+ * cannot be acquired within `LOCK_RETRIES`, falls back to running the
+ * closure unlocked (best-effort — preserves prior behaviour instead of
+ * failing outright).
+ */
+function withRegistryLock<T>(fn: () => T): T {
+	const fd = acquireRegistryLock();
+	try {
+		return fn();
+	} finally {
+		releaseRegistryLock(fd);
+	}
+}
 
 /** Check if a PID is alive */
 function isPidAlive(pid: number): boolean {
@@ -87,32 +187,38 @@ function writeInstances(instances: ProxyInstance[]): void {
 
 /** Register a new proxy instance */
 export function registerInstance(instance: Omit<ProxyInstance, 'lastHeartbeat'>): void {
-	const instances = readInstances();
-	// Remove any existing entry with same sessionId or port
-	const filtered = instances.filter(
-		(i) => i.sessionId !== instance.sessionId && i.port !== instance.port,
-	);
-	filtered.push({
-		...instance,
-		lastHeartbeat: new Date().toISOString(),
+	withRegistryLock(() => {
+		const instances = readInstances();
+		// Remove any existing entry with same sessionId or port
+		const filtered = instances.filter(
+			(i) => i.sessionId !== instance.sessionId && i.port !== instance.port,
+		);
+		filtered.push({
+			...instance,
+			lastHeartbeat: new Date().toISOString(),
+		});
+		writeInstances(filtered);
 	});
-	writeInstances(filtered);
 }
 
 /** Deregister a proxy instance */
 export function deregisterInstance(sessionId: string): void {
-	const instances = readInstances();
-	writeInstances(instances.filter((i) => i.sessionId !== sessionId));
+	withRegistryLock(() => {
+		const instances = readInstances();
+		writeInstances(instances.filter((i) => i.sessionId !== sessionId));
+	});
 }
 
 /** Update heartbeat timestamp for an instance */
 export function heartbeatInstance(sessionId: string): void {
-	const instances = readInstances();
-	const instance = instances.find((i) => i.sessionId === sessionId);
-	if (instance) {
-		instance.lastHeartbeat = new Date().toISOString();
-		writeInstances(instances);
-	}
+	withRegistryLock(() => {
+		const instances = readInstances();
+		const instance = instances.find((i) => i.sessionId === sessionId);
+		if (instance) {
+			instance.lastHeartbeat = new Date().toISOString();
+			writeInstances(instances);
+		}
+	});
 }
 
 /** Start a heartbeat interval that keeps this instance registered. Returns cleanup fn. */

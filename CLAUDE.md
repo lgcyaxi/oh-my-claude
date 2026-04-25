@@ -180,7 +180,7 @@ npm publish --access public
 - `src/cli/utils/colors.ts` - Shared color/formatter helpers (`createFormatters()`)
 - `src/cli/utils/paths.ts` - Shared path constants (INSTALL_DIR, CLAUDE_DIR, etc.)
 - `src/cli/utils/health.ts` - Shared proxy health check
-- `src/cli/utils/proxy-lifecycle.ts` - Shared proxy daemon spawn logic
+- `src/cli/utils/proxy-lifecycle.ts` - Shared proxy daemon spawn logic + ref-counted `maybeStopDashboard` (paired with the `dashboard.origin` marker so manually-started dashboards are never auto-reaped)
 - `src/shared/auth/minimax.ts` - MiniMax authentication (cookie + groupId extraction via Playwright)
 - `scripts/minimax-login.ts` - Playwright script for MiniMax login (QR code scan)
 - `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)

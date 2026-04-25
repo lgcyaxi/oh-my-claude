@@ -17,6 +17,7 @@ import {
 	spawnSessionProxy,
 	spawnDetachedProxy,
 	waitForHealth,
+	maybeStopDashboard,
 } from '../../utils/proxy-lifecycle';
 import { PROXY_SCRIPT } from '../../utils/paths';
 import {
@@ -235,17 +236,28 @@ export async function launchDetachedSession(options: {
 	}
 
 	if (!reuseProxy) {
-		registerProxySession({
-			sessionId,
-			port: ports.port,
-			controlPort: ports.controlPort,
-			pid: proxyPid ?? 0,
-			startedAt: Date.now(),
-			cwd,
-			paneId,
-			terminalBackend: terminal,
-			detached: true,
-		});
+		// Only register when we have a real PID. `pid: 0` would otherwise poison
+		// the registry: every `process.kill(0, ...)` either targets the current
+		// process (POSIX) or addresses the whole process group (Windows), so a
+		// later `cc stop` or `cleanupStaleEntries` could kill the wrong target.
+		if (typeof proxyPid === 'number' && proxyPid > 0) {
+			registerProxySession({
+				sessionId,
+				port: ports.port,
+				controlPort: ports.controlPort,
+				pid: proxyPid,
+				startedAt: Date.now(),
+				cwd,
+				paneId,
+				terminalBackend: terminal,
+				detached: true,
+			});
+		} else {
+			console.warn(
+				`[cc] Skipping proxy-session registration: no valid PID captured ` +
+					`(session=${sessionId}). Use 'oh-my-claude cc stop ${sessionId}' manually if needed.`,
+			);
+		}
 	}
 
 	const argsLabel = claudeArgs.length > 0 ? ` (${claudeArgs.join(' ')})` : '';
@@ -325,14 +337,23 @@ export async function launchInlineSession(options: {
 			console.log(dimText(`  Log: ${proxyResult.logFile}`));
 		}
 
-		registerProxySession({
-			sessionId,
-			port: ports.port,
-			controlPort: ports.controlPort,
-			pid: proxyChild.pid!,
-			startedAt: Date.now(),
-			cwd: process.cwd(),
-		});
+		// Same guard as the detached path: never record pid=0 in the registry.
+		// See the detached branch above for rationale.
+		if (typeof proxyChild.pid === 'number' && proxyChild.pid > 0) {
+			registerProxySession({
+				sessionId,
+				port: ports.port,
+				controlPort: ports.controlPort,
+				pid: proxyChild.pid,
+				startedAt: Date.now(),
+				cwd: process.cwd(),
+			});
+		} else {
+			console.warn(
+				`[cc] Skipping proxy-session registration (inline): no valid PID ` +
+					`captured (session=${sessionId}).`,
+			);
+		}
 	}
 
 	let cleanedUp = false;
@@ -342,6 +363,14 @@ export async function launchInlineSession(options: {
 		if (!reuseProxy) {
 			unregisterProxySession(sessionId);
 			proxyChild?.kill();
+		}
+		// Ref-counted dashboard teardown: after this session is deregistered,
+		// if no peers remain and the dashboard was auto-started, shut it down.
+		// maybeStopDashboard is a no-op for origin=manual dashboards.
+		try {
+			maybeStopDashboard('cc-inline-exit');
+		} catch {
+			// Defensive: never block cc exit on dashboard teardown errors.
 		}
 	};
 

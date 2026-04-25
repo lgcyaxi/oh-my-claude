@@ -7,14 +7,57 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
+import { DASHBOARD_ORIGIN_FILE, DASHBOARD_PID_FILE } from '../cli/utils/paths';
 
 const INSTALL_DIR = join(homedir(), '.claude', 'oh-my-claude');
-const PID_FILE = join(INSTALL_DIR, 'dashboard.pid');
 const SERVER_SCRIPT = join(INSTALL_DIR, 'dist', 'proxy', 'server.js');
 const DASHBOARD_SCRIPT = join(INSTALL_DIR, 'dist', 'proxy', 'dashboard.js');
+
+/** How the running dashboard was launched (see DASHBOARD_ORIGIN_FILE). */
+export type DashboardOrigin = 'auto' | 'manual';
+
+/**
+ * Read the origin marker for the running dashboard.
+ *
+ * Returns null when the dashboard is not running or no marker exists
+ * (e.g. an older install started the dashboard before the marker was
+ * introduced — callers should treat that as "unknown / don't auto-stop").
+ */
+export function readDashboardOrigin(): DashboardOrigin | null {
+	try {
+		if (!existsSync(DASHBOARD_ORIGIN_FILE)) return null;
+		const raw = readFileSync(DASHBOARD_ORIGIN_FILE, 'utf-8').trim();
+		return raw === 'auto' || raw === 'manual' ? raw : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Write the origin marker. `manual` is sticky: once it's recorded we never
+ * downgrade to `auto`, so that an implicit `ensureDashboard()` after a manual
+ * `omc proxy dashboard` cannot accidentally enable auto-teardown.
+ */
+function writeDashboardOrigin(origin: DashboardOrigin): void {
+	try {
+		const current = readDashboardOrigin();
+		if (current === 'manual' && origin === 'auto') return;
+		writeFileSync(DASHBOARD_ORIGIN_FILE, origin, 'utf-8');
+	} catch {
+		// Best-effort — origin tracking is advisory only.
+	}
+}
+
+function clearDashboardOrigin(): void {
+	try {
+		if (existsSync(DASHBOARD_ORIGIN_FILE)) unlinkSync(DASHBOARD_ORIGIN_FILE);
+	} catch {
+		// Ignore
+	}
+}
 
 /** Check if a process is running */
 function isProcessRunning(pid: number): boolean {
@@ -33,12 +76,12 @@ export function getServerScript(): string {
 
 /** Check if the daemon is running */
 export function isRunning(): boolean {
-	if (!existsSync(PID_FILE)) {
+	if (!existsSync(DASHBOARD_PID_FILE)) {
 		return false;
 	}
 
 	try {
-		const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim());
+		const pid = parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
 		return isProcessRunning(pid);
 	} catch {
 		return false;
@@ -56,12 +99,12 @@ export async function startDaemon(options?: {
 
 	// Check if already running
 	if (isRunning()) {
-		const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim());
+		const pid = parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
 		if (isProcessRunning(pid)) {
 			return { pid, port, controlPort };
 		}
 		// Stale PID file, clean up
-		unlinkSync(PID_FILE);
+		unlinkSync(DASHBOARD_PID_FILE);
 	}
 
 	// Check if server script exists
@@ -109,7 +152,7 @@ export async function startDaemon(options?: {
 	proc.unref();
 
 	// Write PID file
-	writeFileSync(PID_FILE, String(pid));
+	writeFileSync(DASHBOARD_PID_FILE, String(pid));
 
 	return { pid, port, controlPort };
 }
@@ -118,16 +161,26 @@ export async function startDaemon(options?: {
 export async function startDashboard(options?: {
 	port?: number;
 	foreground?: boolean;
+	/**
+	 * Launch origin — "auto" (implicit via `omc cc`) or "manual" (explicit via
+	 * `omc proxy dashboard`). `manual` is sticky across re-entry; see
+	 * `writeDashboardOrigin` for the downgrade guard.
+	 */
+	origin?: DashboardOrigin;
 }): Promise<{ pid: number; port: number }> {
 	const port = options?.port ?? 18920;
+	const origin: DashboardOrigin = options?.origin ?? 'auto';
 
 	// Check if already running
 	if (isRunning()) {
-		const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim());
+		const pid = parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
 		if (isProcessRunning(pid)) {
+			// Dashboard already up — refresh origin (write is sticky on manual)
+			writeDashboardOrigin(origin);
 			return { pid, port };
 		}
-		unlinkSync(PID_FILE);
+		unlinkSync(DASHBOARD_PID_FILE);
+		clearDashboardOrigin();
 	}
 
 	const script = existsSync(DASHBOARD_SCRIPT)
@@ -169,7 +222,8 @@ export async function startDashboard(options?: {
 	}
 
 	proc.unref();
-	writeFileSync(PID_FILE, String(pid));
+	writeFileSync(DASHBOARD_PID_FILE, String(pid));
+	writeDashboardOrigin(origin);
 
 	// Wait for the server to be ready
 	for (let i = 0; i < 15; i++) {
@@ -189,16 +243,18 @@ export async function startDashboard(options?: {
 
 /** Stop the proxy daemon */
 export function stopDaemon(): boolean {
-	if (!existsSync(PID_FILE)) {
+	if (!existsSync(DASHBOARD_PID_FILE)) {
+		clearDashboardOrigin();
 		return false;
 	}
 
 	try {
-		const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim());
+		const pid = parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
 
 		if (!isProcessRunning(pid)) {
 			// Stale PID file
-			unlinkSync(PID_FILE);
+			unlinkSync(DASHBOARD_PID_FILE);
+			clearDashboardOrigin();
 			return false;
 		}
 
@@ -219,15 +275,17 @@ export function stopDaemon(): boolean {
 			process.kill(pid, 'SIGKILL');
 		}
 
-		unlinkSync(PID_FILE);
+		unlinkSync(DASHBOARD_PID_FILE);
+		clearDashboardOrigin();
 		return true;
 	} catch (error) {
 		// If we can't read the PID file, try to delete it
 		try {
-			unlinkSync(PID_FILE);
+			unlinkSync(DASHBOARD_PID_FILE);
 		} catch {
 			// Ignore
 		}
+		clearDashboardOrigin();
 		throw error;
 	}
 }
@@ -235,10 +293,10 @@ export function stopDaemon(): boolean {
 /** Get the PID from the PID file */
 export function getPid(): number | null {
 	try {
-		if (!existsSync(PID_FILE)) {
+		if (!existsSync(DASHBOARD_PID_FILE)) {
 			return null;
 		}
-		return parseInt(readFileSync(PID_FILE, 'utf-8').trim());
+		return parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
 	} catch {
 		return null;
 	}

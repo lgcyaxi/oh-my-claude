@@ -127,7 +127,12 @@ async function main() {
 		return;
 	}
 
-	const hash = quickHash(prompt);
+	// Include cwd in the cache key so two projects that happen to send the
+	// same prompt don't share injected preferences. Previously the cache was
+	// keyed purely on `prompt`, which caused project-scoped preferences from
+	// project A to leak into a subsequent identical prompt from project B.
+	const cacheKey = `${input.cwd ?? ''}:::${prompt}`;
+	const hash = quickHash(cacheKey);
 	const cached = getCached(hash);
 	if (cached !== null) {
 		console.log(cached === '' ? approve() : approveWithContext(cached));

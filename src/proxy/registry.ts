@@ -189,12 +189,20 @@ export function unregisterProxySession(sessionId: string): void {
 }
 
 /**
- * Remove entries whose PIDs are no longer alive.
+ * Remove entries whose PIDs are no longer alive OR invalid.
+ *
+ * Also drops any entry whose `pid` is not a positive integer. A pid of `0` or
+ * a negative number would be interpreted by `process.kill(pid, ...)` in
+ * dangerous ways (current process / process group broadcast), so we treat
+ * such entries as stale.
+ *
  * @returns Number of stale entries removed
  */
 export function cleanupStaleEntries(): number {
 	const entries = readProxyRegistry();
-	const alive = entries.filter((e) => isPidAlive(e.pid));
+	const alive = entries.filter(
+		(e) => Number.isInteger(e.pid) && e.pid > 0 && isPidAlive(e.pid),
+	);
 	const removed = entries.length - alive.length;
 
 	if (removed > 0) {

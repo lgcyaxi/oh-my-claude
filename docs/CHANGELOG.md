@@ -4,7 +4,15 @@ All notable changes to oh-my-claude are documented here. Detailed changelogs are
 
 ## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-25
 
-### Latest: v2.2.14-beta.4
+### Latest: v2.2.14-beta.5
+
+- **Dashboard ref-counted lifecycle** — first `omc cc` starts the dashboard (idempotent; unchanged), last `omc cc` exit tears it down via the new `maybeStopDashboard()` probe which reads `proxy-sessions.json` + `proxy-instances.json` and only kills when both are empty. `omc proxy dashboard` marks its launch as `origin="manual"` via the new `dashboard.origin` marker; manual dashboards are sticky and are never auto-reaped, even after a later implicit `ensureDashboard()`
+- **B1 HIGH — no more `pid:0` sessions** — `omc cc` refuses to register a proxy session when the spawned bun child's PID is `0` (Windows edge case), `cleanupStaleEntries` purges any such legacy entries, and `omc cc stop` refuses to `process.kill(0, …)`. Removes a real footgun where the old code could signal the calling process group
+- **B2 HIGH — corrupt `settings.json` no longer silently overwritten** — `loadSettings()` now backs up the bad file to `settings.json.corrupt-<unix-ts>.bak` and throws `SettingsCorruptError` instead of returning `{}`, which previously caused `saveSettings()` to clobber the user's Claude Code config. Install / doctor / hook-merge paths propagate the error
+- **B3 MED — `memory-awareness.ts` stops printing bogus "Proxy not detected" warnings** — new detection: `OMC_PROXY_CONTROL_PORT` set → no warning; else loopback `ANTHROPIC_BASE_URL` matches legacy 18910/18920 or a live registry port → no warning. The old hard-coded `9090` compare is gone
+- **Medium / low cleanups** — `preference-awareness` cache key now includes `cwd` (no cross-project prompt collisions); `instance-registry` RMW ops run under an `O_EXCL` advisory lock (stale-lock auto-recycle after 5s); `comment-checker` regex patterns dropped the `/g` flag (fixes flaky alternating `.test()` results); `PID_FILE` renamed to `DASHBOARD_PID_FILE` for consistency with the new `DASHBOARD_ORIGIN_FILE`; dead `routeViaProxy` / `routeViaClaude` / `isProxyAvailable` helpers + hard-coded 18910/18911 constants deleted from `mcp/server/manager.ts`
+
+### Previous: v2.2.14-beta.4
 
 - **Vision tag for `qwen3.6-plus`** — the Aliyun Qwen 3.6 Plus entry now carries `"note": "supports vision"` and the dashboard + menubar both surface it as a pill (Switch page uses ` · supports vision` in the `<option>` label plus a below-select pill; menubar shows it next to the model label). Root cause: `/providers` stripped the `note` field — fixed to pass registry entries through with `note` / `realId` intact
 - **`proxy.failClosed` default-on** — switched-path failures now return `HTTP 502 {error:{type:"upstream_error", provider, model}}` instead of silently bridging to the native Claude subscription (which masked bad API keys and billed the wrong account). Opt-in legacy behaviour via `proxy.failClosed: false`

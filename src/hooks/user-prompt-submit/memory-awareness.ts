@@ -35,16 +35,36 @@ import {
 	getTimelineContent,
 } from '../../memory/hooks';
 
+/**
+ * Warn when the Claude Code base URL does NOT appear to be the oh-my-claude
+ * proxy. Previously this hook compared the URL's port to a hard-coded
+ * `9090` default, which has never been the proxy's port — so every non-omc
+ * session (and plenty of legitimate omc ones on dynamic ports) got a
+ * bogus "Proxy not detected" warning.
+ *
+ * The new heuristic treats the proxy as detected when ANY of these hold:
+ *   - `OMC_PROXY_CONTROL_PORT` is set in the environment (omc cc sets this
+ *     for its child shell, so it's the strongest signal).
+ *   - `ANTHROPIC_BASE_URL` is localhost AND its port matches a port that
+ *     currently appears in `proxy-sessions.json` or `proxy-instances.json`.
+ *   - `ANTHROPIC_BASE_URL` points to localhost at 18910/18920 (legacy
+ *     global proxy / dashboard defaults).
+ * Only when NONE of the above match do we print the warning.
+ */
 function warnIfNonOmcProxyBaseUrl(sessionId?: string): void {
 	const baseUrl = (process.env.ANTHROPIC_BASE_URL || '').trim();
 	if (!baseUrl) return;
 
-	const expectedPortRaw = (process.env.OMC_PROXY_PORT || '').trim();
-	const expectedPort = Number.parseInt(expectedPortRaw, 10) || 9090;
+	if ((process.env.OMC_PROXY_CONTROL_PORT || '').trim()) {
+		// Definitive signal — omc cc sets this for every spawned session.
+		return;
+	}
 
 	let actualPort: number | null = null;
+	let hostname: string = '';
 	try {
 		const parsed = new URL(baseUrl);
+		hostname = parsed.hostname;
 		actualPort = parsed.port
 			? Number.parseInt(parsed.port, 10)
 			: parsed.protocol === 'https:'
@@ -54,7 +74,18 @@ function warnIfNonOmcProxyBaseUrl(sessionId?: string): void {
 		actualPort = null;
 	}
 
-	if (actualPort === expectedPort) return;
+	const isLoopback =
+		hostname === '127.0.0.1' ||
+		hostname === 'localhost' ||
+		hostname === '::1';
+
+	if (isLoopback && actualPort !== null) {
+		// Legacy fixed-port proxies: always considered "detected".
+		if (actualPort === 18910 || actualPort === 18920) return;
+
+		const registryPorts = loadRegistryPorts();
+		if (registryPorts.has(actualPort)) return;
+	}
 
 	try {
 		const runDir = join(homedir(), '.claude', 'oh-my-claude', 'run');
@@ -70,6 +101,34 @@ function warnIfNonOmcProxyBaseUrl(sessionId?: string): void {
 	process.stderr.write(
 		'⚠️  Proxy not detected. Running natively — proxy-only routing features limited.\n',
 	);
+}
+
+/**
+ * Collect ports from the live proxy-session/proxy-instance registries.
+ * Returns an empty Set on any error — in that case the caller will warn,
+ * which is the previous behaviour.
+ */
+function loadRegistryPorts(): Set<number> {
+	const ports = new Set<number>();
+	const base = join(homedir(), '.claude', 'oh-my-claude');
+	for (const rel of ['proxy-sessions.json', 'proxy-instances.json']) {
+		try {
+			const file = join(base, rel);
+			if (!existsSync(file)) continue;
+			const raw = readFileSync(file, 'utf-8');
+			const data = JSON.parse(raw);
+			if (!Array.isArray(data)) continue;
+			for (const entry of data) {
+				const p = entry?.port;
+				const cp = entry?.controlPort;
+				if (typeof p === 'number' && Number.isFinite(p)) ports.add(p);
+				if (typeof cp === 'number' && Number.isFinite(cp)) ports.add(cp);
+			}
+		} catch {
+			// Best-effort — skip malformed files.
+		}
+	}
+	return ports;
 }
 
 interface UserPromptSubmitInput {
