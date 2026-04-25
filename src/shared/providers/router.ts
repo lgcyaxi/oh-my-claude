@@ -93,6 +93,7 @@ export async function routeByAgent(
   options?: {
     temperature?: number;
     maxTokens?: number;
+    thinking?: { enabled: boolean; budget_tokens?: number };
   }
 ): Promise<ChatCompletionResponse> {
   const config = loadConfig();
@@ -122,11 +123,20 @@ export async function routeByAgent(
 
   const client = getProviderClient(agentConfig.provider, config);
 
+  // Forward per-agent max_tokens + thinking overrides (if set) so declarations
+  // like `thinking.enabled=true` in the config actually reach the upstream.
+  // Caller-provided options take precedence over agent defaults.
+  const agentThinking = (agentConfig as { thinking?: { enabled: boolean; budget_tokens?: number } }).thinking;
+  const agentMaxTokens = (agentConfig as { max_tokens?: number }).max_tokens;
+
   const request: ChatCompletionRequest = {
     model: agentConfig.model,
     messages,
     temperature: options?.temperature ?? agentConfig.temperature,
-    max_tokens: options?.maxTokens,
+    max_tokens: options?.maxTokens ?? agentMaxTokens,
+    ...(options?.thinking ?? agentThinking
+      ? { thinking: options?.thinking ?? agentThinking }
+      : {}),
   };
 
   return client.createChatCompletion(request);

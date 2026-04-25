@@ -13,6 +13,15 @@ export interface ChatCompletionRequest {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
+  /**
+   * Optional thinking/reasoning hint for thinking-capable models
+   * (e.g. DeepSeek V4 Pro, Claude Opus). Clients that don't understand
+   * this field should drop it silently.
+   */
+  thinking?: {
+    enabled: boolean;
+    budget_tokens?: number;
+  };
 }
 
 export interface ChatCompletionChoice {

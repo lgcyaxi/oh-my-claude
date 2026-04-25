@@ -63,6 +63,11 @@ export function ModelPicker({
                   `}
                 >
                   {model.label}
+                  {model.note && (
+                    <span className="ml-1.5 text-[10px] text-accent/60 bg-accent/10 px-1.5 py-0.5 rounded">
+                      {model.note}
+                    </span>
+                  )}
                   {isActive && (
                     <span className="ml-1.5 text-[10px] text-accent/70">active</span>
                   )}

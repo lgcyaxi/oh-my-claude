@@ -43,13 +43,21 @@ export class OpenAICompatibleClient implements ProviderClient {
 
     const url = `${this.baseUrl}/chat/completions`;
 
-    const body = {
+    const body: Record<string, unknown> = {
       model: request.model || this.defaultModel,
       messages: request.messages,
       temperature: request.temperature,
       max_tokens: request.max_tokens,
       stream: false, // We don't support streaming in background tasks
     };
+
+    // Forward thinking/reasoning hint when the agent config asks for it.
+    // Providers that don't understand this field should ignore it; most
+    // Anthropic-compatible OpenAI-shape upstreams (DeepSeek V4, Zhipu GLM-5,
+    // MiniMax M2.7) honour `thinking.enabled` + `thinking.budget_tokens`.
+    if (request.thinking) {
+      body.thinking = request.thinking;
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);

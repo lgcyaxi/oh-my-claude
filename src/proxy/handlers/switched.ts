@@ -133,9 +133,34 @@ export async function handleSwitched(
 		return wrapWithCapture(result, sessionId, provider, effectiveModel);
 	} catch (error) {
 		const message = toErrorMessage(error);
+		const cfg = loadConfig();
+		// Fail-closed by default: surface upstream provider errors as 502 so
+		// auth/quota problems aren't silently masked by a native Claude fallback
+		// (which can bill the wrong account and hide broken switch targets).
+		if (cfg.proxy?.failClosed !== false) {
+			console.error(
+				`[proxy #${reqId}]${sessionTag} Provider "${provider}" request failed: ${message} ` +
+					`(fail-closed → returning 502; set proxy.failClosed=false to fall back to native Claude)`,
+			);
+			return new Response(
+				JSON.stringify({
+					type: 'error',
+					error: {
+						type: 'upstream_error',
+						message,
+						provider,
+						model,
+					},
+				}),
+				{
+					status: 502,
+					headers: { 'content-type': 'application/json' },
+				},
+			);
+		}
 		console.error(
 			`[proxy #${reqId}]${sessionTag} Provider "${provider}" request failed: ${message}, ` +
-				`falling back to native Claude`,
+				`falling back to native Claude (proxy.failClosed=false)`,
 		);
 		return await handlePassthrough(req, reqId, bodyText, sessionTag);
 	}

@@ -91,6 +91,17 @@ export function convertAnthropicToOpenAI(
 		stream: body.stream ?? true,
 	};
 
+	// When streaming, request terminal usage chunk from the OpenAI Chat
+	// Completions API (stream_options.include_usage). Without this, the final
+	// SSE chunk has usage=null and the Anthropic-bridge converter has to fall
+	// back to token heuristics. Supported by OpenAI, DeepSeek (Anthropic-compat
+	// reasoners), ZhiPu GLM-5, MiniMax, Aliyun Qwen — anyone who implements the
+	// Chat Completions contract. Non-OpenAI-shape providers (Responses API)
+	// take a different path and are unaffected.
+	if (result.stream === true) {
+		result.stream_options = { include_usage: true };
+	}
+
 	// Map compatible fields
 	if (body.temperature !== undefined) result.temperature = body.temperature;
 	if (body.max_tokens !== undefined) result.max_tokens = body.max_tokens;

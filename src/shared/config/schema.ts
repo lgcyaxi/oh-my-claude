@@ -204,6 +204,14 @@ export const ProxyConfigSchema = z.object({
 	controlPort: z.number().min(1024).max(65535).default(18911),
 	/** Whether the proxy feature is enabled */
 	enabled: z.boolean().default(false),
+	/**
+	 * When true (default), switched-path upstream failures return HTTP 502
+	 * instead of silently falling back to the native Claude subscription.
+	 * Set `false` to keep the legacy resilient behaviour where failures are
+	 * transparently bridged to Anthropic. Fail-closed is preferred because
+	 * silent fallback can mask auth/quota errors and bill the wrong account.
+	 */
+	failClosed: z.boolean().default(true),
 });
 
 // Main configuration schema

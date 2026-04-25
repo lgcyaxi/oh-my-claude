@@ -24,6 +24,19 @@ const NON_LLM_PATTERNS = [
 	/-embedding[:/]|^.*-embedding$/i,
 ];
 
+/**
+ * Per-model shape exposed by `/providers` and `/models?provider=...`.
+ * Keep optional capability / alias fields (note, realId) so the dashboard
+ * can render vision/tooling pills without duplicating registry lookups.
+ */
+type ExposedModel = {
+	id: string;
+	label: string;
+	note?: string;
+	realId?: string;
+	size?: number;
+};
+
 export async function handleProviders(
 	corsHeaders: Record<string, string>,
 ): Promise<Response> {
@@ -32,7 +45,7 @@ export async function handleProviders(
 	const available: Array<{
 		name: string;
 		label: string;
-		models: Array<{ id: string; label: string }>;
+		models: ExposedModel[];
 	}> = [];
 
 	for (const p of registry.providers) {
@@ -41,8 +54,17 @@ export async function handleProviders(
 		if (!pc || pc.type === 'claude-subscription') continue;
 		if (!isProviderConfigured(provConfig, pName)) continue;
 
-		let models: Array<{ id: string; label: string }> =
-			((p as any).models as Array<{ id: string; label: string }>) ?? [];
+		// Pass registry entries through with their optional capability fields
+		// (note, realId) intact so consumers like SwitchPage + menubar can
+		// render vision/tooling pills the same way the Models page does.
+		let models: ExposedModel[] = (
+			((p as any).models as ExposedModel[]) ?? []
+		).map((m) => ({
+			id: m.id,
+			label: m.label,
+			...(m.note ? { note: m.note } : {}),
+			...(m.realId ? { realId: m.realId } : {}),
+		}));
 
 		// Ollama: auto-discover models if registry list is empty
 		if (pName === 'ollama' && models.length === 0) {

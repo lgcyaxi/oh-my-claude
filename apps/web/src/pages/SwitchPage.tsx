@@ -236,10 +236,19 @@ export default function SwitchPage() {
                     <option value="">Select model...</option>
                     {models.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.label}
+                        {m.note ? `${m.label} · ${m.note}` : m.label}
                       </option>
                     ))}
                   </select>
+                  {(() => {
+                    const selected = models.find((m) => m.id === selectedModel);
+                    if (!selected?.note) return null;
+                    return (
+                      <span className="mt-1 inline-block text-[10px] text-accent/60 bg-accent-muted px-1.5 py-0.5 rounded">
+                        {selected.note}
+                      </span>
+                    );
+                  })()}
                 </label>
               </div>
 

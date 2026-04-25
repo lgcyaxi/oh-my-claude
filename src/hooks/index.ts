@@ -59,6 +59,14 @@ export const HOOKS = {
 		matcher: '.*',
 		source: './session-start/auto-rotate.ts',
 	},
+	'task-tracker': {
+		name: 'task-tracker',
+		description:
+			'PreToolUse: track Task tool invocations (subscription-agent status for the statusline)',
+		type: 'PreToolUse',
+		matcher: 'Task',
+		source: './pre-tool-use/task-tracker.ts',
+	},
 } as const;
 
 export type HookName = keyof typeof HOOKS;

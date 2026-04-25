@@ -80,7 +80,8 @@
 			"models": [
 				{
 					"id": "qwen3.6-plus",
-					"label": "Qwen 3.6 Plus"
+					"label": "Qwen 3.6 Plus",
+					"note": "supports vision"
 				},
 				{
 					"id": "qwen3.5-plus",
@@ -233,7 +234,7 @@
 			"provider": "aliyun",
 			"model": "qwen3.6-plus",
 			"temperature": 0.3,
-			"description": "Provider agent: general-purpose via Qwen 3.5 Plus",
+			"description": "Provider agent: general-purpose via Qwen 3.6 Plus (supports vision)",
 			"agentType": "provider"
 		},
 		"zhipu": {

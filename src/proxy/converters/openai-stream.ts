@@ -197,14 +197,33 @@ export class OpenAIToAnthropicStreamConverter extends TransformStream<
 			this.sentBlockStart = false;
 		}
 
-		const stopReason =
-			finishReason === 'stop'
-				? 'end_turn'
-				: finishReason === 'tool_calls'
-					? 'tool_use'
-					: finishReason === 'length'
-						? 'max_tokens'
-						: 'end_turn';
+		// Map OpenAI finish_reason → Anthropic stop_reason explicitly so unknown
+		// values (e.g. provider-specific reasons) are at least logged instead of
+		// silently coalesced to 'end_turn'.
+		let stopReason: 'end_turn' | 'max_tokens' | 'tool_use' | 'stop_sequence';
+		switch (finishReason) {
+			case 'stop':
+				stopReason = 'end_turn';
+				break;
+			case 'length':
+				stopReason = 'max_tokens';
+				break;
+			case 'tool_calls':
+			case 'function_call':
+				stopReason = 'tool_use';
+				break;
+			case 'content_filter':
+				stopReason = 'stop_sequence';
+				break;
+			default:
+				if (finishReason) {
+					console.warn(
+						`[openai-stream] unknown finish_reason "${finishReason}", mapping to end_turn`,
+					);
+				}
+				stopReason = 'end_turn';
+				break;
+		}
 
 		this.emitEvent(controller, 'message_delta', {
 			type: 'message_delta',

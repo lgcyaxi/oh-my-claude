@@ -53,18 +53,34 @@ export function getDefaultConfigPath(): string {
 }
 
 /**
- * Resolve provider config for an agent or category
+ * Resolve provider config for an agent or category.
+ *
+ * Returns the optional `max_tokens` and `thinking` hints from
+ * `AgentConfigSchema` so consumers (router / MCP background client) can
+ * forward them to the upstream. Previously these were silently dropped —
+ * meaning agents declaring `thinking.enabled=true` on DeepSeek V4 Pro or
+ * Claude Opus never actually enabled thinking.
  */
 export function resolveProviderForAgent(
   config: OhMyClaudeConfig,
   agentName: string
-): { provider: string; model: string; temperature?: number } | null {
+): {
+  provider: string;
+  model: string;
+  temperature?: number;
+  max_tokens?: number;
+  thinking?: { enabled: boolean; budget_tokens?: number };
+} | null {
   const agentConfig = config.agents[agentName];
   if (agentConfig) {
     return {
       provider: agentConfig.provider,
       model: agentConfig.model,
       temperature: agentConfig.temperature,
+      ...(agentConfig.max_tokens !== undefined
+        ? { max_tokens: agentConfig.max_tokens }
+        : {}),
+      ...(agentConfig.thinking ? { thinking: agentConfig.thinking } : {}),
     };
   }
   return null;
@@ -251,9 +267,23 @@ function resolveViaCrossProvider(
 export function resolveProviderForAgentWithFallback(
   config: OhMyClaudeConfig,
   agentName: string
-): { provider: string; model: string; temperature?: number } | null {
+): {
+  provider: string;
+  model: string;
+  temperature?: number;
+  max_tokens?: number;
+  thinking?: { enabled: boolean; budget_tokens?: number };
+} | null {
   const agentConfig = config.agents[agentName];
   if (!agentConfig) return null;
+
+  // Shared optional overrides carried through every fallback branch: if the
+  // agent declared `max_tokens` / `thinking` we keep them regardless of which
+  // provider ends up handling the request.
+  const extras = {
+    ...(agentConfig.max_tokens !== undefined ? { max_tokens: agentConfig.max_tokens } : {}),
+    ...(agentConfig.thinking ? { thinking: agentConfig.thinking } : {}),
+  };
 
   // 1. Try primary provider
   if (isProviderConfigured(config, agentConfig.provider)) {
@@ -261,6 +291,7 @@ export function resolveProviderForAgentWithFallback(
       provider: agentConfig.provider,
       model: agentConfig.model,
       temperature: agentConfig.temperature,
+      ...extras,
     };
   }
 
@@ -271,6 +302,7 @@ export function resolveProviderForAgentWithFallback(
     return {
       ...crossProvider,
       temperature: agentConfig.temperature,
+      ...extras,
     };
   }
 
@@ -280,6 +312,7 @@ export function resolveProviderForAgentWithFallback(
       provider: agentConfig.fallback.provider,
       model: agentConfig.fallback.model,
       temperature: agentConfig.temperature,
+      ...extras,
     };
   }
 
@@ -293,6 +326,7 @@ export function resolveProviderForAgentWithFallback(
         provider: fb.provider,
         model: fb.model,
         temperature: agentConfig.temperature,
+        ...extras,
       };
     }
   }
@@ -302,5 +336,6 @@ export function resolveProviderForAgentWithFallback(
     provider: agentConfig.provider,
     model: agentConfig.model,
     temperature: agentConfig.temperature,
+    ...extras,
   };
 }

@@ -190,9 +190,26 @@ export async function handleMessages(
 		const message = toErrorMessage(error);
 		console.error(`[proxy #${reqId}]${sessionTag} Error: ${message}`);
 
+		// Fail-closed at the routing level too: if a switch target or directive
+		// raised, surface it as 502 rather than quietly falling back to native
+		// Claude. Users that prefer legacy resilience opt in via failClosed=false.
+		const cfg = loadConfig();
+		if (cfg.proxy?.failClosed !== false) {
+			return new Response(
+				JSON.stringify({
+					type: 'error',
+					error: { type: 'proxy_error', message },
+				}),
+				{
+					status: 502,
+					headers: { 'content-type': 'application/json' },
+				},
+			);
+		}
+
 		try {
 			console.error(
-				`[proxy #${reqId}]${sessionTag} Falling back to passthrough`,
+				`[proxy #${reqId}]${sessionTag} Falling back to passthrough (proxy.failClosed=false)`,
 			);
 			return await handlePassthrough(req, reqId, bodyText, sessionTag);
 		} catch (fallbackError) {

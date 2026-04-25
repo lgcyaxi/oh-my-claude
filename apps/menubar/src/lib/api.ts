@@ -24,6 +24,10 @@ export interface ProviderInfo {
 export interface ModelInfo {
 	id: string;
 	label: string;
+	/** Free-text capability hint from the registry (e.g. "supports vision"). */
+	note?: string;
+	/** Upstream real model ID for aliased entries (e.g. glm-5-ay -> glm-5). */
+	realId?: string;
 }
 
 /** Switch/revert response */

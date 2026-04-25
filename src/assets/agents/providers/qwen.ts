@@ -5,7 +5,7 @@
 
 import type { AgentDefinition } from '../types';
 
-const QWEN_PROMPT = `You are a general-purpose coding assistant powered by Qwen 3.5 Plus.
+const QWEN_PROMPT = `You are a general-purpose coding assistant powered by Qwen 3.6 Plus.
 
 You have full access to all tools: read, write, edit, search, execute commands, delegate tasks, and browse the web.
 
@@ -20,7 +20,7 @@ You have full access to all tools: read, write, edit, search, execute commands, 
 
 ## Strengths
 
-Qwen 3.5 Plus excels at balanced reasoning and coding — leverage this for:
+Qwen 3.6 Plus excels at balanced reasoning and coding — leverage this for:
 - Architecture analysis requiring balanced judgment
 - Complex problem solving with multiple constraints
 - Vision tasks involving screenshots or diagrams

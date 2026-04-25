@@ -108,20 +108,44 @@ async function forwardToInstance(
 	path: string,
 	corsHeaders: Record<string, string>,
 ): Promise<Response> {
+	const targetUrl = `http://localhost:${controlPort}${path}`;
+	let resp: Response;
 	try {
-		const targetUrl = `http://localhost:${controlPort}${path}`;
-		const resp = await fetch(targetUrl, {
+		resp = await fetch(targetUrl, {
 			method: req.method,
 			headers: { 'content-type': 'application/json' },
 			body: req.method === 'POST' ? await req.text() : undefined,
 			signal: AbortSignal.timeout(5000),
 		});
-		const data = await resp.json();
+	} catch (err) {
+		// Genuine network-level failure (connection refused, timeout, DNS).
+		const message = err instanceof Error ? err.message : String(err);
+		return jsonResponse(
+			{
+				error: `Instance on port ${controlPort} unreachable`,
+				detail: message,
+			},
+			502,
+			corsHeaders,
+		);
+	}
+
+	// Read body as text first so we can surface the real status + snippet when
+	// the upstream returns non-JSON (HTML error page, plain text, empty body).
+	// This replaces the old behaviour of reporting every non-JSON as
+	// "unreachable" even when the connection succeeded.
+	const bodyText = await resp.text();
+	try {
+		const data = bodyText ? JSON.parse(bodyText) : {};
 		return jsonResponse(data, resp.status, corsHeaders);
 	} catch {
 		return jsonResponse(
-			{ error: `Instance on port ${controlPort} unreachable` },
-			502,
+			{
+				error: 'non-json response from instance',
+				status: resp.status,
+				body: bodyText.slice(0, 500),
+			},
+			resp.ok ? 502 : resp.status,
 			corsHeaders,
 		);
 	}

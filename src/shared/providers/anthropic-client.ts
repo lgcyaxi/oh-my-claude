@@ -28,6 +28,11 @@ interface AnthropicRequest {
   temperature?: number;
   system?: string;
   stream?: boolean;
+  /** Anthropic-style extended thinking (honoured by Claude Opus + DeepSeek V4 Pro). */
+  thinking?: {
+    type?: "enabled";
+    budget_tokens?: number;
+  };
 }
 
 interface AnthropicContentBlock {
@@ -155,6 +160,18 @@ export class AnthropicCompatibleClient implements ProviderClient {
 
     if (system) {
       body.system = system;
+    }
+
+    // Forward extended-thinking hint for Anthropic-shape upstreams (Claude
+    // Opus, DeepSeek V4 Pro via Anthropic-compat). Upstreams that don't
+    // understand this field will ignore it.
+    if (request.thinking?.enabled) {
+      body.thinking = {
+        type: "enabled",
+        ...(request.thinking.budget_tokens !== undefined
+          ? { budget_tokens: request.thinking.budget_tokens }
+          : {}),
+      };
     }
 
     const controller = new AbortController();

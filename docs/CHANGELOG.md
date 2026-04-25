@@ -4,7 +4,16 @@ All notable changes to oh-my-claude are documented here. Detailed changelogs are
 
 ## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-25
 
-### Latest: v2.2.14-beta.3
+### Latest: v2.2.14-beta.4
+
+- **Vision tag for `qwen3.6-plus`** — the Aliyun Qwen 3.6 Plus entry now carries `"note": "supports vision"` and the dashboard + menubar both surface it as a pill (Switch page uses ` · supports vision` in the `<option>` label plus a below-select pill; menubar shows it next to the model label). Root cause: `/providers` stripped the `note` field — fixed to pass registry entries through with `note` / `realId` intact
+- **`proxy.failClosed` default-on** — switched-path failures now return `HTTP 502 {error:{type:"upstream_error", provider, model}}` instead of silently bridging to the native Claude subscription (which masked bad API keys and billed the wrong account). Opt-in legacy behaviour via `proxy.failClosed: false`
+- **OpenAI-shape streaming is correct end-to-end** — proxy now requests `stream_options.include_usage` on every streaming Chat Completions call, so the terminal chunk carries real token usage; `finish_reason` → Anthropic `stop_reason` is now an explicit `switch` (covers `stop` / `length` / `tool_calls` / `function_call` / `content_filter`) with a `console.warn` fallback for unknown reasons
+- **`forwardToInstance` reports real upstream errors** — stopped treating every non-JSON response as "unreachable"; now returns the real status + first 500 bytes of body when the instance responds with HTML or plain text, and includes the network error message in the catch path
+- **Per-agent `max_tokens` + `thinking` now reach the wire** — `resolveProviderForAgent*` carries both through the router and both the OpenAI-compat and Anthropic-compat clients forward them in the outgoing body, so `thinking.enabled=true` declarations actually enable thinking on DeepSeek V4 Pro / Claude Opus
+- **Low-severity cleanup** — `sanitize.ts` comment refreshed to point at the real dispatcher; `task-tracker` registered in the `HOOKS` map for registry completeness; passthrough usage-cache failures now log instead of being swallowed
+
+### Previous: v2.2.14-beta.3
 
 - **Memory auto-rotation on SessionStart** — new `auto-rotate` hook prunes zero-byte `active-session-<hash>.jsonl` files and compacts past-date sessions + auto-commit notes into one `YYYY-MM-DD-daily-rollup.md` per day. Primary path uses the same internals as `/omc-mem-summary` (provider order: **minimax-cn → minimax → zhipu → deepseek**, domestic MiniMax preferred); deterministic fallback when the proxy is unreachable. Runs under a 20s wall clock, caps per-run work via `memory.autoRotate.maxDatesPerRun` (default 2), never blocks Claude Code startup, and logs every action to `~/.claude/oh-my-claude/memory/.rotation-log.jsonl`
 - **Memory ops audit: 9 bug fixes** — `clearSessionLog` now `unlinkSync`s (stops the zero-byte file graveyard); `summarize_memories` MCP input schema now accepts `narrative` / `dateRange` / `type`; `removeFromIndex` is finally `async` + `await indexer.flush()`; memory IDs use local time (fixes late-evening PDT sessions landing on the next UTC day); `parseAIJsonResult` uses a string-aware brace-walker instead of a greedy regex; `compact_memories` only drops SQLite rows after a successful `deleteMemory`; empty `catch {}` replaced with `console.error` on the memory paths; slash-command docs refreshed (provider priority, typos, removed params)

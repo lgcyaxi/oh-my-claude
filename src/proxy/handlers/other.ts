@@ -52,7 +52,12 @@ export async function handleOtherRequest(
 		if (canonicalPath === '/api/oauth/usage' && upstreamResponse.ok) {
 			cacheUsageResponse(
 				upstreamResponse.clone() as globalThis.Response,
-			).catch(() => {});
+			).catch((e) =>
+				console.warn(
+					`[proxy #${reqId}] usage cache failed:`,
+					e instanceof Error ? e.message : e,
+				),
+			);
 		}
 
 		return createStreamingResponse(upstreamResponse);
