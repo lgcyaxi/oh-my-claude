@@ -4,7 +4,13 @@ All notable changes to oh-my-claude are documented here. Detailed changelogs are
 
 ## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-25
 
-### Latest: v2.2.14-beta.5
+### Latest: v2.2.14-beta.6
+
+- **Critical fix: `bun add -g .../tarball/dev` now installs cleanly** — GitHub dev-channel tarballs ship source only (`dist/` is gitignored); beta.5 and earlier had no `prepare` lifecycle hook, so fresh machines fell through to a TS-source fallback in `bin/` that failed with a cryptic `Unexpected … zod/v3/types.js:1:1` parse error under bun 1.3.13 on Windows. Added `scripts/prepare.cjs` wired to the `prepare` script (replaces the redundant `prepack`), which detects bun, runs `bun run build:all`, and fails loudly with bun install links if bun is missing. `OMC_SKIP_PREPARE=1` escape hatch; skips when `dist/cli/cli.js` already exists so published npm tarballs remain no-op
+- **`bin/oh-my-claude.js` fails fast on missing `dist/`** — the silent TS fallback (the real vector for the zod trap) is now gated behind `OMC_ALLOW_SOURCE_FALLBACK=1` for dev use only. Normal users see a precise actionable error (package dir, one-line `bun run build:all` fix, bun install links) and exit 1 instead of the cryptic parser failure
+- **`installFromGitHub` belt-and-suspenders build block** — comment updated to reflect the new `prepare`-first flow; also fixed a stale `dist/cli.js` path check to `dist/cli/cli.js` (the old check was always falsy and always triggered a needless rebuild)
+
+### Previous: v2.2.14-beta.5
 
 - **Dashboard ref-counted lifecycle** — first `omc cc` starts the dashboard (idempotent; unchanged), last `omc cc` exit tears it down via the new `maybeStopDashboard()` probe which reads `proxy-sessions.json` + `proxy-instances.json` and only kills when both are empty. `omc proxy dashboard` marks its launch as `origin="manual"` via the new `dashboard.origin` marker; manual dashboards are sticky and are never auto-reaped, even after a later implicit `ensureDashboard()`
 - **B1 HIGH — no more `pid:0` sessions** — `omc cc` refuses to register a proxy session when the spawned bun child's PID is `0` (Windows edge case), `cleanupStaleEntries` purges any such legacy entries, and `omc cc stop` refuses to `process.kill(0, …)`. Removes a real footgun where the old code could signal the calling process group

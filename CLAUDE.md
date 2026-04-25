@@ -183,7 +183,8 @@ npm publish --access public
 - `src/cli/utils/proxy-lifecycle.ts` - Shared proxy daemon spawn logic + ref-counted `maybeStopDashboard` (paired with the `dashboard.origin` marker so manually-started dashboards are never auto-reaped)
 - `src/shared/auth/minimax.ts` - MiniMax authentication (cookie + groupId extraction via Playwright)
 - `scripts/minimax-login.ts` - Playwright script for MiniMax login (QR code scan)
-- `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility)
+- `scripts/prepare.cjs` - npm/bun `prepare` lifecycle hook: builds `dist/` on GitHub-tarball installs (requires bun, honours `OMC_SKIP_PREPARE=1`)
+- `bin/oh-my-claude.js` - CLI entry point (uses pathToFileURL for Windows compatibility; fails fast when `dist/` is missing — opt in to TS source fallback with `OMC_ALLOW_SOURCE_FALLBACK=1`)
 - `docs/guides/coworker-gui-acceptance.md` - Cross-platform coworker GUI acceptance tests (macOS/Windows/Linux)
 - `docs/guides/coworker-smoke-tests.md` - Manual and CI smoke-test commands for OpenCode coworker
 

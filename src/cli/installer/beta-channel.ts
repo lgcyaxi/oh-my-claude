@@ -136,17 +136,21 @@ export async function installFromGitHub(
 			timeout: 120000, // 2 minute timeout
 		});
 
-		// Build dist/ in the global install directory
-		// GitHub tarballs contain source only — the prepare script may silently
-		// skip the build if bun is not in npm's PATH, leaving dist/ empty.
+		// Belt-and-suspenders: the package.json `prepare` lifecycle script (added
+		// in v2.2.14-beta.6) normally rebuilds dist/ on GitHub-tarball installs.
+		// We re-run the build here only if it got skipped (e.g. npm was invoked
+		// with --ignore-scripts, bun missing from npm's PATH at install time, or
+		// an older package version that predates the prepare hook).
 		const globalRoot = execSync('npm root -g', {
 			encoding: 'utf-8',
 			stdio: ['pipe', 'pipe', 'pipe'],
 		}).trim();
 		const globalPkgDir = join(globalRoot, '@lgcyaxi', 'oh-my-claude');
 
-		if (!existsSync(join(globalPkgDir, 'dist', 'cli.js'))) {
-			console.log('Building from source (dist/ not found)...');
+		if (!existsSync(join(globalPkgDir, 'dist', 'cli', 'cli.js'))) {
+			console.log(
+				'Building from source (dist/cli/cli.js not found; prepare script was likely skipped)...',
+			);
 			execSync('bun run build:all', {
 				cwd: globalPkgDir,
 				stdio: 'inherit',
