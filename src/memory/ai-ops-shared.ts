@@ -8,10 +8,36 @@
 // ─── AI Response Parsing ──────────────────────────────────────────
 
 /**
- * Extract the first JSON object from an AI response string.
- * AI models often wrap JSON in markdown fences or explanatory text.
+ * Extract the first top-level JSON object from an AI response string.
+ * AI models often wrap JSON in markdown fences or explanatory text and
+ * sometimes emit multiple JSON blobs. The old regex
+ * `/\{[\s\S]*\}/` was greedy — it grabbed from the first `{` to the
+ * LAST `}` in the whole response, which breaks when there is trailing
+ * commentary with braces or multiple concatenated JSON objects.
+ *
+ * Strategy:
+ *  1. Find each candidate `{` in order.
+ *  2. Walk forward tracking brace depth with string/escape awareness.
+ *  3. The first balanced substring that parses as JSON wins.
+ *  4. Fall back to the old regex only if nothing balanced parses, so we
+ *     degrade gracefully if our scanner is wrong about a model's quirk.
  */
 export function parseAIJsonResult<T = unknown>(content: string): T | null {
+	if (!content) return null;
+
+	for (let start = 0; start < content.length; start++) {
+		if (content[start] !== '{') continue;
+		const end = findBalancedBraceEnd(content, start);
+		if (end === -1) continue;
+		const candidate = content.slice(start, end + 1);
+		try {
+			return JSON.parse(candidate) as T;
+		} catch {
+			// Not this one — try the next `{` position.
+		}
+	}
+
+	// Fallback: old greedy regex (kept so we fail no worse than before).
 	const match = content.match(/\{[\s\S]*\}/);
 	if (!match) return null;
 	try {
@@ -19,6 +45,44 @@ export function parseAIJsonResult<T = unknown>(content: string): T | null {
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Walk the string starting at `start` (which must point at `{`) and
+ * return the index of the matching closing `}`. Respects strings,
+ * escape sequences, and nested braces. Returns -1 if unbalanced.
+ */
+function findBalancedBraceEnd(s: string, start: number): number {
+	let depth = 0;
+	let inString = false;
+	let escape = false;
+	for (let i = start; i < s.length; i++) {
+		const c = s[i];
+		if (escape) {
+			escape = false;
+			continue;
+		}
+		if (inString) {
+			if (c === '\\') {
+				escape = true;
+			} else if (c === '"') {
+				inString = false;
+			}
+			continue;
+		}
+		if (c === '"') {
+			inString = true;
+			continue;
+		}
+		if (c === '{') {
+			depth += 1;
+		} else if (c === '}') {
+			depth -= 1;
+			if (depth === 0) return i;
+			if (depth < 0) return -1;
+		}
+	}
+	return -1;
 }
 
 // ─── Content Merge Utilities ──────────────────────────────────────

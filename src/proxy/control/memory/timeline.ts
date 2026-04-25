@@ -11,6 +11,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { parseFrontmatter } from './io';
+import { formatLocalYYYYMMDD } from '../../../memory/parser';
 
 export async function regenerateTimeline(memRoot: string): Promise<void> {
 	const entries: Array<{
@@ -51,7 +52,7 @@ export async function regenerateTimeline(memRoot: string): Promise<void> {
 	entries.sort((a, b) => (b.created || '').localeCompare(a.created || ''));
 
 	const now = new Date();
-	const todayStr = now.toISOString().slice(0, 10);
+	const todayStr = formatLocalYYYYMMDD(now);
 	const lines = [
 		'# Memory Timeline',
 		`> ${entries.length} memories | Updated: ${now.toISOString()}`,

@@ -51,6 +51,14 @@ export const HOOKS = {
 		matcher: '.*',
 		source: './post-tool-use/post-tool.ts',
 	},
+	'auto-rotate': {
+		name: 'auto-rotate',
+		description:
+			'SessionStart: prune stale session logs and compact past-date memory files (daily rollups)',
+		type: 'SessionStart',
+		matcher: '.*',
+		source: './session-start/auto-rotate.ts',
+	},
 } as const;
 
 export type HookName = keyof typeof HOOKS;

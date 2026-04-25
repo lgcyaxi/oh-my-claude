@@ -86,12 +86,26 @@ export function serializeMemoryFile(entry: MemoryEntry): string {
 }
 
 /**
+ * Format a Date as `YYYY-MM-DD` in the local timezone. Using
+ * `toISOString().slice(0,10)` produces a UTC day boundary, so users
+ * west of UTC (e.g. UTC-7) would see evening sessions land in the next
+ * calendar day. This helper honours `Date#getFullYear` / `#getMonth` /
+ * `#getDate` to stay aligned with the user's local clock.
+ */
+export function formatLocalYYYYMMDD(date: Date): string {
+	const y = date.getFullYear();
+	const m = String(date.getMonth() + 1).padStart(2, '0');
+	const d = String(date.getDate()).padStart(2, '0');
+	return `${y}-${m}-${d}`;
+}
+
+/**
  * Generate a memory ID from a title and timestamp.
- * Format: YYYY-MM-DD-slugified-title
+ * Format: YYYY-MM-DD-slugified-title (local time — see formatLocalYYYYMMDD).
  */
 export function generateMemoryId(title: string, date?: Date): string {
 	const d = date ?? new Date();
-	const datePrefix = d.toISOString().slice(0, 10); // YYYY-MM-DD
+	const datePrefix = formatLocalYYYYMMDD(d);
 	const slug = slugify(title);
 	return `${datePrefix}-${slug}`;
 }

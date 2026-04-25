@@ -27,6 +27,10 @@ interface ClaudeSettings {
 			matcher: string;
 			hooks: Array<{ type: string; command: string }>;
 		}>;
+		SessionStart?: Array<{
+			matcher: string;
+			hooks: Array<{ type: string; command: string }>;
+		}>;
 	};
 	mcpServers?: Record<
 		string,
@@ -145,7 +149,12 @@ export function saveSettings(settings: ClaudeSettings): void {
  */
 function addHook(
 	settings: ClaudeSettings,
-	hookType: 'PreToolUse' | 'PostToolUse' | 'Stop' | 'UserPromptSubmit',
+	hookType:
+		| 'PreToolUse'
+		| 'PostToolUse'
+		| 'Stop'
+		| 'UserPromptSubmit'
+		| 'SessionStart',
 	matcher: string,
 	command: string,
 	force = false,
@@ -196,7 +205,12 @@ function addHook(
  */
 function removeHook(
 	settings: ClaudeSettings,
-	hookType: 'PreToolUse' | 'PostToolUse' | 'Stop' | 'UserPromptSubmit',
+	hookType:
+		| 'PreToolUse'
+		| 'PostToolUse'
+		| 'Stop'
+		| 'UserPromptSubmit'
+		| 'SessionStart',
 	identifier: string,
 ): boolean {
 	if (!settings.hooks?.[hookType]) {
@@ -432,6 +446,26 @@ export function installHooks(
 		}
 	} else {
 		skipped.push('preference-awareness (already installed)');
+	}
+
+	// Auto-rotate hook (SessionStart — prunes stale session logs and compacts
+	// past-date memory files so `.claude/oh-my-claude/memory/sessions` and
+	// `notes/` don't grow unboundedly).
+	const autoRotateResult = addHook(
+		settings,
+		'SessionStart',
+		'.*',
+		`${nodeCmd} "${join(hooksDir, 'auto-rotate.js')}"`,
+		force,
+	);
+	if (autoRotateResult) {
+		if (force) {
+			updated.push('auto-rotate (SessionStart)');
+		} else {
+			installed.push('auto-rotate (SessionStart)');
+		}
+	} else {
+		skipped.push('auto-rotate (SessionStart already installed)');
 	}
 
 	saveSettings(settings);

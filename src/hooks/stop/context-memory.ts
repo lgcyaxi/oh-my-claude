@@ -33,6 +33,8 @@ import {
 	getSessionLogSizeKB,
 	readSessionLog,
 	clearSessionLog,
+	formatLocalYYYYMMDDLite,
+	formatLocalHHMMSSLite,
 } from '../../memory/hooks';
 
 // ---- Input types for different hook events ----
@@ -268,8 +270,11 @@ function saveSessionMemory(
 	mkdirSync(memoryDir, { recursive: true });
 
 	const now = new Date();
-	const dateStr = now.toISOString().slice(0, 10);
-	const timeStr = now.toISOString().slice(11, 19).replace(/:/g, '');
+	// Use local-time YYYY-MM-DD / HHMMSS so evening sessions in timezones
+	// west of UTC do not land in tomorrow's date folder (matches
+	// `formatLocalYYYYMMDD` in src/memory/parser.ts).
+	const dateStr = formatLocalYYYYMMDDLite(now);
+	const timeStr = formatLocalHHMMSSLite(now);
 	const prefix = trigger === 'session-end' ? 'session' : 'context-save';
 	const id = `${prefix}-${dateStr}-${timeStr}`;
 
@@ -370,8 +375,8 @@ function saveMiniNote(projectCwd?: string): void {
 	mkdirSync(notesDir, { recursive: true });
 
 	const now = new Date();
-	const dateStr = now.toISOString().slice(0, 10);
-	const timeStr = now.toISOString().slice(11, 19).replace(/:/g, '');
+	const dateStr = formatLocalYYYYMMDDLite(now);
+	const timeStr = formatLocalHHMMSSLite(now);
 	const id = `auto-commit-${dateStr}-${timeStr}`;
 
 	const content = [

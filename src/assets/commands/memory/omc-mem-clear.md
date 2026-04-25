@@ -45,7 +45,7 @@ Use mcp__oh-my-claude__clear_memories with:
 - scope: <from arguments, default "all">
 ```
 
-This uses AI (ZhiPu -> MiniMax -> DeepSeek) to identify deletion candidates.
+This uses AI (MiniMax-CN -> MiniMax -> ZhiPu -> DeepSeek, per `memory.aiProviderPriority` / `resolveMemoryProvider`) to identify deletion candidates.
 
 **Step 3: Display deletion candidates**
 
@@ -87,9 +87,12 @@ If user confirms, execute:
 Use mcp__oh-my-claude__clear_memories with:
 - mode: "execute"
 - ids: <selected memory IDs>
-- recordInTimeline: true
-- removeTags: true  (removes keywords from Timeline record)
 ```
+
+Note: Timeline recording is automatic — on successful delete, a
+strikethrough entry is written to the cleared log so you retain the
+"what was done" history without keywords/tags (preventing the cleared
+memory from re-surfacing in recall).
 
 **Step 6: Show results**
 
@@ -114,7 +117,7 @@ Timeline records created (strikethrough, no tags):
 ## Error Handling
 
 **If no AI provider available:**
-Display message that memory cleanup requires at least one configured provider (ZhiPu, MiniMax, or DeepSeek).
+Display message that memory cleanup requires at least one configured provider (MiniMax-CN, MiniMax, ZhiPu, or DeepSeek).
 
 **If MCP server not available:**
 Display error and suggest running `oh-my-claude doctor`.

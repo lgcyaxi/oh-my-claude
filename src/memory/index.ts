@@ -51,6 +51,7 @@ export {
 	generateTitle,
 	nowISO,
 	stripPrivateBlocks,
+	formatLocalYYYYMMDD,
 } from './parser';
 
 // Search

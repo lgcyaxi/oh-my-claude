@@ -11,6 +11,8 @@ import {
 	mkdirSync,
 	statSync,
 	appendFileSync,
+	readdirSync,
+	unlinkSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -103,11 +105,70 @@ export function clearSessionLog(projectCwd?: string): void {
 	try {
 		const logPath = getSessionLogPath(projectCwd);
 		if (existsSync(logPath)) {
-			writeFileSync(logPath, '', 'utf-8');
+			// Delete rather than truncate so we do not leave zero-byte
+			// `active-session-<cwdhash>.jsonl` files orphaned on disk for
+			// every CWD we have ever touched.
+			unlinkSync(logPath);
 		}
 	} catch {
 		// Ignore
 	}
+}
+
+/**
+ * Remove stale/empty `active-session-<hash>.jsonl` files from the global
+ * sessions dir. Intended to be called on SessionStart. Returns the number
+ * of files unlinked.
+ *
+ * Safety rules:
+ *  - Only considers files matching `active-session*.jsonl`.
+ *  - Skips the file belonging to the CURRENT cwd (never touch the log
+ *    that the starting session is about to write into).
+ *  - Unlinks if either (a) size == 0, or (b) mtime is older than
+ *    `maxAgeMs` (default 24h).
+ */
+export function pruneEmptySessionLogs(
+	options: { currentCwd?: string; maxAgeMs?: number } = {},
+): number {
+	const maxAgeMs = options.maxAgeMs ?? 24 * 60 * 60 * 1000;
+	const currentLogPath = options.currentCwd
+		? getSessionLogPath(options.currentCwd)
+		: null;
+
+	const sessionsDir = join(
+		homedir(),
+		'.claude',
+		'oh-my-claude',
+		'memory',
+		'sessions',
+	);
+
+	let removed = 0;
+	try {
+		if (!existsSync(sessionsDir)) return 0;
+		const entries = readdirSync(sessionsDir);
+		const now = Date.now();
+		for (const name of entries) {
+			if (!name.startsWith('active-session') || !name.endsWith('.jsonl')) {
+				continue;
+			}
+			const full = join(sessionsDir, name);
+			if (currentLogPath && full === currentLogPath) continue;
+			try {
+				const s = statSync(full);
+				const stale = now - s.mtimeMs > maxAgeMs;
+				if (s.size === 0 || stale) {
+					unlinkSync(full);
+					removed += 1;
+				}
+			} catch {
+				// Per-file failures are non-fatal; keep scanning.
+			}
+		}
+	} catch {
+		// Dir-level failures are non-fatal.
+	}
+	return removed;
 }
 
 // ---- Prompt logging ----

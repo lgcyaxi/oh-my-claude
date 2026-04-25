@@ -4,7 +4,13 @@ All notable changes to oh-my-claude are documented here. Detailed changelogs are
 
 ## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-25
 
-### Latest: v2.2.14-beta.2
+### Latest: v2.2.14-beta.3
+
+- **Memory auto-rotation on SessionStart** — new `auto-rotate` hook prunes zero-byte `active-session-<hash>.jsonl` files and compacts past-date sessions + auto-commit notes into one `YYYY-MM-DD-daily-rollup.md` per day. Primary path uses the same internals as `/omc-mem-summary` (provider order: **minimax-cn → minimax → zhipu → deepseek**, domestic MiniMax preferred); deterministic fallback when the proxy is unreachable. Runs under a 20s wall clock, caps per-run work via `memory.autoRotate.maxDatesPerRun` (default 2), never blocks Claude Code startup, and logs every action to `~/.claude/oh-my-claude/memory/.rotation-log.jsonl`
+- **Memory ops audit: 9 bug fixes** — `clearSessionLog` now `unlinkSync`s (stops the zero-byte file graveyard); `summarize_memories` MCP input schema now accepts `narrative` / `dateRange` / `type`; `removeFromIndex` is finally `async` + `await indexer.flush()`; memory IDs use local time (fixes late-evening PDT sessions landing on the next UTC day); `parseAIJsonResult` uses a string-aware brace-walker instead of a greedy regex; `compact_memories` only drops SQLite rows after a successful `deleteMemory`; empty `catch {}` replaced with `console.error` on the memory paths; slash-command docs refreshed (provider priority, typos, removed params)
+- **`memory.autoRotate` config** — new Zod block: `enabled` / `graceDays` / `thresholdFiles` / `maxDatesPerRun` / `useLLMWhenAvailable` with safe defaults
+
+### Previous: v2.2.14-beta.2
 
 - **DeepSeek V4 + GLM Claude-tier mapping** — proxy-side `claudeTierMap` rewrites Claude-tier requests: DeepSeek `opus → deepseek-v4-pro (effort=max)` / `sonnet → deepseek-v4-pro (effort=high)` / `haiku → deepseek-v4-flash (fast path)`; ZhiPu + Z.AI `opus → glm-5.1` / `sonnet → glm-5-turbo` / `haiku → glm-4.5-air`
 - **DeepSeek V4 Flash + GLM-4.5 Air** — new haiku-tier models added to the DeepSeek and ZhiPu/Z.AI rosters

@@ -49,7 +49,7 @@ Use mcp__oh-my-claude__summarize_memories with:
 - scope: <from arguments, default "all">
 ```
 
-This uses AI (ZhiPu -> MiniMax -> DeepSeek) to create a consolidated timeline.
+This uses AI (MiniMax-CN -> MiniMax -> ZhiPu -> DeepSeek, per `memory.aiProviderPriority` / `resolveMemoryProvider`) to create a consolidated timeline.
 
 **Step 3: Display summary preview**
 
@@ -109,7 +109,7 @@ Summary Saved
 ## Error Handling
 
 **If no AI provider available:**
-Display message that summarization requires at least one configured provider (ZhiPu, MiniMax, or DeepSeek).
+Display message that summarization requires at least one configured provider (MiniMax-CN, MiniMax, ZhiPu, or DeepSeek).
 
 **If MCP server not available:**
 Display error and suggest running `oh-my-claude doctor`.

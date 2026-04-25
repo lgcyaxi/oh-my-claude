@@ -32,6 +32,10 @@ import {
 	ensureSessionDir,
 	writeCurrentPPID,
 } from '../../statusline/session';
+import {
+	formatLocalYYYYMMDDLite,
+	formatLocalHHMMSSLite,
+} from '../../memory/hooks';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -486,8 +490,8 @@ function saveMiniNote(
 
 		mkdirSync(notesDir, { recursive: true });
 		const now = new Date();
-		const dateStr = now.toISOString().slice(0, 10);
-		const timeStr = now.toISOString().slice(11, 19).replace(/:/g, '');
+		const dateStr = formatLocalYYYYMMDDLite(now);
+		const timeStr = formatLocalHHMMSSLite(now);
 
 		const content = [
 			'---',

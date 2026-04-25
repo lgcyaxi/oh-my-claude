@@ -35,7 +35,7 @@ Use mcp__oh-my-claude__compact_memories with:
 - scope: <from arguments, default "all">
 ```
 
-This uses AI (ZhiPu -> MiniMax -> DeepSeek) to analyze notes and suggest merge groups.
+This uses AI (MiniMax-CN -> MiniMax -> ZhiPu -> DeepSeek, per `memory.aiProviderPriority` / `resolveMemoryProvider`) to analyze notes and suggest merge groups.
 
 **Step 3: Display suggested groups**
 
@@ -93,7 +93,7 @@ New Memories:
 ## Error Handling
 
 **If no AI provider available:**
-Display message that compaction requires at least one configured provider (ZhiPu, MiniMax, or DeepSeek).
+Display message that compaction requires at least one configured provider (MiniMax-CN, MiniMax, ZhiPu, or DeepSeek).
 
 **If MCP server not available:**
 Display error and suggest running `oh-my-claude doctor`.
@@ -104,13 +104,13 @@ Display message that there are not enough memories to compact (need at least 2).
 ## Examples
 
 ```
-User: /omc-compact
+User: /omc-mem-compact
 → Analyzes all memories from both project and global
 
-User: /omc-compact project
+User: /omc-mem-compact project
 → Only analyzes project-specific memories
 
-User: /omc-compact global
+User: /omc-mem-compact global
 → Only analyzes global memories
 ```
 

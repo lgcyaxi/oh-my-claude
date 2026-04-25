@@ -4,6 +4,8 @@ export {
 	getSessionLogPath,
 	findGitRoot,
 	resolveCanonicalRoot,
+	formatLocalYYYYMMDDLite,
+	formatLocalHHMMSSLite,
 } from './paths';
 
 export {
@@ -14,7 +16,7 @@ export {
 } from './proxy';
 
 export { loadHookConfig } from './config';
-export type { HookConfig } from './config';
+export type { HookConfig, AutoRotateConfig } from './config';
 
 export {
 	loadState,
@@ -22,6 +24,7 @@ export {
 	getSessionLogSizeKB,
 	readSessionLog,
 	clearSessionLog,
+	pruneEmptySessionLogs,
 	logUserPrompt,
 } from './session';
 export type { ContextMemoryState } from './session';

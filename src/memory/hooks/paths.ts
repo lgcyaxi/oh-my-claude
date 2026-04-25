@@ -14,6 +14,27 @@ export function shortHash(str: string): string {
 	return createHash('sha256').update(str).digest('hex').slice(0, 8);
 }
 
+/**
+ * Format a Date as `YYYY-MM-DD` in local time. Keep in sync with
+ * `formatLocalYYYYMMDD` in `src/memory/parser.ts`. Duplicated here so
+ * hook scripts do not have to import the full memory module (which
+ * pulls in SQLite / WASM).
+ */
+export function formatLocalYYYYMMDDLite(date: Date): string {
+	const y = date.getFullYear();
+	const m = String(date.getMonth() + 1).padStart(2, '0');
+	const d = String(date.getDate()).padStart(2, '0');
+	return `${y}-${m}-${d}`;
+}
+
+/** Format a Date as `HHMMSS` in local time for filename timestamp suffixes. */
+export function formatLocalHHMMSSLite(date: Date): string {
+	const h = String(date.getHours()).padStart(2, '0');
+	const m = String(date.getMinutes()).padStart(2, '0');
+	const s = String(date.getSeconds()).padStart(2, '0');
+	return `${h}${m}${s}`;
+}
+
 export function getStateFile(projectCwd?: string): string {
 	const suffix = projectCwd ? `-${shortHash(projectCwd)}` : '';
 	return join(STATE_DIR, `context-memory-state${suffix}.json`);

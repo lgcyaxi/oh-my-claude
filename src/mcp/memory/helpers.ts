@@ -13,8 +13,8 @@ import { join } from 'node:path';
 export function afterMemoryMutation(projectRoot: string | undefined): void {
 	try {
 		regenerateTimelines(projectRoot);
-	} catch {
-		/* best-effort */
+	} catch (e) {
+		console.error('[omc-memory] regenerateTimelines failed:', e);
 	}
 }
 
@@ -51,27 +51,37 @@ export async function indexNewMemory(
 /**
  * Remove a deleted memory from the SQLite FTS index.
  * Call after deleteMemory() to keep the index in sync.
+ *
+ * NOTE: `indexer.removeFile` is async. Earlier versions fired it without
+ * awaiting and skipped `flush()`, which left the `index.db` file out of
+ * sync with disk until a later mutation flushed it. Callers should now
+ * `await removeFromIndex(...)` to guarantee durability.
  */
-export function removeFromIndex(
+export async function removeFromIndex(
 	id: string,
 	projectRoot: string | undefined,
 	indexer: import('../../memory/indexer').MemoryIndexer | null,
-): void {
+): Promise<void> {
 	if (!indexer?.isReady()) return;
 	try {
-		// Try both notes and sessions subdirs in both scopes
+		// Try both notes and sessions subdirs in both scopes.
 		for (const subdir of ['notes', 'sessions']) {
 			if (projectRoot) {
 				const projDir = getProjectMemoryDir(projectRoot);
-				if (projDir)
-					indexer.removeFile(join(projDir, subdir, `${id}.md`));
+				if (projDir) {
+					await indexer.removeFile(
+						join(projDir, subdir, `${id}.md`),
+					);
+				}
 			}
 			const globalDir = getMemoryDir();
-			if (globalDir)
-				indexer.removeFile(join(globalDir, subdir, `${id}.md`));
+			if (globalDir) {
+				await indexer.removeFile(join(globalDir, subdir, `${id}.md`));
+			}
 		}
-	} catch {
-		/* best-effort */
+		await indexer.flush();
+	} catch (e) {
+		console.error('[omc-memory] removeFromIndex failed:', e);
 	}
 }
 

@@ -90,7 +90,10 @@ export async function handleMemoryAiOp(
 					analysisResult = parseAIJsonResult(aiResponse.content);
 					usedProvider = aiResponse.provider;
 				} catch (error) {
-					// AI call failed
+					console.error(
+						'[omc-memory] compact analyze AI call failed:',
+						error,
+					);
 				}
 
 				if (!analysisResult) {
@@ -148,6 +151,7 @@ export async function handleMemoryAiOp(
 					success: boolean;
 					newId?: string;
 					error?: string;
+					deleteErrors?: string[];
 				}> = [];
 
 				for (const group of groups) {
@@ -212,20 +216,37 @@ export async function handleMemoryAiOp(
 							indexer,
 						);
 
-						// Delete original memories and remove from index
+						// Delete original memories and remove from index.
+						// Only strip the index row if the file delete actually
+						// succeeded, so we never leave phantom FTS rows
+						// pointing at on-disk files (and vice versa).
+						const deleteErrors: string[] = [];
 						for (const memory of memories) {
-							deleteMemory(memory.id, 'all', cachedProjectRoot);
-							removeFromIndex(
+							const del = deleteMemory(
 								memory.id,
+								'all',
 								cachedProjectRoot,
-								indexer,
 							);
+							if (del.success) {
+								await removeFromIndex(
+									memory.id,
+									cachedProjectRoot,
+									indexer,
+								);
+							} else {
+								deleteErrors.push(
+									`${memory.id}: ${del.error ?? 'unknown'}`,
+								);
+							}
 						}
 
 						results.push({
 							group: group.title,
 							success: true,
 							newId: createResult.data!.id,
+							...(deleteErrors.length > 0
+								? { deleteErrors }
+								: {}),
 						});
 					} catch (error) {
 						results.push({
@@ -328,8 +349,11 @@ export async function handleMemoryAiOp(
 					});
 					analysisResult = parseAIJsonResult(aiResponse.content);
 					usedProvider = aiResponse.provider;
-				} catch {
-					// AI call failed
+				} catch (error) {
+					console.error(
+						'[omc-memory] clear analyze AI call failed:',
+						error,
+					);
 				}
 
 				if (!analysisResult) {
@@ -426,12 +450,19 @@ export async function handleMemoryAiOp(
 									memScope as 'project' | 'global',
 									cachedProjectRoot,
 								);
-							} catch {
-								// Timeline recording is best-effort
+							} catch (e) {
+								console.error(
+									'[omc-memory] saveClearedEntry failed:',
+									e,
+								);
 							}
 
 							// Clean index entry
-							removeFromIndex(id, cachedProjectRoot, indexer);
+							await removeFromIndex(
+								id,
+								cachedProjectRoot,
+								indexer,
+							);
 							results.push({ id, success: true, title });
 						} else {
 							results.push({
@@ -614,8 +645,11 @@ export async function handleMemoryAiOp(
 					});
 					summaryResult = parseAIJsonResult(aiResponse.content);
 					usedProvider = aiResponse.provider;
-				} catch {
-					// AI call failed
+				} catch (error) {
+					console.error(
+						'[omc-memory] summarize analyze AI call failed:',
+						error,
+					);
 				}
 
 				if (!summaryResult) {
@@ -755,13 +789,27 @@ export async function handleMemoryAiOp(
 								cachedProjectRoot,
 							);
 							if (deleteResult.success) {
-								removeFromIndex(id, cachedProjectRoot, indexer);
+								await removeFromIndex(
+									id,
+									cachedProjectRoot,
+									indexer,
+								);
 								archivedCount++;
 							} else {
 								archiveErrors++;
+								console.error(
+									'[omc-memory] summarize archive: delete failed for',
+									id,
+									deleteResult.error,
+								);
 							}
-						} catch {
+						} catch (e) {
 							archiveErrors++;
+							console.error(
+								'[omc-memory] summarize archive exception for',
+								id,
+								e,
+							);
 						}
 					}
 				}

@@ -1,6 +1,6 @@
 {
   "name": "@lgcyaxi/oh-my-claude",
-  "version": "2.2.14-beta.2",
+  "version": "2.2.14-beta.3",
   "description": "Multi-agent orchestration plugin for Claude Code with multi-provider support",
   "type": "module",
   "workspaces": [
@@ -30,7 +30,7 @@
     "prepack": "bun run build:all",
     "build": "bun build src/index.ts src/cli/cli.ts --outdir dist --target node",
     "build:mcp": "bun build src/mcp/server/index.ts --outdir dist/mcp --target node && mv dist/mcp/index.js dist/mcp/server.js && bun run scripts/copy-wasm.ts",
-    "build:hooks": "bun build src/hooks/pre-tool-use/comment-checker.ts src/hooks/stop/todo-continuation.ts src/hooks/pre-tool-use/task-tracker.ts src/hooks/user-prompt-submit/memory-awareness.ts src/hooks/stop/context-memory.ts src/hooks/user-prompt-submit/preference-awareness.ts src/hooks/post-tool-use/post-tool.ts --outdir dist/hooks --entry-naming [name].js --target node",
+    "build:hooks": "bun build src/hooks/pre-tool-use/comment-checker.ts src/hooks/stop/todo-continuation.ts src/hooks/pre-tool-use/task-tracker.ts src/hooks/user-prompt-submit/memory-awareness.ts src/hooks/stop/context-memory.ts src/hooks/user-prompt-submit/preference-awareness.ts src/hooks/post-tool-use/post-tool.ts src/hooks/session-start/auto-rotate.ts --outdir dist/hooks --entry-naming [name].js --target node",
     "build:statusline": "TS=$(date +%s) && bun build src/statusline/statusline.ts --outdir dist/statusline --target node --define \"__OMC_BUILD_HASH__='$TS'\"",
     "build:proxy": "bun build src/proxy/server.ts src/proxy/dashboard.ts --outdir dist/proxy --target bun",
     "build:web": "cd apps/web && npx vite build",

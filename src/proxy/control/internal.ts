@@ -174,10 +174,12 @@ function resolveMemoryProvider(
 		}
 	}
 
-	// 4. First available from priority list
+	// 4. First available from priority list (minimax-cn preferred; it's the
+	//    domestic MiniMax endpoint which tends to have lower latency + better
+	//    quota for the user's main geo).
 	const priority = memCfg?.aiProviderPriority ?? [
+		'minimax-cn',
 		'minimax',
-			'minimax-cn',
 		'zhipu',
 		'deepseek',
 	];

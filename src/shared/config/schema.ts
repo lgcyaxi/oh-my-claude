@@ -110,10 +110,12 @@ export const MemoryConfigSchema = z.object({
 	aiProvider: z.string().optional(),
 	/** Dedicated model for memory AI operations */
 	aiModel: z.string().optional(),
-	/** Provider priority for AI-powered features (compaction, summarization) */
+	/** Provider priority for AI-powered features (compaction, summarization).
+	 *  Domestic MiniMax (`minimax-cn`) is tried before the global endpoint
+	 *  because the primary user geo gets lower latency + better quota there. */
 	aiProviderPriority: z
 		.array(z.string())
-		.default(['zhipu', 'minimax', 'deepseek']),
+		.default(['minimax-cn', 'minimax', 'zhipu', 'deepseek']),
 	/** Embedding provider configuration for semantic search */
 	embedding: z
 		.object({
@@ -165,6 +167,33 @@ export const MemoryConfigSchema = z.object({
 			tagAndDefer: z.boolean().default(true),
 		})
 		.optional(),
+	/**
+	 * Automatic past-date rotation. Runs on SessionStart; bundles per-day
+	 * session/auto-commit files into a single daily-rollup note so the
+	 * memory tree stops growing indefinitely. Uses the configured memory
+	 * AI provider when available, falls back to a deterministic concat
+	 * when the proxy is unreachable so rotation still happens offline.
+	 */
+	autoRotate: z
+		.object({
+			/** Enable automatic rotation on SessionStart (default: true) */
+			enabled: z.boolean().default(true),
+			/** Do not rotate files whose date is within this many days of today (default: 1) */
+			graceDays: z.number().int().min(0).max(30).default(1),
+			/** Only rotate a date when it has at least this many files (default: 3) */
+			thresholdFiles: z.number().int().min(2).max(50).default(3),
+			/** Cap on how many dates to rotate per SessionStart (default: 2) */
+			maxDatesPerRun: z.number().int().min(1).max(20).default(2),
+			/** Prefer LLM narrative summary when proxy is healthy (default: true) */
+			useLLMWhenAvailable: z.boolean().default(true),
+		})
+		.default({
+			enabled: true,
+			graceDays: 1,
+			thresholdFiles: 3,
+			maxDatesPerRun: 2,
+			useLLMWhenAvailable: true,
+		}),
 });
 
 // Proxy configuration schema

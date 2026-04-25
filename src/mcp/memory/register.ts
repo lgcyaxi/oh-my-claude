@@ -326,6 +326,26 @@ Use this to condense many fine-grained memories into a single coherent overview.
 				scope: searchScope
 					.optional()
 					.describe('Which memories to include (default: all)'),
+				type: memoryType
+					.optional()
+					.describe(
+						"Filter by memory type: 'note' (user memories) or 'session' (session summaries). Default: all types",
+					),
+				narrative: z
+					.boolean()
+					.optional()
+					.describe(
+						"For 'analyze' mode: if true, produce a narrative/daily-story summary instead of a bullet-list timeline (used by /omc-mem-daily)",
+					),
+				dateRange: z
+					.object({
+						start: z.string().describe('ISO 8601 start of window'),
+						end: z.string().describe('ISO 8601 end of window'),
+					})
+					.optional()
+					.describe(
+						"For 'analyze' mode: explicit {start,end} ISO window. Takes precedence over days/after/before. Used by /omc-mem-daily to scope per-day narratives.",
+					),
 				summary: z
 					.string()
 					.optional()

@@ -15,6 +15,7 @@ import {
 	buildDailyNarrativePrompt,
 	BOILERPLATE_TAGS,
 } from '../../../memory/ai-ops-shared';
+import { formatLocalYYYYMMDD } from '../../../memory/parser';
 import type { MemoryEntryWithPath } from './types';
 import { parseFrontmatter } from './io';
 import { collectMemoryEntries } from './query';
@@ -323,7 +324,7 @@ export async function handleCompactOperation(
 				// Write merged file
 				const targetDir = entries[0]!.dir;
 				await mkdir(targetDir, { recursive: true });
-				const dateStr = new Date().toISOString().slice(0, 10);
+				const dateStr = formatLocalYYYYMMDD(new Date());
 				const slug = group.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
 				const newId = `${dateStr}-compact-${slug}`;
 				const newPath = join(targetDir, `${newId}.md`);
@@ -527,7 +528,7 @@ export async function handleSummarizeOperation(
 		}
 		await mkdir(targetDir, { recursive: true });
 
-		const dateStr = new Date().toISOString().slice(0, 10);
+		const dateStr = formatLocalYYYYMMDD(new Date());
 		const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
 		const newId = `${dateStr}-summary-${slug}`;
 		const newPath = join(targetDir, `${newId}.md`);
@@ -590,7 +591,7 @@ ${summary}`;
 		const { meta } = parseFrontmatter(raw);
 		if (Array.isArray(meta.tags)) for (const t of meta.tags) allTags.add(String(t).trim());
 	}
-	const dateRangeLabel = `${cutoff.slice(0, 10)} to ${new Date().toISOString().slice(0, 10)}`;
+	const dateRangeLabel = `${cutoff.slice(0, 10)} to ${formatLocalYYYYMMDD(new Date())}`;
 	const prompt = buildSummarizeAnalyzePrompt(summaryDetails, dateRangeLabel, allTags);
 
 	try {
