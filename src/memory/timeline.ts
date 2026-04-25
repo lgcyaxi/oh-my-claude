@@ -25,6 +25,7 @@ import { join } from 'node:path';
 
 import type { MemoryEntry } from './types';
 import { listMemories, getProjectMemoryDir, getMemoryDir } from './store';
+import { atomicWriteText } from '../shared/fs/file-lock.js';
 
 // ---- Types ----
 
@@ -596,6 +597,10 @@ function getTimelinePath(
 
 /**
  * Write TIMELINE.md to the appropriate directory for a scope.
+ *
+ * Uses `atomicWriteText` (temp file + rename) so concurrent readers in the
+ * memory-awareness hook + dashboard never observe a partial file. Previously
+ * `writeFileSync` did a truncating write that could be read mid-update.
  */
 export function writeTimeline(
 	scope: 'project' | 'global',
@@ -605,13 +610,7 @@ export function writeTimeline(
 	const path = getTimelinePath(scope, projectRoot);
 	if (!path) return;
 
-	// Ensure parent directory exists
-	const dir = join(path, '..');
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
-	}
-
-	writeFileSync(path, content, 'utf-8');
+	atomicWriteText(path, content);
 }
 
 /**

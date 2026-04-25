@@ -18,8 +18,9 @@ declare const window: any;
 import { chromium } from "playwright";
 import { homedir } from "os";
 import { join, dirname } from "path";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { mkdirSync, existsSync } from "fs";
 import { execSync } from "child_process";
+import { writeSecretFile } from "../src/shared/auth/store";
 
 const CREDS_PATH = join(homedir(), ".claude", "oh-my-claude", "aliyun-creds.json");
 
@@ -276,9 +277,9 @@ async function login() {
       process.exit(1);
     }
 
-    // Step 7: Save credentials
+    // Step 7: Save credentials with 0600 permissions on POSIX (HIGH-13).
     mkdirSync(dirname(CREDS_PATH), { recursive: true });
-    writeFileSync(
+    writeSecretFile(
       CREDS_PATH,
       JSON.stringify(
         {

@@ -27,6 +27,10 @@ const { join, dirname } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const ROOT = dirname(__dirname);
+// Keep this path in sync with DIST_MARKER_REL in src/cli/utils/paths.ts —
+// all three of update.ts, beta-channel.ts, and this script must agree on
+// the canonical "built" marker (regression from beta.5 that beta.6 and
+// beta.8 both touched).
 const DIST_MARKER = join(ROOT, "dist", "cli", "cli.js");
 
 function log(msg) {

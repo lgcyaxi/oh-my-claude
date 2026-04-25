@@ -8,12 +8,15 @@
 import {
 	existsSync,
 	readFileSync,
-	writeFileSync,
 	mkdirSync,
 	copyFileSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import {
+	atomicWriteJson,
+	withFileLockSync,
+} from '../../shared/fs/file-lock.js';
 
 /**
  * Thrown by `loadSettings()` when `~/.claude/settings.json` exists but is not
@@ -86,6 +89,21 @@ export function getSettingsPath(): string {
 }
 
 /**
+ * Advisory-lock path for settings.json. Every RMW cycle
+ * (`loadSettings → mutate → saveSettings`) runs under this lock so
+ * concurrent CLI invocations (`omc install` racing `omc doctor`, hook
+ * installers racing proxy daemon restart, etc.) can't stomp each other.
+ */
+function getSettingsLockPath(): string {
+	return getSettingsPath() + '.lock';
+}
+
+function getClaudeJsonLockPath(): string {
+	return join(homedir(), '.claude.json.lock');
+}
+
+
+/**
  * Clean up legacy MCP server name in ~/.claude.json (user-level config).
  * Claude Code reads both ~/.claude/settings.json and ~/.claude.json for MCP servers.
  * The old name "oh-my-claude-background" was renamed to "oh-my-claude".
@@ -97,47 +115,57 @@ function cleanupLegacyMcpName(): void {
 
 	try {
 		if (!existsSync(claudeJsonPath)) return;
-		const raw = readFileSync(claudeJsonPath, 'utf-8');
-		const data = JSON.parse(raw);
-		let changed = false;
+		withFileLockSync(getClaudeJsonLockPath(), () => {
+			const raw = readFileSync(claudeJsonPath, 'utf-8');
+			const data = JSON.parse(raw);
+			let changed = false;
 
-		const visit = (node: unknown) => {
-			if (!node || typeof node !== 'object') return;
-			if (Array.isArray(node)) {
-				for (const entry of node) visit(entry);
-				return;
-			}
-
-			const record = node as Record<string, unknown>;
-			const servers = record.mcpServers;
-			if (
-				servers &&
-				typeof servers === 'object' &&
-				!Array.isArray(servers)
-			) {
-				const serverRecord = servers as Record<string, unknown>;
-				if (serverRecord[legacyName]) {
-					if (!serverRecord[newName]) {
-						serverRecord[newName] = serverRecord[legacyName];
-					}
-					delete serverRecord[legacyName];
-					changed = true;
+			const visit = (node: unknown) => {
+				if (!node || typeof node !== 'object') return;
+				if (Array.isArray(node)) {
+					for (const entry of node) visit(entry);
+					return;
 				}
+
+				const record = node as Record<string, unknown>;
+				const servers = record.mcpServers;
+				if (
+					servers &&
+					typeof servers === 'object' &&
+					!Array.isArray(servers)
+				) {
+					const serverRecord = servers as Record<string, unknown>;
+					if (serverRecord[legacyName]) {
+						if (!serverRecord[newName]) {
+							serverRecord[newName] = serverRecord[legacyName];
+						}
+						delete serverRecord[legacyName];
+						changed = true;
+					}
+				}
+
+				for (const value of Object.values(record)) {
+					visit(value);
+				}
+			};
+
+			visit(data);
+
+			if (changed) {
+				writeClaudeJsonAtomic(claudeJsonPath, data);
 			}
-
-			for (const value of Object.values(record)) {
-				visit(value);
-			}
-		};
-
-		visit(data);
-
-		if (changed) {
-			writeFileSync(claudeJsonPath, JSON.stringify(data, null, 2) + '\n');
-		}
+		});
 	} catch {
 		// Non-critical — user can fix manually
 	}
+}
+
+/** Atomic write for ~/.claude.json (uses 2-space indent + trailing newline). */
+function writeClaudeJsonAtomic(path: string, data: unknown): void {
+	atomicWriteJson(path, data, {
+		indent: 2,
+		trailingNewline: true,
+	});
 }
 
 /**
@@ -182,7 +210,10 @@ export function loadSettings(): ClaudeSettings {
 }
 
 /**
- * Save Claude Code settings
+ * Save Claude Code settings atomically (temp file + rename).
+ *
+ * Uses `atomicWriteJson` with 2-space indent and no trailing newline — the
+ * Claude Code convention for settings.json.
  */
 export function saveSettings(settings: ClaudeSettings): void {
 	const settingsPath = getSettingsPath();
@@ -192,7 +223,10 @@ export function saveSettings(settings: ClaudeSettings): void {
 		mkdirSync(dir, { recursive: true });
 	}
 
-	writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+	atomicWriteJson(settingsPath, settings, {
+		indent: 2,
+		trailingNewline: false,
+	});
 }
 
 /**
@@ -338,6 +372,19 @@ function getNodeCommand(): string {
 export function installHooks(
 	hooksDir: string,
 	force = false,
+): {
+	installed: string[];
+	updated: string[];
+	skipped: string[];
+} {
+	return withFileLockSync(getSettingsLockPath(), () =>
+		installHooksLocked(hooksDir, force),
+	);
+}
+
+function installHooksLocked(
+	hooksDir: string,
+	force: boolean,
 ): {
 	installed: string[];
 	updated: string[];
@@ -558,17 +605,19 @@ function syncMcpToClaudeJson(
 
 	try {
 		if (!existsSync(claudeJsonPath)) return;
-		const raw = readFileSync(claudeJsonPath, 'utf-8');
-		const data = JSON.parse(raw);
+		withFileLockSync(getClaudeJsonLockPath(), () => {
+			const raw = readFileSync(claudeJsonPath, 'utf-8');
+			const data = JSON.parse(raw);
 
-		// Only sync if ~/.claude.json has a top-level mcpServers section
-		if (!data.mcpServers || typeof data.mcpServers !== 'object') return;
+			// Only sync if ~/.claude.json has a top-level mcpServers section
+			if (!data.mcpServers || typeof data.mcpServers !== 'object') return;
 
-		// Skip if already present (unless force)
-		if (data.mcpServers[name] && !force) return;
+			// Skip if already present (unless force)
+			if (data.mcpServers[name] && !force) return;
 
-		data.mcpServers[name] = config;
-		writeFileSync(claudeJsonPath, JSON.stringify(data, null, 2) + '\n');
+			data.mcpServers[name] = config;
+			writeClaudeJsonAtomic(claudeJsonPath, data);
+		});
 	} catch {
 		// Non-critical — settings.json is the primary config
 	}
@@ -582,13 +631,15 @@ function removeMcpFromClaudeJson(name: string): void {
 
 	try {
 		if (!existsSync(claudeJsonPath)) return;
-		const raw = readFileSync(claudeJsonPath, 'utf-8');
-		const data = JSON.parse(raw);
+		withFileLockSync(getClaudeJsonLockPath(), () => {
+			const raw = readFileSync(claudeJsonPath, 'utf-8');
+			const data = JSON.parse(raw);
 
-		if (!data.mcpServers?.[name]) return;
+			if (!data.mcpServers?.[name]) return;
 
-		delete data.mcpServers[name];
-		writeFileSync(claudeJsonPath, JSON.stringify(data, null, 2) + '\n');
+			delete data.mcpServers[name];
+			writeClaudeJsonAtomic(claudeJsonPath, data);
+		});
 	} catch {
 		// Non-critical
 	}
@@ -598,6 +649,12 @@ function removeMcpFromClaudeJson(name: string): void {
  * Install oh-my-claude MCP server using claude mcp add CLI
  */
 export function installMcpServer(serverPath: string, force = false): boolean {
+	return withFileLockSync(getSettingsLockPath(), () =>
+		installMcpServerLocked(serverPath, force),
+	);
+}
+
+function installMcpServerLocked(serverPath: string, force: boolean): boolean {
 	const { platform } = require('node:os');
 
 	// Use settings.json directly — `claude mcp` CLI commands hang when run inside
@@ -642,6 +699,15 @@ export function installMcpServer(serverPath: string, force = false): boolean {
  * Uninstall oh-my-claude from settings
  */
 export function uninstallFromSettings(): {
+	removedHooks: string[];
+	removedMcp: boolean;
+} {
+	return withFileLockSync(getSettingsLockPath(), () =>
+		uninstallFromSettingsLocked(),
+	);
+}
+
+function uninstallFromSettingsLocked(): {
 	removedHooks: string[];
 	removedMcp: boolean;
 } {
@@ -702,6 +768,20 @@ export function installStatusLine(
 	existingBackedUp: boolean;
 	updated: boolean;
 } {
+	return withFileLockSync(getSettingsLockPath(), () =>
+		installStatusLineLocked(statusLineScriptPath, force),
+	);
+}
+
+function installStatusLineLocked(
+	_statusLineScriptPath: string,
+	force: boolean,
+): {
+	installed: boolean;
+	wrapperCreated: boolean;
+	existingBackedUp: boolean;
+	updated: boolean;
+} {
 	const { mergeStatusLine } = require('./statusline-merger');
 
 	const settings = loadSettings();
@@ -727,6 +807,12 @@ export function installStatusLine(
  * Remove oh-my-claude statusLine and restore original if backed up
  */
 export function uninstallStatusLine(): boolean {
+	return withFileLockSync(getSettingsLockPath(), () =>
+		uninstallStatusLineLocked(),
+	);
+}
+
+function uninstallStatusLineLocked(): boolean {
 	const {
 		restoreStatusLine,
 		isStatusLineConfigured,

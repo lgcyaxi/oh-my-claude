@@ -3,34 +3,185 @@ import { createRequire } from "node:module";
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // src/hooks/user-prompt-submit/preference-awareness.ts
-import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2 } from "node:fs";
+import { readFileSync as readFileSync2, existsSync as existsSync3 } from "node:fs";
 import { join as join2 } from "node:path";
 import { tmpdir } from "node:os";
 
 // src/shared/preferences/store.ts
 import {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  mkdirSync
+  existsSync as existsSync2,
+  mkdirSync as mkdirSync2
 } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname as dirname2 } from "node:path";
 import { homedir } from "node:os";
 import { cwd } from "node:process";
+
+// src/shared/fs/file-lock.ts
+import {
+  openSync,
+  closeSync,
+  unlinkSync,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  renameSync,
+  readFileSync,
+  statSync,
+  chmodSync,
+  copyFileSync
+} from "fs";
+import { dirname } from "path";
+var DEFAULT_RETRIES = 10;
+var DEFAULT_BACKOFF_MS = 20;
+var DEFAULT_STALE_MS = 5000;
+function sleepBlockingMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {}
+}
+function acquireLock(lockPath, opts) {
+  const dir = dirname(lockPath);
+  for (let i = 0;i < opts.retries; i++) {
+    try {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      return openSync(lockPath, "wx");
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") {
+        return null;
+      }
+      try {
+        const stat = statSync(lockPath);
+        if (Date.now() - stat.mtimeMs > opts.staleMs) {
+          try {
+            unlinkSync(lockPath);
+          } catch {}
+          continue;
+        }
+      } catch {}
+      sleepBlockingMs(opts.backoffMs + Math.random() * opts.backoffMs);
+    }
+  }
+  return null;
+}
+function releaseLock(fd, lockPath) {
+  if (fd === null)
+    return;
+  try {
+    closeSync(fd);
+  } catch {}
+  try {
+    unlinkSync(lockPath);
+  } catch {}
+}
+function withFileLockSync(lockPath, fn, opts = {}) {
+  const resolved = {
+    retries: opts.retries ?? DEFAULT_RETRIES,
+    backoffMs: opts.backoffMs ?? DEFAULT_BACKOFF_MS,
+    staleMs: opts.staleMs ?? DEFAULT_STALE_MS
+  };
+  const fd = acquireLock(lockPath, resolved);
+  try {
+    return fn();
+  } finally {
+    releaseLock(fd, lockPath);
+  }
+}
+function atomicTempPath(path) {
+  return `${path}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function ensureParentDir(path) {
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+}
+function applyMode(path, mode) {
+  if (mode === undefined || process.platform === "win32")
+    return;
+  try {
+    chmodSync(path, mode);
+  } catch {}
+}
+function atomicWriteText(path, text, opts = {}) {
+  ensureParentDir(path);
+  const tmp = atomicTempPath(path);
+  writeFileSync(tmp, text, "utf-8");
+  applyMode(tmp, opts.mode);
+  renameSync(tmp, path);
+  applyMode(path, opts.mode);
+}
+function atomicWriteJson(path, value, opts = {}) {
+  const indent = opts.indent ?? "\t";
+  const trailing = opts.trailingNewline ?? true;
+  const text = JSON.stringify(value, null, indent) + (trailing ? `
+` : "");
+  atomicWriteText(path, text, { mode: opts.mode });
+}
+
+class JsonCorruptError extends Error {
+  path;
+  backupPath;
+  cause;
+  name = "JsonCorruptError";
+  constructor(message, path, backupPath, cause) {
+    super(message);
+    this.path = path;
+    this.backupPath = backupPath;
+    this.cause = cause;
+  }
+}
+function backupCorruptFile(path) {
+  const backupPath = `${path}.corrupt-${Date.now()}.bak`;
+  try {
+    copyFileSync(path, backupPath);
+  } catch {}
+  return backupPath;
+}
+function loadJsonOrBackup(path, schema, opts = {}) {
+  if (!existsSync(path))
+    return null;
+  let raw;
+  try {
+    raw = readFileSync(path, "utf-8");
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Failed to read JSON file at ${path}: ${err.message}`, path, backupPath, err);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Failed to parse JSON at ${path}: ${err.message}`, path, backupPath, err);
+  }
+  try {
+    return schema.parse(parsed);
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Schema validation failed for ${path}: ${err.message}`, path, backupPath, err);
+  }
+}
+
+// src/shared/preferences/store.ts
 var PREFERENCES_FILENAME = "preferences.json";
 function findProjectRoot(fromDir) {
   let dir = fromDir ?? cwd();
-  const root = dirname(dir);
+  const root = dirname2(dir);
   while (dir !== root) {
-    if (existsSync(join(dir, ".git"))) {
+    if (existsSync2(join(dir, ".git"))) {
       return dir;
     }
-    const parent = dirname(dir);
+    const parent = dirname2(dir);
     if (parent === dir)
       break;
     dir = parent;
   }
-  if (existsSync(join(dir, ".git"))) {
+  if (existsSync2(join(dir, ".git"))) {
     return dir;
   }
   return null;
@@ -66,20 +217,54 @@ function generatePreferenceId(title, date) {
 function nowISO() {
   return new Date().toISOString();
 }
+var PreferenceJsonSchema = {
+  parse(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new Error("preferences.json must be a JSON object");
+    }
+    const raw = input;
+    const store = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        console.error(`[omc preferences] dropping malformed entry "${key}" (expected object)`);
+        continue;
+      }
+      const pref = value;
+      if (typeof pref.id !== "string" || typeof pref.title !== "string" || typeof pref.content !== "string" || typeof pref.scope !== "string") {
+        console.error(`[omc preferences] dropping malformed entry "${key}" (missing required fields)`);
+        continue;
+      }
+      store[key] = pref;
+    }
+    return store;
+  }
+};
+function getLockPath(path) {
+  return path + ".lock";
+}
 function readJsonStore(path) {
-  if (!existsSync(path))
-    return {};
   try {
-    const raw = readFileSync(path, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
+    const loaded = loadJsonOrBackup(path, PreferenceJsonSchema, {
+      onCorrupt: (backupPath) => {
+        console.error(`[omc preferences] ${path} was corrupt; backed up to ${backupPath}. ` + `Starting with empty store for this scope.`);
+      }
+    });
+    return loaded ?? {};
+  } catch (err) {
+    if (err instanceof JsonCorruptError) {
+      return {};
+    }
+    throw err;
   }
 }
 function writeJsonStore(path, store) {
-  const dir = dirname(path);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path, JSON.stringify(store, null, 2), "utf-8");
+  const dir = dirname2(path);
+  mkdirSync2(dir, { recursive: true });
+  atomicWriteJson(path, store, {
+    indent: 2,
+    trailingNewline: false,
+    mode: 384
+  });
 }
 
 class PreferenceStore {
@@ -110,29 +295,31 @@ class PreferenceStore {
     try {
       const scope = input.scope ?? "global";
       const path = this.getPathForScope(scope);
-      const store = readJsonStore(path);
-      const now = nowISO();
-      const baseId = generatePreferenceId(input.title);
-      let id = baseId;
-      let counter = 1;
-      while (store[id]) {
-        id = `${baseId}-${counter}`;
-        counter++;
-      }
-      const preference = {
-        id,
-        title: input.title,
-        content: input.content,
-        scope,
-        autoInject: input.autoInject ?? true,
-        trigger: input.trigger ?? {},
-        tags: input.tags ?? [],
-        createdAt: now,
-        updatedAt: now
-      };
-      store[id] = preference;
-      writeJsonStore(path, store);
-      return { success: true, data: preference };
+      return withFileLockSync(getLockPath(path), () => {
+        const store = readJsonStore(path);
+        const now = nowISO();
+        const baseId = generatePreferenceId(input.title);
+        let id = baseId;
+        let counter = 1;
+        while (store[id]) {
+          id = `${baseId}-${counter}`;
+          counter++;
+        }
+        const preference = {
+          id,
+          title: input.title,
+          content: input.content,
+          scope,
+          autoInject: input.autoInject ?? true,
+          trigger: input.trigger ?? {},
+          tags: input.tags ?? [],
+          createdAt: now,
+          updatedAt: now
+        };
+        store[id] = preference;
+        writeJsonStore(path, store);
+        return { success: true, data: preference };
+      });
     } catch (error) {
       return { success: false, error: `Failed to create preference: ${error}` };
     }
@@ -169,8 +356,12 @@ class PreferenceStore {
   }
   update(id, updates) {
     try {
-      for (const { path, store } of this.getAllStores()) {
-        if (store[id]) {
+      for (const { path } of this.getAllStores()) {
+        const lockPath = getLockPath(path);
+        const result = withFileLockSync(lockPath, () => {
+          const store = readJsonStore(path);
+          if (!store[id])
+            return null;
           const existing = store[id];
           const updated = {
             ...existing,
@@ -179,7 +370,10 @@ class PreferenceStore {
           };
           store[id] = updated;
           writeJsonStore(path, store);
-          return { success: true, data: updated };
+          return updated;
+        });
+        if (result) {
+          return { success: true, data: result };
         }
       }
       return { success: false, error: `Preference "${id}" not found` };
@@ -189,10 +383,17 @@ class PreferenceStore {
   }
   delete(id) {
     try {
-      for (const { path, store } of this.getAllStores()) {
-        if (store[id]) {
+      for (const { path } of this.getAllStores()) {
+        const lockPath = getLockPath(path);
+        const found = withFileLockSync(lockPath, () => {
+          const store = readJsonStore(path);
+          if (!store[id])
+            return false;
           delete store[id];
           writeJsonStore(path, store);
+          return true;
+        });
+        if (found) {
           return { success: true };
         }
       }
@@ -652,6 +853,7 @@ function escapeRegex(str) {
 var CACHE_TTL_MS = 8000;
 var MAX_MATCHES = 5;
 var CACHE_PATH = join2(tmpdir(), "omc-pref-awareness-cache.json");
+var CACHE_LOCK_PATH = CACHE_PATH + ".lock";
 function quickHash(str) {
   let hash = 0;
   for (let i = 0;i < str.length; i++) {
@@ -661,7 +863,7 @@ function quickHash(str) {
 }
 function getCached(promptHash) {
   try {
-    if (!existsSync2(CACHE_PATH))
+    if (!existsSync3(CACHE_PATH))
       return null;
     const raw = readFileSync2(CACHE_PATH, "utf-8");
     const cache = JSON.parse(raw);
@@ -673,8 +875,17 @@ function getCached(promptHash) {
 }
 function setCache(promptHash, result) {
   try {
-    const entry = { ts: Date.now(), hash: promptHash, result };
-    writeFileSync2(CACHE_PATH, JSON.stringify(entry), "utf-8");
+    withFileLockSync(CACHE_LOCK_PATH, () => {
+      const entry = {
+        ts: Date.now(),
+        hash: promptHash,
+        result
+      };
+      atomicWriteJson(CACHE_PATH, entry, {
+        indent: 0,
+        trailingNewline: false
+      });
+    }, { retries: 3, backoffMs: 10 });
   } catch {}
 }
 function approve() {

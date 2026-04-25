@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import { createFormatters } from '../../utils/colors';
-import { INSTALL_DIR } from '../../utils/paths';
+import { DIST_MARKER_REL, INSTALL_DIR } from '../../utils/paths';
 import { toErrorMessage } from '../../../shared/utils';
 
 export function registerUpdateCommand(program: Command) {
@@ -120,7 +120,7 @@ export function registerUpdateCommand(program: Command) {
 						'oh-my-claude',
 					);
 
-					if (!existsSync(join(globalPkgDir, 'dist', 'cli.js'))) {
+					if (!existsSync(join(globalPkgDir, DIST_MARKER_REL))) {
 						console.log(
 							`${dimText('Installing workspace dependencies...')}`,
 						);

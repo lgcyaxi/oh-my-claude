@@ -47,7 +47,19 @@ export function sanitizeDeepSeekV4(
 	opts: DeepSeekSanitizeOpts = {},
 ): void {
 	const model = typeof body.model === 'string' ? body.model : '';
+	const thinkingDisabled = isThinkingExplicitlyDisabled(body);
 	const thinkingRequested = isThinkingExplicitlyEnabled(body);
+
+	// MED-10: honour an explicit `thinking: { type: 'disabled' }` from the
+	// client even when opts.effort is set or the model is pro. Previously
+	// the thinking path still injected `output_config.effort`, which forced
+	// the upstream into thinking mode in direct contradiction to the user's
+	// request. Fall through to the fast path so both the `thinking` field
+	// and any residual `output_config.effort` are stripped.
+	if (thinkingDisabled) {
+		applyFastPath(body);
+		return;
+	}
 
 	const useThinkingPath = (() => {
 		if (opts.effort) return true;
@@ -63,6 +75,12 @@ export function sanitizeDeepSeekV4(
 
 	// Fast path — haiku tier (`deepseek-v4-flash`) or any other non-thinking call.
 	applyFastPath(body);
+}
+
+function isThinkingExplicitlyDisabled(body: Record<string, unknown>): boolean {
+	const t = body.thinking;
+	if (!t || typeof t !== 'object') return false;
+	return (t as Record<string, unknown>).type === 'disabled';
 }
 
 // ── Thinking path ──────────────────────────────────────────────────────────

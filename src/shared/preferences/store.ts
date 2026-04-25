@@ -11,8 +11,6 @@
 
 import {
   existsSync,
-  readFileSync,
-  writeFileSync,
   mkdirSync,
 } from "node:fs";
 import { join, dirname } from "node:path";
@@ -31,6 +29,13 @@ import type {
   PreferenceJsonStore,
   CreatePreferenceInput,
 } from "./types";
+import {
+  JsonCorruptError,
+  atomicWriteJson,
+  loadJsonOrBackup,
+  withFileLockSync,
+  type SchemaLike,
+} from "../fs/file-lock.js";
 
 // ---- Constants ----
 
@@ -99,20 +104,81 @@ export function nowISO(): string {
 
 // ---- JSON file I/O ----
 
+/**
+ * Minimal schema for `preferences.json` — accepts any object whose values look
+ * like `Preference` records. We accept partial records and silently drop
+ * malformed entries (warning via console.error) instead of aborting the entire
+ * load, because the preference store is append-only and one bad entry would
+ * brick every read.
+ */
+const PreferenceJsonSchema: SchemaLike<PreferenceJsonStore> = {
+  parse(input: unknown): PreferenceJsonStore {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new Error("preferences.json must be a JSON object");
+    }
+    const raw = input as Record<string, unknown>;
+    const store: PreferenceJsonStore = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        console.error(
+          `[omc preferences] dropping malformed entry "${key}" (expected object)`,
+        );
+        continue;
+      }
+      const pref = value as Partial<Preference>;
+      if (
+        typeof pref.id !== "string" ||
+        typeof pref.title !== "string" ||
+        typeof pref.content !== "string" ||
+        typeof pref.scope !== "string"
+      ) {
+        console.error(
+          `[omc preferences] dropping malformed entry "${key}" (missing required fields)`,
+        );
+        continue;
+      }
+      store[key] = pref as Preference;
+    }
+    return store;
+  },
+};
+
+/** Lock-path helper — one lock per preferences file. */
+function getLockPath(path: string): string {
+  return path + ".lock";
+}
+
 function readJsonStore(path: string): PreferenceJsonStore {
-  if (!existsSync(path)) return {};
   try {
-    const raw = readFileSync(path, "utf-8");
-    return JSON.parse(raw) as PreferenceJsonStore;
-  } catch {
-    return {};
+    const loaded = loadJsonOrBackup(path, PreferenceJsonSchema, {
+      onCorrupt: (backupPath) => {
+        console.error(
+          `[omc preferences] ${path} was corrupt; backed up to ${backupPath}. ` +
+            `Starting with empty store for this scope.`,
+        );
+      },
+    });
+    return loaded ?? {};
+  } catch (err) {
+    if (err instanceof JsonCorruptError) {
+      // Already logged via onCorrupt; fall through with empty store so the
+      // user can fix the backup without the CLI failing.
+      return {};
+    }
+    throw err;
   }
 }
 
 function writeJsonStore(path: string, store: PreferenceJsonStore): void {
   const dir = dirname(path);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path, JSON.stringify(store, null, 2), "utf-8");
+  atomicWriteJson(path, store, {
+    indent: 2,
+    trailingNewline: false,
+    // 0o600 on POSIX — preferences may contain project-specific rules the
+    // user prefers not to leak via umask leaks. No-op on Windows.
+    mode: 0o600,
+  });
 }
 
 // ---- Preference Store Implementation ----
@@ -151,34 +217,36 @@ export class PreferenceStore implements PreferenceStorage {
     try {
       const scope = input.scope ?? "global";
       const path = this.getPathForScope(scope);
-      const store = readJsonStore(path);
+      return withFileLockSync(getLockPath(path), () => {
+        const store = readJsonStore(path);
 
-      const now = nowISO();
-      const baseId = generatePreferenceId(input.title);
-      let id = baseId;
+        const now = nowISO();
+        const baseId = generatePreferenceId(input.title);
+        let id = baseId;
 
-      let counter = 1;
-      while (store[id]) {
-        id = `${baseId}-${counter}`;
-        counter++;
-      }
+        let counter = 1;
+        while (store[id]) {
+          id = `${baseId}-${counter}`;
+          counter++;
+        }
 
-      const preference: Preference = {
-        id,
-        title: input.title,
-        content: input.content,
-        scope,
-        autoInject: input.autoInject ?? true,
-        trigger: input.trigger ?? {},
-        tags: input.tags ?? [],
-        createdAt: now,
-        updatedAt: now,
-      };
+        const preference: Preference = {
+          id,
+          title: input.title,
+          content: input.content,
+          scope,
+          autoInject: input.autoInject ?? true,
+          trigger: input.trigger ?? {},
+          tags: input.tags ?? [],
+          createdAt: now,
+          updatedAt: now,
+        };
 
-      store[id] = preference;
-      writeJsonStore(path, store);
+        store[id] = preference;
+        writeJsonStore(path, store);
 
-      return { success: true, data: preference };
+        return { success: true, data: preference } as PreferenceResult<Preference>;
+      });
     } catch (error) {
       return { success: false, error: `Failed to create preference: ${error}` };
     }
@@ -220,8 +288,13 @@ export class PreferenceStore implements PreferenceStorage {
     updates: Partial<Pick<Preference, "title" | "content" | "autoInject" | "trigger" | "tags">>,
   ): PreferenceResult<Preference> {
     try {
-      for (const { path, store } of this.getAllStores()) {
-        if (store[id]) {
+      // Determine which store contains the entry (lock-free read), then run
+      // the RMW under that file's lock so concurrent updates don't race.
+      for (const { path } of this.getAllStores()) {
+        const lockPath = getLockPath(path);
+        const result = withFileLockSync(lockPath, () => {
+          const store = readJsonStore(path);
+          if (!store[id]) return null;
           const existing = store[id];
           const updated: Preference = {
             ...existing,
@@ -230,7 +303,10 @@ export class PreferenceStore implements PreferenceStorage {
           };
           store[id] = updated;
           writeJsonStore(path, store);
-          return { success: true, data: updated };
+          return updated;
+        });
+        if (result) {
+          return { success: true, data: result };
         }
       }
       return { success: false, error: `Preference "${id}" not found` };
@@ -241,10 +317,16 @@ export class PreferenceStore implements PreferenceStorage {
 
   delete(id: string): PreferenceResult {
     try {
-      for (const { path, store } of this.getAllStores()) {
-        if (store[id]) {
+      for (const { path } of this.getAllStores()) {
+        const lockPath = getLockPath(path);
+        const found = withFileLockSync(lockPath, () => {
+          const store = readJsonStore(path);
+          if (!store[id]) return false;
           delete store[id];
           writeJsonStore(path, store);
+          return true;
+        });
+        if (found) {
           return { success: true };
         }
       }

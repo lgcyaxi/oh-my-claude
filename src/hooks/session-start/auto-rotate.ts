@@ -104,6 +104,34 @@ function getAuditLogPath(): string {
 	return join(getGlobalMemoryDir(), '.rotation-log.jsonl');
 }
 
+/**
+ * MED-9: bound the `.rotation-log.jsonl` audit file at AUDIT_LOG_MAX_LINES.
+ *
+ * Without this cap the file grew forever (one session-start roll-up emits
+ * multiple entries), eventually taking hundreds of MB after a year of use
+ * and slowing hook startup. We keep the tail so recent activity remains
+ * inspectable; older entries are truncated.
+ */
+const AUDIT_LOG_MAX_LINES = 1000;
+const AUDIT_LOG_TRIM_TRIGGER = 1200; // Amortise: only trim when overshoot.
+
+function trimAuditLogIfNeeded(): void {
+	try {
+		const path = getAuditLogPath();
+		if (!existsSync(path)) return;
+		const raw = readFileSync(path, 'utf-8');
+		const lines = raw.split('\n');
+		// split on a trailing newline leaves an empty final element; drop it.
+		const hasTrailingNewline = raw.endsWith('\n');
+		const content = hasTrailingNewline ? lines.slice(0, -1) : lines;
+		if (content.length < AUDIT_LOG_TRIM_TRIGGER) return;
+		const tail = content.slice(-AUDIT_LOG_MAX_LINES);
+		writeFileSync(path, tail.join('\n') + '\n', 'utf-8');
+	} catch (e) {
+		console.error('[auto-rotate] audit trim failed:', e);
+	}
+}
+
 function appendAudit(entry: Record<string, unknown>): void {
 	try {
 		const dir = getGlobalMemoryDir();
@@ -260,7 +288,16 @@ function groupByDate(files: CandidateFile[]): DateGroup[] {
 async function callNarrativeAI(
 	controlPort: number,
 	prompt: string,
+	opts?: { deadlineMs?: number },
 ): Promise<{ content: string; provider: string } | null> {
+	// MED-9: honour the hook-wide deadline. The static 45 s timeout meant a
+	// slow provider could blow through the 20 s hook budget and delay
+	// session startup — or worse, a subsequent SIGTERM killed the rotation
+	// mid-write. Clamp to whatever budget remains, never below 1 s.
+	const remaining = opts?.deadlineMs
+		? Math.max(1_000, opts.deadlineMs - Date.now())
+		: AI_CALL_TIMEOUT_MS;
+	const effectiveTimeout = Math.min(remaining, AI_CALL_TIMEOUT_MS);
 	try {
 		const resp = await fetch(
 			`http://localhost:${controlPort}/internal/complete`,
@@ -272,7 +309,7 @@ async function callNarrativeAI(
 					temperature: 0.3,
 					max_tokens: 4000,
 				}),
-				signal: AbortSignal.timeout(AI_CALL_TIMEOUT_MS),
+				signal: AbortSignal.timeout(effectiveTimeout),
 			},
 		);
 		if (!resp.ok) {
@@ -483,7 +520,9 @@ async function rotateGroup(
 		const entries = buildNarrativeEntries(group.files);
 		if (entries.length > 0) {
 			const prompt = buildDailyNarrativePrompt(group.date, entries);
-			const result = await callNarrativeAI(opts.controlPort, prompt);
+			const result = await callNarrativeAI(opts.controlPort, prompt, {
+				deadlineMs: opts.deadlineMs,
+			});
 			if (result) {
 				body = result.content;
 				provider = result.provider;
@@ -525,6 +564,10 @@ async function rotateGroup(
 async function runAutoRotate(input: SessionStartInput): Promise<void> {
 	const projectCwd = input.cwd;
 	const config = loadHookConfig().autoRotate;
+
+	// MED-9: cap the rotation-log at AUDIT_LOG_MAX_LINES on every invocation
+	// so long-lived installations don't accumulate an unbounded JSONL file.
+	trimAuditLogIfNeeded();
 
 	// Always prune empty session logs — cheap, fs-only.
 	const pruned = pruneEmptySessionLogs({ currentCwd: projectCwd });

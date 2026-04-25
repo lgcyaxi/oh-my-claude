@@ -17,6 +17,7 @@ export {
   listCredentials,
   hasCredential,
   getAuthStorePath,
+  writeSecretFile,
 } from "./store";
 
 // Token management

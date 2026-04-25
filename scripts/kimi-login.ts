@@ -14,8 +14,9 @@
 import { chromium } from "playwright";
 import { homedir } from "os";
 import { join, dirname } from "path";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { mkdirSync, existsSync } from "fs";
 import { execSync } from "child_process";
+import { writeSecretFile } from "../src/shared/auth/store";
 
 const CREDS_PATH = join(homedir(), ".claude", "oh-my-claude", "kimi-creds.json");
 
@@ -217,7 +218,7 @@ async function login() {
     }
 
     mkdirSync(dirname(CREDS_PATH), { recursive: true });
-    writeFileSync(
+    writeSecretFile(
       CREDS_PATH,
       JSON.stringify(
         {

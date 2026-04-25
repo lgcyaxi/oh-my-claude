@@ -151,28 +151,66 @@ function isPidAlive(pid: number): boolean {
 	}
 }
 
-/** Read all registered instances, filtering out stale and dead entries */
+/**
+ * Read all registered instances, filtering out stale and dead entries.
+ *
+ * Lock-free: returns the in-memory filtered view. Does NOT persist the
+ * cleaned list back to disk — that is the job of `pruneInstances()`, which
+ * runs under the registry advisory lock from dedicated RMW call sites
+ * (register/heartbeat/deregister). Splitting read vs prune eliminates an
+ * RMW race where two concurrent dashboard reads both saw different "stale"
+ * sets and raced to write disjoint cleaned lists.
+ */
 export function readInstances(): ProxyInstance[] {
+	return readInstancesLockFree();
+}
+
+/** Lock-free filtered read; does not write back. */
+function readInstancesLockFree(): ProxyInstance[] {
 	if (!existsSync(REGISTRY_FILE)) return [];
 	try {
 		const data = JSON.parse(readFileSync(REGISTRY_FILE, 'utf-8'));
 		const instances: ProxyInstance[] = Array.isArray(data) ? data : [];
 		const now = Date.now();
-		// Filter out stale entries (heartbeat expired) and dead processes
-		const alive = instances.filter((i) => {
+		return instances.filter((i) => {
 			const heartbeat = new Date(i.lastHeartbeat).getTime();
 			if (now - heartbeat >= STALE_TTL_MS) return false;
 			if (!isPidAlive(i.pid)) return false;
 			return true;
 		});
-		// Write back cleaned list if any were removed
-		if (alive.length < instances.length) {
-			writeInstances(alive);
-		}
-		return alive;
 	} catch {
 		return [];
 	}
+}
+
+/**
+ * Prune stale/dead entries under the advisory lock. Called by register /
+ * heartbeat / deregister. Callers that only need the current live set should
+ * use `readInstances()` instead — writing back from pure reads is what
+ * caused the beta.5-era RMW race.
+ */
+function pruneInstances(): ProxyInstance[] {
+	const raw = existsSync(REGISTRY_FILE)
+		? (() => {
+				try {
+					return JSON.parse(readFileSync(REGISTRY_FILE, 'utf-8'));
+				} catch {
+					return [];
+				}
+			})()
+		: [];
+	const instances: ProxyInstance[] = Array.isArray(raw) ? raw : [];
+	const now = Date.now();
+	const alive = instances.filter((i) => {
+		const heartbeat = new Date(i.lastHeartbeat).getTime();
+		if (now - heartbeat >= STALE_TTL_MS) return false;
+		if (!isPidAlive(i.pid)) return false;
+		return true;
+	});
+	if (alive.length < instances.length) {
+		writeInstances(alive);
+	}
+	return alive;
 }
 
 /** Write instances to disk (atomic via rename) */
@@ -188,7 +226,7 @@ function writeInstances(instances: ProxyInstance[]): void {
 /** Register a new proxy instance */
 export function registerInstance(instance: Omit<ProxyInstance, 'lastHeartbeat'>): void {
 	withRegistryLock(() => {
-		const instances = readInstances();
+		const instances = pruneInstances();
 		// Remove any existing entry with same sessionId or port
 		const filtered = instances.filter(
 			(i) => i.sessionId !== instance.sessionId && i.port !== instance.port,
@@ -204,7 +242,7 @@ export function registerInstance(instance: Omit<ProxyInstance, 'lastHeartbeat'>)
 /** Deregister a proxy instance */
 export function deregisterInstance(sessionId: string): void {
 	withRegistryLock(() => {
-		const instances = readInstances();
+		const instances = pruneInstances();
 		writeInstances(instances.filter((i) => i.sessionId !== sessionId));
 	});
 }
@@ -212,7 +250,7 @@ export function deregisterInstance(sessionId: string): void {
 /** Update heartbeat timestamp for an instance */
 export function heartbeatInstance(sessionId: string): void {
 	withRegistryLock(() => {
-		const instances = readInstances();
+		const instances = pruneInstances();
 		const instance = instances.find((i) => i.sessionId === sessionId);
 		if (instance) {
 			instance.lastHeartbeat = new Date().toISOString();

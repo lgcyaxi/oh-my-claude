@@ -125,6 +125,14 @@ export const MemoryConfigSchema = z.object({
 			model: z.string().default('embedding-3'),
 			/** Embedding dimensions (optional, auto-detected for custom provider) */
 			dimensions: z.number().min(64).max(8192).optional(),
+			/**
+			 * Eagerly embed newly indexed memory chunks on write (default: true).
+			 * When true, saveMemory → indexMemoryWithEmbeddings computes and
+			 * caches vectors for each chunk immediately, so the first hybrid
+			 * search does not need to pay the embedding cost online. Disable
+			 * to defer embedding to the first search (lazier cold-path).
+			 */
+			onWrite: z.boolean().default(true),
 		})
 		.optional(),
 	/** Markdown chunking configuration for indexing */
@@ -212,6 +220,15 @@ export const ProxyConfigSchema = z.object({
 	 * silent fallback can mask auth/quota errors and bill the wrong account.
 	 */
 	failClosed: z.boolean().default(true),
+	/**
+	 * Maximum size in bytes for incoming request bodies (MED-2). Requests
+	 * with `content-length` exceeding this cap — or chunked bodies whose
+	 * accumulated buffer crosses it — are rejected with HTTP 413. The
+	 * default (4 MiB) is ample for normal Anthropic Messages API traffic;
+	 * raise it only if you rely on very large multimodal inputs. Zero or
+	 * negative values disable the check (not recommended).
+	 */
+	maxBodyBytes: z.number().int().default(4 * 1024 * 1024),
 });
 
 // Main configuration schema

@@ -4,16 +4,16 @@ var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // src/hooks/post-tool-use/post-tool.ts
 import {
-  readFileSync as readFileSync7,
+  readFileSync as readFileSync8,
   writeFileSync as writeFileSync4,
   appendFileSync as appendFileSync2,
-  existsSync as existsSync7,
-  mkdirSync as mkdirSync4,
+  existsSync as existsSync8,
+  mkdirSync as mkdirSync5,
   readdirSync as readdirSync3,
-  statSync as statSync4,
-  unlinkSync as unlinkSync3
+  statSync as statSync5,
+  unlinkSync as unlinkSync4
 } from "node:fs";
-import { join as join7, dirname } from "node:path";
+import { join as join7, dirname as dirname2 } from "node:path";
 import { homedir as homedir7 } from "node:os";
 import { createHash as createHash2 } from "node:crypto";
 
@@ -427,40 +427,221 @@ function loadHookConfig() {
 }
 // src/memory/hooks/session.ts
 import {
-  existsSync as existsSync5,
-  readFileSync as readFileSync5,
-  writeFileSync as writeFileSync3,
-  mkdirSync as mkdirSync3,
-  statSync as statSync3,
+  existsSync as existsSync6,
+  readFileSync as readFileSync6,
+  mkdirSync as mkdirSync4,
+  statSync as statSync4,
   appendFileSync,
   readdirSync as readdirSync2,
-  unlinkSync as unlinkSync2
+  unlinkSync as unlinkSync3
 } from "node:fs";
 import { join as join5 } from "node:path";
 import { homedir as homedir5 } from "node:os";
-var STATE_DIR2 = join5(homedir5(), ".claude", "oh-my-claude", "state");
-function loadState(projectCwd) {
-  try {
-    const stateFile = getStateFile(projectCwd);
-    if (existsSync5(stateFile)) {
-      const raw = readFileSync5(stateFile, "utf-8");
-      return JSON.parse(raw);
+
+// src/shared/fs/file-lock.ts
+import {
+  openSync,
+  closeSync,
+  unlinkSync as unlinkSync2,
+  existsSync as existsSync5,
+  mkdirSync as mkdirSync3,
+  writeFileSync as writeFileSync3,
+  renameSync,
+  readFileSync as readFileSync5,
+  statSync as statSync3,
+  chmodSync,
+  copyFileSync
+} from "fs";
+import { dirname } from "path";
+var DEFAULT_RETRIES = 10;
+var DEFAULT_BACKOFF_MS = 20;
+var DEFAULT_STALE_MS = 5000;
+function sleepBlockingMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {}
+}
+function acquireLock(lockPath, opts) {
+  const dir = dirname(lockPath);
+  for (let i = 0;i < opts.retries; i++) {
+    try {
+      if (!existsSync5(dir)) {
+        mkdirSync3(dir, { recursive: true });
+      }
+      return openSync(lockPath, "wx");
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") {
+        return null;
+      }
+      try {
+        const stat = statSync3(lockPath);
+        if (Date.now() - stat.mtimeMs > opts.staleMs) {
+          try {
+            unlinkSync2(lockPath);
+          } catch {}
+          continue;
+        }
+      } catch {}
+      sleepBlockingMs(opts.backoffMs + Math.random() * opts.backoffMs);
     }
+  }
+  return null;
+}
+function releaseLock(fd, lockPath) {
+  if (fd === null)
+    return;
+  try {
+    closeSync(fd);
   } catch {}
+  try {
+    unlinkSync2(lockPath);
+  } catch {}
+}
+function withFileLockSync(lockPath, fn, opts = {}) {
+  const resolved = {
+    retries: opts.retries ?? DEFAULT_RETRIES,
+    backoffMs: opts.backoffMs ?? DEFAULT_BACKOFF_MS,
+    staleMs: opts.staleMs ?? DEFAULT_STALE_MS
+  };
+  const fd = acquireLock(lockPath, resolved);
+  try {
+    return fn();
+  } finally {
+    releaseLock(fd, lockPath);
+  }
+}
+function atomicTempPath(path) {
+  return `${path}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function ensureParentDir(path) {
+  const dir = dirname(path);
+  if (!existsSync5(dir)) {
+    mkdirSync3(dir, { recursive: true });
+  }
+}
+function applyMode(path, mode) {
+  if (mode === undefined || process.platform === "win32")
+    return;
+  try {
+    chmodSync(path, mode);
+  } catch {}
+}
+function atomicWriteText(path, text, opts = {}) {
+  ensureParentDir(path);
+  const tmp = atomicTempPath(path);
+  writeFileSync3(tmp, text, "utf-8");
+  applyMode(tmp, opts.mode);
+  renameSync(tmp, path);
+  applyMode(path, opts.mode);
+}
+function atomicWriteJson(path, value, opts = {}) {
+  const indent = opts.indent ?? "\t";
+  const trailing = opts.trailingNewline ?? true;
+  const text = JSON.stringify(value, null, indent) + (trailing ? `
+` : "");
+  atomicWriteText(path, text, { mode: opts.mode });
+}
+
+class JsonCorruptError extends Error {
+  path;
+  backupPath;
+  cause;
+  name = "JsonCorruptError";
+  constructor(message, path, backupPath, cause) {
+    super(message);
+    this.path = path;
+    this.backupPath = backupPath;
+    this.cause = cause;
+  }
+}
+function backupCorruptFile(path) {
+  const backupPath = `${path}.corrupt-${Date.now()}.bak`;
+  try {
+    copyFileSync(path, backupPath);
+  } catch {}
+  return backupPath;
+}
+function loadJsonOrBackup(path, schema, opts = {}) {
+  if (!existsSync5(path))
+    return null;
+  let raw;
+  try {
+    raw = readFileSync5(path, "utf-8");
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Failed to read JSON file at ${path}: ${err.message}`, path, backupPath, err);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Failed to parse JSON at ${path}: ${err.message}`, path, backupPath, err);
+  }
+  try {
+    return schema.parse(parsed);
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Schema validation failed for ${path}: ${err.message}`, path, backupPath, err);
+  }
+}
+
+// src/memory/hooks/session.ts
+var STATE_DIR2 = join5(homedir5(), ".claude", "oh-my-claude", "state");
+var SessionStateSchema = {
+  parse(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new Error("session state must be an object");
+    }
+    const raw = input;
+    const lastSaveTimestamp = typeof raw.lastSaveTimestamp === "string" ? raw.lastSaveTimestamp : raw.lastSaveTimestamp === null ? null : null;
+    const lastSaveLogSizeKB = typeof raw.lastSaveLogSizeKB === "number" ? raw.lastSaveLogSizeKB : raw.lastSaveLogSizeKB === null ? null : null;
+    const saveCount = typeof raw.saveCount === "number" && Number.isFinite(raw.saveCount) ? raw.saveCount : 0;
+    return { lastSaveTimestamp, lastSaveLogSizeKB, saveCount };
+  }
+};
+var corruptStatePaths = new Set;
+function loadState(projectCwd) {
+  const stateFile = getStateFile(projectCwd);
+  try {
+    const loaded = loadJsonOrBackup(stateFile, SessionStateSchema, {
+      onCorrupt: (backupPath) => {
+        console.error(`[omc memory] session state at ${stateFile} was corrupt; ` + `backed up to ${backupPath}. Save skipped this run.`);
+      }
+    });
+    if (loaded !== null)
+      return loaded;
+  } catch (err) {
+    if (err instanceof JsonCorruptError) {
+      corruptStatePaths.add(stateFile);
+    } else {
+      console.error(`[omc memory] unexpected error loading session state at ${stateFile}: ${err.message}`);
+      corruptStatePaths.add(stateFile);
+    }
+  }
   return { lastSaveTimestamp: null, lastSaveLogSizeKB: null, saveCount: 0 };
 }
 function saveState(state, projectCwd) {
   try {
-    mkdirSync3(STATE_DIR2, { recursive: true });
-    writeFileSync3(getStateFile(projectCwd), JSON.stringify(state, null, 2), "utf-8");
+    const stateFile = getStateFile(projectCwd);
+    if (corruptStatePaths.has(stateFile))
+      return;
+    mkdirSync4(STATE_DIR2, { recursive: true });
+    atomicWriteJson(stateFile, state, {
+      indent: 2,
+      trailingNewline: false
+    });
   } catch {}
 }
 function getSessionLogSizeKB(projectCwd) {
   try {
     const logPath = getSessionLogPath(projectCwd);
-    if (!existsSync5(logPath))
+    if (!existsSync6(logPath))
       return 0;
-    const stats = statSync3(logPath);
+    const stats = statSync4(logPath);
     return Math.round(stats.size / 1024);
   } catch {
     return 0;
@@ -469,9 +650,9 @@ function getSessionLogSizeKB(projectCwd) {
 function readSessionLog(projectCwd) {
   try {
     const logPath = getSessionLogPath(projectCwd);
-    if (!existsSync5(logPath))
+    if (!existsSync6(logPath))
       return "";
-    const raw = readFileSync5(logPath, "utf-8").trim();
+    const raw = readFileSync6(logPath, "utf-8").trim();
     if (!raw)
       return "";
     const lines = raw.split(`
@@ -495,8 +676,8 @@ function readSessionLog(projectCwd) {
 function clearSessionLog(projectCwd) {
   try {
     const logPath = getSessionLogPath(projectCwd);
-    if (existsSync5(logPath)) {
-      unlinkSync2(logPath);
+    if (existsSync6(logPath)) {
+      unlinkSync3(logPath);
     }
   } catch {}
 }
@@ -506,7 +687,7 @@ function pruneEmptySessionLogs(options = {}) {
   const sessionsDir = join5(homedir5(), ".claude", "oh-my-claude", "memory", "sessions");
   let removed = 0;
   try {
-    if (!existsSync5(sessionsDir))
+    if (!existsSync6(sessionsDir))
       return 0;
     const entries = readdirSync2(sessionsDir);
     const now = Date.now();
@@ -518,10 +699,10 @@ function pruneEmptySessionLogs(options = {}) {
       if (currentLogPath && full === currentLogPath)
         continue;
       try {
-        const s = statSync3(full);
+        const s = statSync4(full);
         const stale = now - s.mtimeMs > maxAgeMs;
         if (s.size === 0 || stale) {
-          unlinkSync2(full);
+          unlinkSync3(full);
           removed += 1;
         }
       } catch {}
@@ -534,8 +715,8 @@ function logUserPrompt(prompt, projectCwd) {
     return;
   try {
     const logDir = join5(homedir5(), ".claude", "oh-my-claude", "memory", "sessions");
-    if (!existsSync5(logDir)) {
-      mkdirSync3(logDir, { recursive: true });
+    if (!existsSync6(logDir)) {
+      mkdirSync4(logDir, { recursive: true });
     }
     const suffix = projectCwd ? `-${shortHash(projectCwd)}` : "";
     const logPath = join5(logDir, `active-session${suffix}.jsonl`);
@@ -550,25 +731,25 @@ function logUserPrompt(prompt, projectCwd) {
   } catch {}
 }
 // src/memory/hooks/timeline.ts
-import { existsSync as existsSync6, readFileSync as readFileSync6 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync7 } from "node:fs";
 import { join as join6 } from "node:path";
 import { homedir as homedir6 } from "node:os";
 function getTimelineContent(projectCwd, maxLines = 80) {
   const lines = [];
   if (projectCwd) {
     const projectTimeline = join6(projectCwd, ".claude", "mem", "TIMELINE.md");
-    if (existsSync6(projectTimeline)) {
+    if (existsSync7(projectTimeline)) {
       try {
-        const content = readFileSync6(projectTimeline, "utf-8").trim();
+        const content = readFileSync7(projectTimeline, "utf-8").trim();
         if (content)
           lines.push(content);
       } catch {}
     }
   }
   const globalTimeline = join6(homedir6(), ".claude", "oh-my-claude", "memory", "TIMELINE.md");
-  if (existsSync6(globalTimeline)) {
+  if (existsSync7(globalTimeline)) {
     try {
-      const content = readFileSync6(globalTimeline, "utf-8").trim();
+      const content = readFileSync7(globalTimeline, "utf-8").trim();
       if (content) {
         if (lines.length > 0) {
           lines.push("");
@@ -656,7 +837,7 @@ function logToolObservation(toolName, toolInput, toolOutput, projectCwd) {
   };
   try {
     const logDir = join7(homedir7(), ".claude", "oh-my-claude", "memory", "sessions");
-    mkdirSync4(logDir, { recursive: true });
+    mkdirSync5(logDir, { recursive: true });
     const logPath = getSessionLogPath2(projectCwd);
     appendFileSync2(logPath, JSON.stringify(observation) + `
 `, "utf-8");
@@ -679,9 +860,9 @@ var DEFAULT_MODELS = {
 function loadTaskAgents() {
   try {
     const path = getSessionTaskAgentsPath();
-    if (!existsSync7(path))
+    if (!existsSync8(path))
       return { agents: [] };
-    const data = JSON.parse(readFileSync7(path, "utf-8"));
+    const data = JSON.parse(readFileSync8(path, "utf-8"));
     return Array.isArray(data?.agents) ? data : { agents: [] };
   } catch {
     return { agents: [] };
@@ -702,9 +883,9 @@ function updateStatusFile(taskAgents) {
       providers: {},
       updatedAt: new Date().toISOString()
     };
-    if (existsSync7(statusPath)) {
+    if (existsSync8(statusPath)) {
       try {
-        status = JSON.parse(readFileSync7(statusPath, "utf-8"));
+        status = JSON.parse(readFileSync8(statusPath, "utf-8"));
       } catch {}
     }
     const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
@@ -759,13 +940,13 @@ function handleTaskTool(input) {
 var SIGNALS_DIR = join7(homedir7(), ".claude", "oh-my-claude", "signals", "completed");
 var NOTIFIED_FILE = join7(homedir7(), ".claude", "oh-my-claude", "notified-tasks.json");
 function scanCompletionSignals() {
-  if (!existsSync7(SIGNALS_DIR))
+  if (!existsSync8(SIGNALS_DIR))
     return [];
   const notifications = [];
   let notified;
   try {
-    if (existsSync7(NOTIFIED_FILE)) {
-      const data = JSON.parse(readFileSync7(NOTIFIED_FILE, "utf-8"));
+    if (existsSync8(NOTIFIED_FILE)) {
+      const data = JSON.parse(readFileSync8(NOTIFIED_FILE, "utf-8"));
       const oneHourAgo = Date.now() - 60 * 60 * 1000;
       notified = new Set(Object.entries(data).filter(([_, ts]) => ts > oneHourAgo).map(([id]) => id));
     } else {
@@ -779,10 +960,10 @@ function scanCompletionSignals() {
     for (const file of files) {
       const filePath = join7(SIGNALS_DIR, file);
       try {
-        const signal = JSON.parse(readFileSync7(filePath, "utf-8"));
+        const signal = JSON.parse(readFileSync8(filePath, "utf-8"));
         if (notified.has(signal.taskId)) {
           try {
-            unlinkSync3(filePath);
+            unlinkSync4(filePath);
           } catch {}
           continue;
         }
@@ -791,20 +972,20 @@ function scanCompletionSignals() {
         notifications.push(`[@] ${signal.agentName}: ${signal.status} (${durationStr})`);
         notified.add(signal.taskId);
         try {
-          unlinkSync3(filePath);
+          unlinkSync4(filePath);
         } catch {}
       } catch {
         try {
-          unlinkSync3(filePath);
+          unlinkSync4(filePath);
         } catch {}
       }
     }
   } catch {}
   if (notifications.length > 0) {
     try {
-      const dir = dirname(NOTIFIED_FILE);
-      if (!existsSync7(dir))
-        mkdirSync4(dir, { recursive: true });
+      const dir = dirname2(NOTIFIED_FILE);
+      if (!existsSync8(dir))
+        mkdirSync5(dir, { recursive: true });
       const data = {};
       const now = Date.now();
       for (const id of notified)
@@ -825,7 +1006,7 @@ function formatDuration(ms) {
 function findGitRoot2(fromDir) {
   let dir = fromDir;
   while (true) {
-    if (existsSync7(join7(dir, ".git")))
+    if (existsSync8(join7(dir, ".git")))
       return dir;
     const parent = join7(dir, "..");
     if (parent === dir)
@@ -837,10 +1018,10 @@ function findGitRoot2(fromDir) {
 function resolveCanonicalRoot2(projectRoot) {
   const gitPath = join7(projectRoot, ".git");
   try {
-    const stat = statSync4(gitPath);
+    const stat = statSync5(gitPath);
     if (stat.isDirectory())
       return projectRoot;
-    const content = readFileSync7(gitPath, "utf-8").trim();
+    const content = readFileSync8(gitPath, "utf-8").trim();
     const match = content.match(/^gitdir:\s*(.+)$/);
     if (!match)
       return projectRoot;
@@ -857,9 +1038,9 @@ function saveMiniNote(toolInput, projectCwd) {
     return;
   try {
     const logPath = getSessionLogPath2(projectCwd);
-    if (!existsSync7(logPath))
+    if (!existsSync8(logPath))
       return;
-    const raw = readFileSync7(logPath, "utf-8").trim();
+    const raw = readFileSync8(logPath, "utf-8").trim();
     if (!raw || raw.length < 200)
       return;
     const lines = raw.split(`
@@ -885,7 +1066,7 @@ function saveMiniNote(toolInput, projectCwd) {
     } else {
       notesDir = join7(homedir7(), ".claude", "oh-my-claude", "memory", "notes");
     }
-    mkdirSync4(notesDir, { recursive: true });
+    mkdirSync5(notesDir, { recursive: true });
     const now = new Date;
     const dateStr = formatLocalYYYYMMDDLite(now);
     const timeStr = formatLocalHHMMSSLite(now);
@@ -912,7 +1093,7 @@ async function main() {
   writeCurrentPPID();
   let inputData = "";
   try {
-    inputData = readFileSync7(0, "utf-8");
+    inputData = readFileSync8(0, "utf-8");
   } catch {
     console.log(JSON.stringify({ decision: "approve" }));
     return;

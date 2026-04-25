@@ -80,15 +80,29 @@ async function refreshOpenAI(
     return cred.accessToken;
   }
 
-  const response = await fetch("https://auth.openai.com/oauth/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: cred.refreshToken,
-      client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
-    }),
-  });
+  // MED-6: bound OAuth refresh with a 30s timeout. Without this, a hung
+  // `auth.openai.com` request would stall every upstream request waiting
+  // on `getAccessToken` — and since refreshes are dedup'd, concurrent
+  // callers all block on the same never-resolving promise. The timeout
+  // lets the dedup'd promise reject cleanly so waiters can retry.
+  let response: Response;
+  try {
+    response = await fetch("https://auth.openai.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: cred.refreshToken,
+        client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // AbortSignal.timeout produces a TimeoutError/AbortError at runtime;
+    // fold both into a consistent message so the dedup'd promise rejects.
+    throw new Error(`OpenAI token refresh network error: ${msg}`);
+  }
 
   if (!response.ok) {
     const text = await response.text();

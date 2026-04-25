@@ -5,7 +5,7 @@
  * with restricted file permissions (0600).
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, platform } from "node:os";
 import { AuthStoreSchema, type AuthStore, type AuthCredential } from "./types";
@@ -35,6 +35,25 @@ function setFilePermissions(path: string): void {
 }
 
 /**
+ * Write a secret payload (credentials, cookies, OAuth tokens, refresh
+ * tokens, API keys) to disk with 0600 permissions on POSIX systems.
+ *
+ * All credential writers in the codebase (auth store, provider cookie
+ * stores, login scripts) MUST go through this helper so the permissions
+ * bit is never forgotten. Windows systems inherit the parent directory
+ * ACL since POSIX mode bits don't apply — callers relying on stricter
+ * isolation should additionally restrict the containing directory.
+ */
+export function writeSecretFile(
+  path: string,
+  content: string,
+  encoding: BufferEncoding = "utf-8",
+): void {
+  writeFileSync(path, content, encoding);
+  setFilePermissions(path);
+}
+
+/**
  * Load the full auth store from disk
  */
 export function loadAuthStore(): AuthStore {
@@ -51,13 +70,24 @@ export function loadAuthStore(): AuthStore {
 }
 
 /**
- * Save the full auth store to disk
+ * Save the full auth store to disk.
+ *
+ * Also bumps the file mtime explicitly (HIGH-12) so the provider router's
+ * mtime-based cache invalidation sees every save as a change event, even
+ * when the serialized content happens to be byte-identical (e.g. OAuth
+ * refresh returns the same access token within its skew window).
  */
 export function saveAuthStore(store: AuthStore): void {
   ensureAuthDir();
   const content = JSON.stringify(store, null, 2);
   writeFileSync(AUTH_PATH, content, "utf-8");
   setFilePermissions(AUTH_PATH);
+  try {
+    const now = new Date();
+    utimesSync(AUTH_PATH, now, now);
+  } catch {
+    // Best-effort; file system may not support utimes (rare).
+  }
 }
 
 /**

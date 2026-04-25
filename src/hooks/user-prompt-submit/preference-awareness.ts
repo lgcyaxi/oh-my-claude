@@ -16,7 +16,7 @@
  * }
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -25,6 +25,10 @@ import {
 	injectPreferences,
 	formatPreferenceInjection,
 } from '../../shared/preferences/injection';
+import {
+	atomicWriteJson,
+	withFileLockSync,
+} from '../../shared/fs/file-lock';
 
 interface UserPromptSubmitInput {
 	prompt: string;
@@ -45,6 +49,7 @@ interface HookResponse {
 const CACHE_TTL_MS = 8_000;
 const MAX_MATCHES = 5;
 const CACHE_PATH = join(tmpdir(), 'omc-pref-awareness-cache.json');
+const CACHE_LOCK_PATH = CACHE_PATH + '.lock';
 
 interface CacheEntry {
 	ts: number;
@@ -76,8 +81,25 @@ function getCached(promptHash: string): string | null {
 
 function setCache(promptHash: string, result: string): void {
 	try {
-		const entry: CacheEntry = { ts: Date.now(), hash: promptHash, result };
-		writeFileSync(CACHE_PATH, JSON.stringify(entry), 'utf-8');
+		// Serialize cache writes across concurrent hook invocations via
+		// withFileLockSync. atomicWriteJson does temp-file + rename so readers
+		// never observe a partial write, and the lock prevents two hooks from
+		// both racing to write the cache at the same instant.
+		withFileLockSync(
+			CACHE_LOCK_PATH,
+			() => {
+				const entry: CacheEntry = {
+					ts: Date.now(),
+					hash: promptHash,
+					result,
+				};
+				atomicWriteJson(CACHE_PATH, entry, {
+					indent: 0,
+					trailingNewline: false,
+				});
+			},
+			{ retries: 3, backoffMs: 10 },
+		);
 	} catch {
 		/* best-effort */
 	}

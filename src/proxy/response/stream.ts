@@ -13,6 +13,34 @@
 const UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
 
 /**
+ * Build an `AbortSignal` that fires when EITHER the upstream timeout
+ * elapses OR the downstream client disconnects (MED-3).
+ *
+ * Previously the proxy only wired the timeout. A client hitting Ctrl+C
+ * or dropping mid-stream would leave the upstream `fetch` running —
+ * holding a TCP connection and generating tokens nobody would ever read,
+ * which costs the user real money on metered providers.
+ *
+ * `AbortSignal.any` is available in Node.js ≥ 20 and Bun; we guard
+ * against older runtimes with a fallback that only honours the timeout
+ * so the function stays robust.
+ */
+export function buildUpstreamSignal(
+	clientSignal: AbortSignal | undefined,
+	timeoutMs: number = UPSTREAM_TIMEOUT_MS,
+): AbortSignal {
+	const timeoutSignal = AbortSignal.timeout(timeoutMs);
+	if (!clientSignal) return timeoutSignal;
+	const any = (AbortSignal as unknown as {
+		any?: (signals: AbortSignal[]) => AbortSignal;
+	}).any;
+	if (typeof any === 'function') {
+		return any([clientSignal, timeoutSignal]);
+	}
+	return timeoutSignal;
+}
+
+/**
  * Pipe an upstream response body to the client response as a ReadableStream.
  * Preserves SSE format and handles backpressure.
  *
@@ -163,12 +191,14 @@ export async function forwardToUpstream(
 		body = await originalRequest.text();
 	}
 
-	// Forward to upstream with timeout to prevent hanging on slow providers
+	// Forward to upstream with a composite signal: upstream timeout OR
+	// downstream client disconnect (MED-3). This prevents runaway
+	// upstream calls after the Claude Code client has hung up.
 	const upstreamResponse = await fetch(targetUrl, {
 		method: originalRequest.method,
 		headers,
 		body,
-		signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+		signal: buildUpstreamSignal(originalRequest.signal, UPSTREAM_TIMEOUT_MS),
 	});
 
 	return upstreamResponse;

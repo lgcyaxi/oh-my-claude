@@ -41,6 +41,74 @@ export { handleModelsRequest } from './models';
 export { getProxyStats, getProviderRequestCounts } from './stats';
 
 /**
+ * Build a 413 Payload Too Large response in Anthropic-error shape.
+ *
+ * MED-2: extracted into a shared helper so both `handleMessages` and
+ * `handleSwitched` (direct path) surface the same error envelope.
+ */
+export function buildBodyTooLargeResponse(
+	limit: number,
+	actual: number | undefined,
+): Response {
+	const message =
+		actual !== undefined
+			? `Request body exceeds proxy.maxBodyBytes (${actual} > ${limit})`
+			: `Request body exceeds proxy.maxBodyBytes (${limit})`;
+	return new Response(
+		JSON.stringify({
+			type: 'error',
+			error: { type: 'request_too_large', message },
+		}),
+		{
+			status: 413,
+			headers: { 'content-type': 'application/json' },
+		},
+	);
+}
+
+/**
+ * Read the request body, enforcing `proxy.maxBodyBytes` (default 4 MiB).
+ *
+ * MED-2: returns either the body text or a pre-built 413 response so the
+ * caller can bail out without performing expensive `JSON.parse` on an
+ * oversized payload. Content-length is consulted first to reject early
+ * without buffering; the post-read length check catches chunked or
+ * content-length-less requests.
+ */
+export async function readBodyWithLimit(
+	req: Request,
+): Promise<
+	| { ok: true; bodyText: string }
+	| { ok: false; response: Response }
+> {
+	const cfg = loadConfig();
+	const limit = cfg.proxy?.maxBodyBytes ?? 4 * 1024 * 1024;
+	if (limit > 0) {
+		const cl = req.headers.get('content-length');
+		if (cl) {
+			const declared = Number.parseInt(cl, 10);
+			if (Number.isFinite(declared) && declared > limit) {
+				return {
+					ok: false,
+					response: buildBodyTooLargeResponse(limit, declared),
+				};
+			}
+		}
+	}
+	const bodyText = await req.text();
+	if (limit > 0) {
+		const byteLen = Buffer.byteLength(bodyText, 'utf8');
+		if (byteLen > limit) {
+			return {
+				ok: false,
+				response: buildBodyTooLargeResponse(limit, byteLen),
+			};
+		}
+	}
+	return { ok: true, bodyText };
+}
+
+/**
  * Handle an incoming /v1/messages request from Claude Code
  */
 export async function handleMessages(
@@ -50,8 +118,15 @@ export async function handleMessages(
 	const reqId = nextRequestId();
 	const sessionTag = sessionId ? ` [s:${sessionId.slice(0, 8)}]` : '';
 
-	// Read body ONCE — prevents double-consumption when fallback paths need the body
-	const bodyText = await req.text();
+	// Read body ONCE, enforcing proxy.maxBodyBytes before JSON.parse (MED-2).
+	const bodyOutcome = await readBodyWithLimit(req);
+	if (!bodyOutcome.ok) {
+		console.error(
+			`[proxy #${reqId}]${sessionTag} Request body rejected (413)`,
+		);
+		return bodyOutcome.response;
+	}
+	const bodyText = bodyOutcome.bodyText;
 
 	try {
 		// --- Priority 1: Route directive in system prompt ---

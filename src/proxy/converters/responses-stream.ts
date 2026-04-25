@@ -235,10 +235,18 @@ export class ResponsesToAnthropicStreamConverter extends TransformStream<
 			}
 
 			case 'response.failed': {
+				// MED-1: previously we closed the stream with a clean
+				// `message_delta(stop_reason=end_turn)` + `message_stop`,
+				// which made the Anthropic client treat an upstream failure
+				// as a successful empty turn — losing retry semantics and
+				// silently dropping user prompts. Emit an Anthropic-shape
+				// `error` event instead so the SDK rejects the stream.
 				const error = data.error as Record<string, unknown> | undefined;
 				const errorMsg =
 					(error?.message as string) ??
 					'Unknown error from Codex API';
+				const errorType =
+					(error?.type as string) ?? 'api_error';
 
 				for (const blockIdx of this.openBlocks) {
 					this.emitSSE(controller, 'content_block_stop', {
@@ -248,13 +256,12 @@ export class ResponsesToAnthropicStreamConverter extends TransformStream<
 				}
 				this.openBlocks.clear();
 
-				this.emitSSE(controller, 'message_delta', {
-					type: 'message_delta',
-					delta: { stop_reason: 'end_turn', stop_sequence: null },
-					usage: { output_tokens: this.outputTokens },
-				});
-				this.emitSSE(controller, 'message_stop', {
-					type: 'message_stop',
+				this.emitSSE(controller, 'error', {
+					type: 'error',
+					error: {
+						type: errorType,
+						message: errorMsg,
+					},
 				});
 
 				console.error(

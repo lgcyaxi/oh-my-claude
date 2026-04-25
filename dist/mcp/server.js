@@ -10719,6 +10719,33 @@ function inferCategory(type, tags, content) {
   }
   return bestScore >= 2 ? bestCategory : undefined;
 }
+function validateMemoryId(id) {
+  if (typeof id !== "string") {
+    throw new MemoryIdInvalidError(String(id), "must be a string");
+  }
+  if (id.length === 0) {
+    throw new MemoryIdInvalidError(id, "must be non-empty");
+  }
+  if (id.length > MEMORY_ID_MAX_LENGTH) {
+    throw new MemoryIdInvalidError(id, `exceeds maximum length of ${MEMORY_ID_MAX_LENGTH}`);
+  }
+  if (id.includes("\x00")) {
+    throw new MemoryIdInvalidError(id, "must not contain null bytes");
+  }
+  if (id.includes("/") || id.includes("\\")) {
+    throw new MemoryIdInvalidError(id, "must not contain path separators");
+  }
+  if (id === "." || id === ".." || id.startsWith("..")) {
+    throw new MemoryIdInvalidError(id, "must not reference parent/current directory");
+  }
+  if (id.startsWith(".")) {
+    throw new MemoryIdInvalidError(id, "must not start with a dot");
+  }
+  if (!MEMORY_ID_PATTERN.test(id)) {
+    throw new MemoryIdInvalidError(id, "must match /^[A-Za-z0-9_\\-.:]+$/");
+  }
+  return id;
+}
 function findProjectRoot(fromDir) {
   let dir = fromDir ?? cwd();
   const root = dirname(dir);
@@ -10835,7 +10862,7 @@ function createMemory(input, projectRoot) {
     const now = nowISO();
     const createdAt = input.createdAt ?? now;
     const idDate = input.createdAt ? new Date(input.createdAt) : undefined;
-    const id = generateMemoryId(title, idDate);
+    const id = validateMemoryId(generateMemoryId(title, idDate));
     const category = input.category ?? inferCategory(type, normalizeTags(input.tags), input.content);
     const entry = {
       id,
@@ -10871,13 +10898,14 @@ function createMemory(input, projectRoot) {
 }
 function getMemory(id, scope = "all", projectRoot) {
   try {
+    const safeId = validateMemoryId(id);
     const dirs = getMemoryDirForScope(scope, projectRoot);
     for (const baseDir of dirs) {
       for (const type of ["session", "note"]) {
-        const filePath = join(getTypeDir(baseDir, type), `${id}.md`);
+        const filePath = join(getTypeDir(baseDir, type), `${safeId}.md`);
         if (existsSync(filePath)) {
           const raw = readFileSync(filePath, "utf-8");
-          const entry = parseMemoryFile(id, raw);
+          const entry = parseMemoryFile(safeId, raw);
           if (entry) {
             const projectDir = getProjectMemoryDir(projectRoot);
             entry._scope = baseDir === projectDir ? "project" : "global";
@@ -10887,25 +10915,32 @@ function getMemory(id, scope = "all", projectRoot) {
         }
       }
     }
-    return { success: false, error: `Memory "${id}" not found` };
+    return { success: false, error: `Memory "${safeId}" not found` };
   } catch (error2) {
+    if (error2 instanceof MemoryIdInvalidError) {
+      return { success: false, error: error2.message };
+    }
     return { success: false, error: `Failed to read memory: ${error2}` };
   }
 }
 function deleteMemory(id, scope = "all", projectRoot) {
   try {
+    const safeId = validateMemoryId(id);
     const dirs = getMemoryDirForScope(scope, projectRoot);
     for (const baseDir of dirs) {
       for (const type of ["session", "note"]) {
-        const filePath = join(getTypeDir(baseDir, type), `${id}.md`);
+        const filePath = join(getTypeDir(baseDir, type), `${safeId}.md`);
         if (existsSync(filePath)) {
           unlinkSync(filePath);
           return { success: true };
         }
       }
     }
-    return { success: false, error: `Memory "${id}" not found` };
+    return { success: false, error: `Memory "${safeId}" not found` };
   } catch (error2) {
+    if (error2 instanceof MemoryIdInvalidError) {
+      return { success: false, error: error2.message };
+    }
     return { success: false, error: `Failed to delete memory: ${error2}` };
   }
 }
@@ -11002,7 +11037,7 @@ function getMemoryStats(projectRoot) {
   }
   return stats;
 }
-var CATEGORY_KEYWORDS;
+var CATEGORY_KEYWORDS, MemoryIdInvalidError, MEMORY_ID_MAX_LENGTH = 200, MEMORY_ID_PATTERN;
 var init_store = __esm(() => {
   CATEGORY_KEYWORDS = {
     architecture: [
@@ -11078,6 +11113,15 @@ var init_store = __esm(() => {
     session: ["session", "auto-capture", "session-end", "context-threshold"],
     uncategorized: []
   };
+  MemoryIdInvalidError = class MemoryIdInvalidError extends Error {
+    id;
+    constructor(id, reason) {
+      super(`Invalid memory id "${id}": ${reason}`);
+      this.name = "MemoryIdInvalidError";
+      this.id = id;
+    }
+  };
+  MEMORY_ID_PATTERN = /^[A-Za-z0-9_\-.:]+$/;
 });
 
 // node_modules/sql.js-fts5/dist/sql-wasm.js
@@ -13626,6 +13670,156 @@ var require_sql_wasm = __commonJS((exports, module) => {
   }
 });
 
+// src/shared/fs/file-lock.ts
+import {
+  openSync,
+  closeSync,
+  unlinkSync as unlinkSync2,
+  existsSync as existsSync3,
+  mkdirSync as mkdirSync3,
+  writeFileSync as writeFileSync3,
+  renameSync,
+  readFileSync as readFileSync3,
+  statSync as statSync3,
+  chmodSync,
+  copyFileSync
+} from "fs";
+import { dirname as dirname3 } from "path";
+function sleepBlockingMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {}
+}
+function acquireLock(lockPath, opts) {
+  const dir = dirname3(lockPath);
+  for (let i = 0;i < opts.retries; i++) {
+    try {
+      if (!existsSync3(dir)) {
+        mkdirSync3(dir, { recursive: true });
+      }
+      return openSync(lockPath, "wx");
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") {
+        return null;
+      }
+      try {
+        const stat = statSync3(lockPath);
+        if (Date.now() - stat.mtimeMs > opts.staleMs) {
+          try {
+            unlinkSync2(lockPath);
+          } catch {}
+          continue;
+        }
+      } catch {}
+      sleepBlockingMs(opts.backoffMs + Math.random() * opts.backoffMs);
+    }
+  }
+  return null;
+}
+function releaseLock(fd, lockPath) {
+  if (fd === null)
+    return;
+  try {
+    closeSync(fd);
+  } catch {}
+  try {
+    unlinkSync2(lockPath);
+  } catch {}
+}
+function withFileLockSync(lockPath, fn, opts = {}) {
+  const resolved = {
+    retries: opts.retries ?? DEFAULT_RETRIES,
+    backoffMs: opts.backoffMs ?? DEFAULT_BACKOFF_MS,
+    staleMs: opts.staleMs ?? DEFAULT_STALE_MS
+  };
+  const fd = acquireLock(lockPath, resolved);
+  try {
+    return fn();
+  } finally {
+    releaseLock(fd, lockPath);
+  }
+}
+function atomicTempPath(path) {
+  return `${path}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function ensureParentDir(path) {
+  const dir = dirname3(path);
+  if (!existsSync3(dir)) {
+    mkdirSync3(dir, { recursive: true });
+  }
+}
+function applyMode(path, mode) {
+  if (mode === undefined || process.platform === "win32")
+    return;
+  try {
+    chmodSync(path, mode);
+  } catch {}
+}
+function atomicWriteText(path, text, opts = {}) {
+  ensureParentDir(path);
+  const tmp = atomicTempPath(path);
+  writeFileSync3(tmp, text, "utf-8");
+  applyMode(tmp, opts.mode);
+  renameSync(tmp, path);
+  applyMode(path, opts.mode);
+}
+function atomicWriteJson(path, value, opts = {}) {
+  const indent = opts.indent ?? "\t";
+  const trailing = opts.trailingNewline ?? true;
+  const text = JSON.stringify(value, null, indent) + (trailing ? `
+` : "");
+  atomicWriteText(path, text, { mode: opts.mode });
+}
+function backupCorruptFile(path) {
+  const backupPath = `${path}.corrupt-${Date.now()}.bak`;
+  try {
+    copyFileSync(path, backupPath);
+  } catch {}
+  return backupPath;
+}
+function loadJsonOrBackup(path, schema, opts = {}) {
+  if (!existsSync3(path))
+    return null;
+  let raw;
+  try {
+    raw = readFileSync3(path, "utf-8");
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Failed to read JSON file at ${path}: ${err.message}`, path, backupPath, err);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Failed to parse JSON at ${path}: ${err.message}`, path, backupPath, err);
+  }
+  try {
+    return schema.parse(parsed);
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Schema validation failed for ${path}: ${err.message}`, path, backupPath, err);
+  }
+}
+var DEFAULT_RETRIES = 10, DEFAULT_BACKOFF_MS = 20, DEFAULT_STALE_MS = 5000, JsonCorruptError;
+var init_file_lock = __esm(() => {
+  JsonCorruptError = class JsonCorruptError extends Error {
+    path;
+    backupPath;
+    cause;
+    name = "JsonCorruptError";
+    constructor(message, path, backupPath, cause) {
+      super(message);
+      this.path = path;
+      this.backupPath = backupPath;
+      this.cause = cause;
+    }
+  };
+});
+
 // src/memory/timeline.ts
 var exports_timeline = {};
 __export(exports_timeline, {
@@ -13637,10 +13831,10 @@ __export(exports_timeline, {
   generateTimeline: () => generateTimeline
 });
 import {
-  existsSync as existsSync3,
-  readFileSync as readFileSync3,
-  writeFileSync as writeFileSync3,
-  mkdirSync as mkdirSync3,
+  existsSync as existsSync4,
+  readFileSync as readFileSync4,
+  writeFileSync as writeFileSync4,
+  mkdirSync as mkdirSync4,
   readdirSync as readdirSync3
 } from "node:fs";
 import { join as join3 } from "node:path";
@@ -13649,26 +13843,26 @@ function saveClearedEntry(entry, scope, projectRoot) {
   if (!baseDir)
     return;
   const clearedDir = join3(baseDir, CLEARED_DIRNAME);
-  if (!existsSync3(clearedDir)) {
-    mkdirSync3(clearedDir, { recursive: true });
+  if (!existsSync4(clearedDir)) {
+    mkdirSync4(clearedDir, { recursive: true });
   }
   const filename = `${entry.id}.json`;
   const filepath = join3(clearedDir, filename);
-  writeFileSync3(filepath, JSON.stringify(entry, null, 2), "utf-8");
+  writeFileSync4(filepath, JSON.stringify(entry, null, 2), "utf-8");
 }
 function listClearedEntries(scope, projectRoot) {
   const baseDir = scope === "project" ? getProjectMemoryDir(projectRoot) : getMemoryDir();
   if (!baseDir)
     return [];
   const clearedDir = join3(baseDir, CLEARED_DIRNAME);
-  if (!existsSync3(clearedDir))
+  if (!existsSync4(clearedDir))
     return [];
   const entries = [];
   try {
     const files = readdirSync3(clearedDir).filter((f) => f.endsWith(".json"));
     for (const file of files) {
       try {
-        const content = readFileSync3(join3(clearedDir, file), "utf-8");
+        const content = readFileSync4(join3(clearedDir, file), "utf-8");
         entries.push(JSON.parse(content));
       } catch {}
     }
@@ -13994,25 +14188,21 @@ function writeTimeline(scope, content, projectRoot) {
   const path = getTimelinePath(scope, projectRoot);
   if (!path)
     return;
-  const dir = join3(path, "..");
-  if (!existsSync3(dir)) {
-    mkdirSync3(dir, { recursive: true });
-  }
-  writeFileSync3(path, content, "utf-8");
+  atomicWriteText(path, content);
 }
 function readTimeline(scope, projectRoot) {
   const path = getTimelinePath(scope, projectRoot);
-  if (!path || !existsSync3(path))
+  if (!path || !existsSync4(path))
     return null;
   try {
-    return readFileSync3(path, "utf-8");
+    return readFileSync4(path, "utf-8");
   } catch {
     return null;
   }
 }
 function regenerateTimelines(projectRoot) {
   const projectDir = getProjectMemoryDir(projectRoot);
-  if (projectDir && existsSync3(projectDir)) {
+  if (projectDir && existsSync4(projectDir)) {
     const projectEntries = listMemories({ scope: "project" }, projectRoot);
     const projectCleared = listClearedEntries("project", projectRoot);
     if (projectEntries.length > 0 || projectCleared.length > 0) {
@@ -14038,6 +14228,7 @@ function regenerateTimelines(projectRoot) {
 var TIMELINE_FILENAME = "TIMELINE.md", CLEARED_DIRNAME = "cleared", DEFAULT_MAX_LINES = 120, DEFAULT_MAX_WEEK_ENTRIES = 10, NOISE_TAGS;
 var init_timeline = __esm(() => {
   init_store();
+  init_file_lock();
   NOISE_TAGS = new Set([
     "auto-capture",
     "session-end",
@@ -14073,6 +14264,7 @@ var init_types2 = __esm(() => {
 // src/shared/auth/store.ts
 var exports_store = {};
 __export(exports_store, {
+  writeSecretFile: () => writeSecretFile,
   setCredential: () => setCredential,
   saveAuthStore: () => saveAuthStore,
   removeCredential: () => removeCredential,
@@ -14082,27 +14274,31 @@ __export(exports_store, {
   getCredential: () => getCredential,
   getAuthStorePath: () => getAuthStorePath
 });
-import { existsSync as existsSync4, readFileSync as readFileSync4, writeFileSync as writeFileSync4, mkdirSync as mkdirSync4, chmodSync } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync5, writeFileSync as writeFileSync5, mkdirSync as mkdirSync5, chmodSync as chmodSync2, utimesSync } from "node:fs";
 import { join as join6 } from "node:path";
 import { homedir as homedir5, platform } from "node:os";
 function ensureAuthDir() {
-  if (!existsSync4(AUTH_DIR)) {
-    mkdirSync4(AUTH_DIR, { recursive: true });
+  if (!existsSync5(AUTH_DIR)) {
+    mkdirSync5(AUTH_DIR, { recursive: true });
   }
 }
 function setFilePermissions(path) {
   if (platform() === "win32")
     return;
   try {
-    chmodSync(path, 384);
+    chmodSync2(path, 384);
   } catch {}
+}
+function writeSecretFile(path, content, encoding = "utf-8") {
+  writeFileSync5(path, content, encoding);
+  setFilePermissions(path);
 }
 function loadAuthStore() {
   try {
-    if (!existsSync4(AUTH_PATH)) {
+    if (!existsSync5(AUTH_PATH)) {
       return { version: 1, credentials: {} };
     }
-    const content = readFileSync4(AUTH_PATH, "utf-8");
+    const content = readFileSync5(AUTH_PATH, "utf-8");
     const parsed = JSON.parse(content);
     return AuthStoreSchema.parse(parsed);
   } catch {
@@ -14112,8 +14308,12 @@ function loadAuthStore() {
 function saveAuthStore(store) {
   ensureAuthDir();
   const content = JSON.stringify(store, null, 2);
-  writeFileSync4(AUTH_PATH, content, "utf-8");
+  writeFileSync5(AUTH_PATH, content, "utf-8");
   setFilePermissions(AUTH_PATH);
+  try {
+    const now = new Date;
+    utimesSync(AUTH_PATH, now, now);
+  } catch {}
 }
 function getCredential(provider) {
   const store = loadAuthStore();
@@ -14167,16 +14367,16 @@ function toErrorMessage(error2) {
 // src/coworker/observability.ts
 import {
   appendFileSync,
-  existsSync as existsSync7,
-  mkdirSync as mkdirSync5,
-  readFileSync as readFileSync6,
-  renameSync,
-  writeFileSync as writeFileSync5
+  existsSync as existsSync8,
+  mkdirSync as mkdirSync6,
+  readFileSync as readFileSync7,
+  renameSync as renameSync2,
+  writeFileSync as writeFileSync6
 } from "node:fs";
-import { dirname as dirname4, join as join11 } from "node:path";
+import { dirname as dirname5, join as join11 } from "node:path";
 import { homedir as homedir8 } from "node:os";
 function ensureParent(path) {
-  mkdirSync5(dirname4(path), { recursive: true });
+  mkdirSync6(dirname5(path), { recursive: true });
 }
 function getCoworkerStorageRoot() {
   return process.env.OMC_COWORKER_STATE_DIR || join11(homedir8(), ".claude", "oh-my-claude");
@@ -14190,9 +14390,9 @@ function getCoworkerStatusPath(target) {
 function readCoworkerStatusSignal(target) {
   const path = getCoworkerStatusPath(target);
   try {
-    if (!existsSync7(path))
+    if (!existsSync8(path))
       return null;
-    return JSON.parse(readFileSync6(path, "utf8"));
+    return JSON.parse(readFileSync7(path, "utf8"));
   } catch {
     return null;
   }
@@ -14200,9 +14400,9 @@ function readCoworkerStatusSignal(target) {
 function readRecentCoworkerActivity(target, limit = 20) {
   const path = getCoworkerLogPath(target);
   try {
-    if (!existsSync7(path))
+    if (!existsSync8(path))
       return [];
-    return readFileSync6(path, "utf8").split(`
+    return readFileSync7(path, "utf8").split(`
 `).filter((line) => line.trim().length > 0).slice(-Math.max(1, limit)).map((line) => {
       try {
         return JSON.parse(line);
@@ -14248,8 +14448,8 @@ class CoworkerObservability {
         ...signal
       };
       const tmpPath = `${this.statusSignalPath}.tmp`;
-      writeFileSync5(tmpPath, JSON.stringify(payload), "utf8");
-      renameSync(tmpPath, this.statusSignalPath);
+      writeFileSync6(tmpPath, JSON.stringify(payload), "utf8");
+      renameSync2(tmpPath, this.statusSignalPath);
     } catch {}
   }
   writeStatusSignal(state, tool, model, sessionId, taskId) {
@@ -15674,7 +15874,7 @@ var init_actions = __esm(() => {
 });
 
 // src/coworker/opencode/runtime.ts
-import { existsSync as existsSync8 } from "node:fs";
+import { existsSync as existsSync9 } from "node:fs";
 import { resolve } from "node:path";
 
 class OpenCodeCoworkerRuntime {
@@ -15778,7 +15978,7 @@ class OpenCodeCoworkerRuntime {
       sessionId: this.sessionId,
       activeTaskCount: this.activeTaskCount,
       lastActivityAt: this.lastActivityAt,
-      logAvailable: existsSync8(getCoworkerLogPath("opencode")),
+      logAvailable: existsSync9(getCoworkerLogPath("opencode")),
       viewerAvailable: process.env.OPENCODE_NO_VIEWER !== "1",
       viewerAttached: this.viewer?.attached ?? false,
       signalState: signal?.state ?? null,
@@ -25178,15 +25378,19 @@ function mergeHybridResults(ftsResults, vectorResults, weights) {
 }
 
 // src/memory/search.ts
-async function searchMemories(options, projectRoot, tiered) {
+async function searchMemoriesEnvelope(options, projectRoot, tiered) {
   const indexer = tiered?.indexer;
   const embeddingProvider = tiered?.embeddingProvider;
   const snippetMaxChars = tiered?.snippetMaxChars ?? 300;
-  const tier = indexer?.isReady() && embeddingProvider ? "hybrid" : indexer?.isReady() ? "fts5" : "legacy";
+  const capabilityTier = indexer?.isReady() && embeddingProvider ? "hybrid" : indexer?.isReady() ? "fts5" : "legacy";
   if (!options.query || options.query.trim().length === 0) {
-    return searchLegacy(options, projectRoot);
+    return {
+      results: searchLegacy(options, projectRoot),
+      capabilityTier,
+      executedTier: "legacy"
+    };
   }
-  if (tier !== "legacy" && indexer?.isReady() && options.query) {
+  if (capabilityTier !== "legacy" && indexer?.isReady() && options.query) {
     try {
       const limit = options.limit ?? 5;
       let augmentedQuery = options.query;
@@ -25196,24 +25400,40 @@ async function searchMemories(options, projectRoot, tiered) {
       if (options.concepts && options.concepts.length > 0) {
         augmentedQuery = `${augmentedQuery} ${options.concepts.join(" ")}`;
       }
-      if (tier === "hybrid" && embeddingProvider) {
-        return await searchHybrid(augmentedQuery, limit, indexer, embeddingProvider, options, projectRoot, tiered?.hybridWeights, snippetMaxChars);
-      } else {
-        return await searchFTS5(augmentedQuery, limit, indexer, options, projectRoot, snippetMaxChars);
+      if (capabilityTier === "hybrid" && embeddingProvider) {
+        const results = await searchHybrid(augmentedQuery, limit, indexer, embeddingProvider, options, projectRoot, tiered?.hybridWeights, snippetMaxChars);
+        const executedTier = results[0]?.searchTier ?? "hybrid";
+        return {
+          results,
+          capabilityTier,
+          executedTier
+        };
       }
+      const fts = await searchFTS5(augmentedQuery, limit, indexer, options, projectRoot, snippetMaxChars);
+      return {
+        results: fts,
+        capabilityTier,
+        executedTier: "fts5"
+      };
     } catch (e) {
-      console.error(`[search] Tier ${tier} failed, falling back to legacy:`, e);
+      console.error(`[search] Tier ${capabilityTier} failed, falling back to legacy:`, e);
     }
   }
-  return searchLegacy(options, projectRoot);
+  return {
+    results: searchLegacy(options, projectRoot),
+    capabilityTier,
+    executedTier: "legacy"
+  };
 }
 async function searchHybrid(query, limit, indexer, embeddingProvider, options, projectRoot, weights, snippetMaxChars = 300) {
   const candidateLimit = limit * 4;
   const ftsResults = await indexer.searchFTS(query, candidateLimit, options.scope, projectRoot);
   let vectorResults = [];
+  let embeddingsAvailable = 0;
   try {
     const queryVec = await embeddingProvider.embed(query);
     const embeddings = await indexer.getEmbeddings(embeddingProvider.name, embeddingProvider.model);
+    embeddingsAvailable = embeddings.size;
     const scored = [];
     for (const [chunkId, vec] of embeddings) {
       const score = cosineSimilarity(queryVec, vec);
@@ -25226,6 +25446,8 @@ async function searchHybrid(query, limit, indexer, embeddingProvider, options, p
   } catch (e) {
     console.error("[search] Vector search failed, using FTS only:", e);
   }
+  const hadVectors = embeddingsAvailable > 0;
+  const executedTier = hadVectors ? "hybrid" : "fts5";
   const merged = mergeHybridResults(ftsResults.map((f) => ({
     chunkId: f.chunkId,
     path: f.path,
@@ -25235,7 +25457,7 @@ async function searchHybrid(query, limit, indexer, embeddingProvider, options, p
     text: f.text,
     rank: f.rank
   })), vectorResults, weights);
-  return await convertChunkResults(merged.slice(0, limit), ftsResults, "hybrid", snippetMaxChars, options, projectRoot, indexer);
+  return await convertChunkResults(merged.slice(0, limit), ftsResults, executedTier, snippetMaxChars, options, projectRoot, indexer);
 }
 async function searchFTS5(query, limit, indexer, options, projectRoot, snippetMaxChars = 300) {
   const ftsResults = await indexer.searchFTS(query, limit * 2, options.scope, projectRoot);
@@ -25920,6 +26142,40 @@ class MemoryIndexer {
          WHERE ec.provider = ? AND ec.model = ?
        )`, [provider, model]);
   }
+  async getChunksWithoutEmbeddingsForFile(filePath, provider, model) {
+    await this.init();
+    if (!this.db)
+      return [];
+    return this.queryAll(`SELECT c.id, c.hash, c.text FROM chunks c
+       WHERE c.path = ?
+         AND c.hash NOT IN (
+           SELECT ec.hash FROM embedding_cache ec
+           WHERE ec.provider = ? AND ec.model = ?
+         )`, [filePath, provider, model]);
+  }
+  async indexMemoryWithEmbeddings(filePath, scope, projectRoot, provider) {
+    await this.indexFile(filePath, scope, projectRoot);
+    const missing = await this.getChunksWithoutEmbeddingsForFile(filePath, provider.name, provider.model);
+    let embedded = 0;
+    let failed = 0;
+    const skipped = 0;
+    for (const chunk of missing) {
+      try {
+        const vector = await provider.embed(chunk.text);
+        if (!Array.isArray(vector) || vector.length === 0) {
+          failed++;
+          continue;
+        }
+        await this.cacheEmbedding(provider.name, provider.model, chunk.hash, vector);
+        embedded++;
+      } catch (e) {
+        failed++;
+        console.error(`[indexer] embed failed for chunk ${chunk.id}:`, e instanceof Error ? e.message : e);
+      }
+    }
+    await this.flush();
+    return { embedded, skipped, failed };
+  }
   isReady() {
     return this.initialized && this.db !== null;
   }
@@ -26437,7 +26693,9 @@ var STATE_DIR = join4(homedir3(), ".claude", "oh-my-claude", "state");
 // src/memory/hooks/session.ts
 import { join as join5 } from "node:path";
 import { homedir as homedir4 } from "node:os";
+init_file_lock();
 var STATE_DIR2 = join5(homedir4(), ".claude", "oh-my-claude", "state");
+var corruptStatePaths = new Set;
 // src/shared/config/schema.ts
 init_zod();
 // src/shared/config/models-registry.json
@@ -26809,7 +27067,8 @@ var MemoryConfigSchema = exports_external.object({
   embedding: exports_external.object({
     provider: exports_external.enum(["custom", "zhipu", "none"]).default("custom"),
     model: exports_external.string().default("embedding-3"),
-    dimensions: exports_external.number().min(64).max(8192).optional()
+    dimensions: exports_external.number().min(64).max(8192).optional(),
+    onWrite: exports_external.boolean().default(true)
   }).optional(),
   chunking: exports_external.object({
     tokens: exports_external.number().min(100).max(2000).default(400),
@@ -26847,7 +27106,8 @@ var ProxyConfigSchema = exports_external.object({
   port: exports_external.number().min(1024).max(65535).default(18910),
   controlPort: exports_external.number().min(1024).max(65535).default(18911),
   enabled: exports_external.boolean().default(false),
-  failClosed: exports_external.boolean().default(true)
+  failClosed: exports_external.boolean().default(true),
+  maxBodyBytes: exports_external.number().int().default(4 * 1024 * 1024)
 });
 var OhMyClaudeConfigSchema = exports_external.object({
   $schema: exports_external.string().optional(),
@@ -26920,7 +27180,7 @@ var OhMyClaudeConfigSchema = exports_external.object({
 });
 var DEFAULT_CONFIG = OhMyClaudeConfigSchema.parse({});
 // src/shared/config/loader.ts
-import { readFileSync as readFileSync5, existsSync as existsSync5 } from "node:fs";
+import { readFileSync as readFileSync6, existsSync as existsSync6 } from "node:fs";
 import { homedir as homedir6 } from "node:os";
 import { join as join7 } from "node:path";
 init_types2();
@@ -26936,9 +27196,9 @@ function getConfigPaths() {
 function loadConfig() {
   const configPaths = getConfigPaths();
   for (const configPath of configPaths) {
-    if (existsSync5(configPath)) {
+    if (existsSync6(configPath)) {
       try {
-        const content = readFileSync5(configPath, "utf-8");
+        const content = readFileSync6(configPath, "utf-8");
         const parsed = JSON.parse(content);
         return OhMyClaudeConfigSchema.parse(parsed);
       } catch (error2) {
@@ -26984,8 +27244,8 @@ function isProviderConfigured(config2, providerName) {
   return false;
 }
 // src/mcp/shared/utils.ts
-import { existsSync as existsSync6 } from "node:fs";
-import { join as join8, dirname as dirname3 } from "node:path";
+import { existsSync as existsSync7 } from "node:fs";
+import { join as join8, dirname as dirname4 } from "node:path";
 function parseStringArray(value) {
   if (Array.isArray(value)) {
     return value.map(String);
@@ -27024,10 +27284,10 @@ function getConfiguredWriteScope() {
 function resolveProjectRoot() {
   let dir = process.cwd();
   while (true) {
-    if (existsSync6(join8(dir, ".git"))) {
+    if (existsSync7(join8(dir, ".git"))) {
       return dir;
     }
-    const parent = dirname3(dir);
+    const parent = dirname4(dir);
     if (parent === dir)
       break;
     dir = parent;
@@ -27037,6 +27297,18 @@ function resolveProjectRoot() {
 
 // src/mcp/memory/helpers.ts
 import { join as join9 } from "node:path";
+var cachedEmbedOnWrite = null;
+function readEmbedOnWriteFromConfig() {
+  if (cachedEmbedOnWrite !== null)
+    return cachedEmbedOnWrite;
+  try {
+    const cfg = loadConfig();
+    cachedEmbedOnWrite = cfg.memory?.embedding?.onWrite !== false;
+  } catch {
+    cachedEmbedOnWrite = true;
+  }
+  return cachedEmbedOnWrite;
+}
 function afterMemoryMutation(projectRoot) {
   try {
     regenerateTimelines(projectRoot);
@@ -27044,18 +27316,24 @@ function afterMemoryMutation(projectRoot) {
     console.error("[omc-memory] regenerateTimelines failed:", e);
   }
 }
-async function indexNewMemory(memoryData, scope, projectRoot, indexer) {
+async function indexNewMemory(memoryData, scope, projectRoot, indexer, opts) {
   if (!indexer?.isReady())
     return;
   try {
     const actualScope = scope ?? getDefaultWriteScope(projectRoot, getConfiguredWriteScope());
     const memDir = actualScope === "project" && projectRoot ? getProjectMemoryDir(projectRoot) : getMemoryDir();
-    if (memDir) {
-      const subdir = memoryData.type === "session" ? "sessions" : "notes";
-      const filePath = join9(memDir, subdir, `${memoryData.id}.md`);
-      await indexer.indexFile(filePath, actualScope, projectRoot);
-      await indexer.flush();
+    if (!memDir)
+      return;
+    const subdir = memoryData.type === "session" ? "sessions" : "notes";
+    const filePath = join9(memDir, subdir, `${memoryData.id}.md`);
+    const provider = opts?.embeddingProvider ?? null;
+    const embedOnWrite = opts?.embedOnWrite !== undefined ? opts.embedOnWrite : readEmbedOnWriteFromConfig();
+    if (embedOnWrite && provider) {
+      await indexer.indexMemoryWithEmbeddings(filePath, actualScope, projectRoot, provider);
+      return;
     }
+    await indexer.indexFile(filePath, actualScope, projectRoot);
+    await indexer.flush();
   } catch (e) {
     console.error("[oh-my-claude] Post-write indexing failed:", e);
   }
@@ -27170,7 +27448,7 @@ async function handleMemoryAiOp(name, args, ctx, cachedProjectRoot) {
             isError: true
           };
         }
-        const { indexer } = await ctx.ensureIndexer();
+        const { indexer, embeddingProvider } = await ctx.ensureIndexer();
         const results = [];
         for (const group of groups) {
           try {
@@ -27202,7 +27480,7 @@ async function handleMemoryAiOp(name, args, ctx, cachedProjectRoot) {
               });
               continue;
             }
-            await indexNewMemory({ id: createResult.data.id, type: "note" }, targetScope ?? getDefaultWriteScope(cachedProjectRoot, getConfiguredWriteScope()), cachedProjectRoot, indexer);
+            await indexNewMemory({ id: createResult.data.id, type: "note" }, targetScope ?? getDefaultWriteScope(cachedProjectRoot, getConfiguredWriteScope()), cachedProjectRoot, indexer, { embeddingProvider });
             const deleteErrors = [];
             for (const memory of memories) {
               const del = deleteMemory(memory.id, "all", cachedProjectRoot);
@@ -27554,7 +27832,7 @@ async function handleMemoryAiOp(name, args, ctx, cachedProjectRoot) {
             resolvedCreatedAt = `${dateMatch[1]}T00:00:00.000Z`;
           }
         }
-        const { indexer } = await ctx.ensureIndexer();
+        const { indexer, embeddingProvider } = await ctx.ensureIndexer();
         const createResult = createMemory({
           title: title ?? "Timeline Summary",
           content: summary,
@@ -27581,7 +27859,7 @@ async function handleMemoryAiOp(name, args, ctx, cachedProjectRoot) {
           await indexNewMemory({
             id: createResult.data.id,
             type: createResult.data.type
-          }, targetScope ?? getDefaultWriteScope(cachedProjectRoot, getConfiguredWriteScope()), cachedProjectRoot, indexer);
+          }, targetScope ?? getDefaultWriteScope(cachedProjectRoot, getConfiguredWriteScope()), cachedProjectRoot, indexer, { embeddingProvider });
         }
         let archivedCount = 0;
         let archiveErrors = 0;
@@ -27732,7 +28010,7 @@ async function handleMemoryTool(name, args, ctx) {
         };
       }
       if (result.data) {
-        await indexNewMemory(result.data, scope, cachedProjectRoot, indexer);
+        await indexNewMemory(result.data, scope, cachedProjectRoot, indexer, { embeddingProvider });
       }
       afterMemoryMutation(cachedProjectRoot);
       const actualScope = scope ?? getDefaultWriteScope(cachedProjectRoot, getConfiguredWriteScope());
@@ -27769,7 +28047,7 @@ async function handleMemoryTool(name, args, ctx) {
     case "recall": {
       const { query, type, category, tags, concepts, limit, scope } = args;
       const { indexer, embeddingProvider } = await ctx.ensureIndexer();
-      const results = await searchMemories({
+      const envelope = await searchMemoriesEnvelope({
         query,
         type,
         category,
@@ -27782,7 +28060,8 @@ async function handleMemoryTool(name, args, ctx) {
         indexer,
         embeddingProvider
       });
-      const searchTier = results.length > 0 ? results[0].searchTier ?? "legacy" : indexer?.isReady() && embeddingProvider ? "hybrid" : indexer?.isReady() ? "fts5" : "legacy";
+      const results = envelope.results;
+      const searchTier = envelope.executedTier;
       return {
         content: [
           {
@@ -27955,13 +28234,14 @@ async function handleMemoryTool(name, args, ctx) {
         try {
           const idxStats = await indexer.getStats();
           const dbPath = join10(homedir7(), ".claude", "oh-my-claude", "memory", "index.db");
-          const searchTier = embeddingProvider ? "hybrid" : "fts5";
+          const capabilityTier = embeddingProvider ? "hybrid" : "fts5";
           indexStatus = {
             initialized: true,
             dbPath,
             ...idxStats,
             embeddingProvider: embeddingProvider ? `${embeddingProvider.name}/${embeddingProvider.model}` : null,
-            searchTier
+            capabilityTier,
+            searchTier: capabilityTier
           };
         } catch {
           indexStatus = { initialized: false };
@@ -27969,6 +28249,7 @@ async function handleMemoryTool(name, args, ctx) {
       } else {
         indexStatus = {
           initialized: false,
+          capabilityTier: "legacy",
           searchTier: "legacy"
         };
       }
@@ -29205,29 +29486,28 @@ function registerCoworkerTools(server, ctx) {
 }
 
 // src/shared/preferences/store.ts
+init_file_lock();
 import {
-  existsSync as existsSync9,
-  readFileSync as readFileSync7,
-  writeFileSync as writeFileSync6,
-  mkdirSync as mkdirSync6
+  existsSync as existsSync10,
+  mkdirSync as mkdirSync7
 } from "node:fs";
-import { join as join12, dirname as dirname5 } from "node:path";
+import { join as join12, dirname as dirname6 } from "node:path";
 import { homedir as homedir9 } from "node:os";
 import { cwd as cwd2 } from "node:process";
 var PREFERENCES_FILENAME = "preferences.json";
 function findProjectRoot2(fromDir) {
   let dir = fromDir ?? cwd2();
-  const root = dirname5(dir);
+  const root = dirname6(dir);
   while (dir !== root) {
-    if (existsSync9(join12(dir, ".git"))) {
+    if (existsSync10(join12(dir, ".git"))) {
       return dir;
     }
-    const parent = dirname5(dir);
+    const parent = dirname6(dir);
     if (parent === dir)
       break;
     dir = parent;
   }
-  if (existsSync9(join12(dir, ".git"))) {
+  if (existsSync10(join12(dir, ".git"))) {
     return dir;
   }
   return null;
@@ -29263,20 +29543,54 @@ function generatePreferenceId(title, date4) {
 function nowISO2() {
   return new Date().toISOString();
 }
+var PreferenceJsonSchema = {
+  parse(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new Error("preferences.json must be a JSON object");
+    }
+    const raw = input;
+    const store = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        console.error(`[omc preferences] dropping malformed entry "${key}" (expected object)`);
+        continue;
+      }
+      const pref = value;
+      if (typeof pref.id !== "string" || typeof pref.title !== "string" || typeof pref.content !== "string" || typeof pref.scope !== "string") {
+        console.error(`[omc preferences] dropping malformed entry "${key}" (missing required fields)`);
+        continue;
+      }
+      store[key] = pref;
+    }
+    return store;
+  }
+};
+function getLockPath(path) {
+  return path + ".lock";
+}
 function readJsonStore(path) {
-  if (!existsSync9(path))
-    return {};
   try {
-    const raw = readFileSync7(path, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
+    const loaded = loadJsonOrBackup(path, PreferenceJsonSchema, {
+      onCorrupt: (backupPath) => {
+        console.error(`[omc preferences] ${path} was corrupt; backed up to ${backupPath}. ` + `Starting with empty store for this scope.`);
+      }
+    });
+    return loaded ?? {};
+  } catch (err) {
+    if (err instanceof JsonCorruptError) {
+      return {};
+    }
+    throw err;
   }
 }
 function writeJsonStore(path, store) {
-  const dir = dirname5(path);
-  mkdirSync6(dir, { recursive: true });
-  writeFileSync6(path, JSON.stringify(store, null, 2), "utf-8");
+  const dir = dirname6(path);
+  mkdirSync7(dir, { recursive: true });
+  atomicWriteJson(path, store, {
+    indent: 2,
+    trailingNewline: false,
+    mode: 384
+  });
 }
 
 class PreferenceStore {
@@ -29307,29 +29621,31 @@ class PreferenceStore {
     try {
       const scope = input.scope ?? "global";
       const path = this.getPathForScope(scope);
-      const store = readJsonStore(path);
-      const now = nowISO2();
-      const baseId = generatePreferenceId(input.title);
-      let id = baseId;
-      let counter = 1;
-      while (store[id]) {
-        id = `${baseId}-${counter}`;
-        counter++;
-      }
-      const preference = {
-        id,
-        title: input.title,
-        content: input.content,
-        scope,
-        autoInject: input.autoInject ?? true,
-        trigger: input.trigger ?? {},
-        tags: input.tags ?? [],
-        createdAt: now,
-        updatedAt: now
-      };
-      store[id] = preference;
-      writeJsonStore(path, store);
-      return { success: true, data: preference };
+      return withFileLockSync(getLockPath(path), () => {
+        const store = readJsonStore(path);
+        const now = nowISO2();
+        const baseId = generatePreferenceId(input.title);
+        let id = baseId;
+        let counter = 1;
+        while (store[id]) {
+          id = `${baseId}-${counter}`;
+          counter++;
+        }
+        const preference = {
+          id,
+          title: input.title,
+          content: input.content,
+          scope,
+          autoInject: input.autoInject ?? true,
+          trigger: input.trigger ?? {},
+          tags: input.tags ?? [],
+          createdAt: now,
+          updatedAt: now
+        };
+        store[id] = preference;
+        writeJsonStore(path, store);
+        return { success: true, data: preference };
+      });
     } catch (error2) {
       return { success: false, error: `Failed to create preference: ${error2}` };
     }
@@ -29366,8 +29682,12 @@ class PreferenceStore {
   }
   update(id, updates) {
     try {
-      for (const { path, store } of this.getAllStores()) {
-        if (store[id]) {
+      for (const { path } of this.getAllStores()) {
+        const lockPath = getLockPath(path);
+        const result = withFileLockSync(lockPath, () => {
+          const store = readJsonStore(path);
+          if (!store[id])
+            return null;
           const existing = store[id];
           const updated = {
             ...existing,
@@ -29376,7 +29696,10 @@ class PreferenceStore {
           };
           store[id] = updated;
           writeJsonStore(path, store);
-          return { success: true, data: updated };
+          return updated;
+        });
+        if (result) {
+          return { success: true, data: result };
         }
       }
       return { success: false, error: `Preference "${id}" not found` };
@@ -29386,10 +29709,17 @@ class PreferenceStore {
   }
   delete(id) {
     try {
-      for (const { path, store } of this.getAllStores()) {
-        if (store[id]) {
+      for (const { path } of this.getAllStores()) {
+        const lockPath = getLockPath(path);
+        const found = withFileLockSync(lockPath, () => {
+          const store = readJsonStore(path);
+          if (!store[id])
+            return false;
           delete store[id];
           writeJsonStore(path, store);
+          return true;
+        });
+        if (found) {
           return { success: true };
         }
       }
@@ -29628,10 +29958,10 @@ import { writeFileSync as writeFileSync8 } from "node:fs";
 import { join as join13 } from "node:path";
 import { homedir as homedir10 } from "node:os";
 import {
-  existsSync as existsSync10,
-  mkdirSync as mkdirSync7,
+  existsSync as existsSync11,
+  mkdirSync as mkdirSync8,
   readdirSync as readdirSync4,
-  statSync as statSync3,
+  statSync as statSync4,
   rmSync,
   readFileSync as readFileSync8,
   writeFileSync as writeFileSync7
@@ -29718,7 +30048,7 @@ function getClaudeCodePPID() {
     return claudePid;
   }
   try {
-    if (existsSync10(PPID_FILE)) {
+    if (existsSync11(PPID_FILE)) {
       const content = readFileSync8(PPID_FILE, "utf-8").trim();
       const parts = content.split(":");
       const pidStr = parts[0] ?? "";
@@ -29747,13 +30077,13 @@ function getSessionStatusPath(sessionId) {
 function ensureSessionDir(sessionId) {
   const id = sessionId ?? getSessionId();
   const sessionDir = join13(SESSIONS_DIR, id);
-  if (!existsSync10(sessionDir)) {
-    mkdirSync7(sessionDir, { recursive: true });
+  if (!existsSync11(sessionDir)) {
+    mkdirSync8(sessionDir, { recursive: true });
   }
   return sessionDir;
 }
 function cleanupStaleSessions(maxAgeMs = 60 * 60 * 1000) {
-  if (!existsSync10(SESSIONS_DIR)) {
+  if (!existsSync11(SESSIONS_DIR)) {
     return 0;
   }
   const now = Date.now();
@@ -29775,11 +30105,11 @@ function cleanupStaleSessions(maxAgeMs = 60 * 60 * 1000) {
         }
         const statusPath = join13(sessionDir, "status.json");
         let isStale = false;
-        if (existsSync10(statusPath)) {
-          const stat = statSync3(statusPath);
+        if (existsSync11(statusPath)) {
+          const stat = statSync4(statusPath);
           isStale = now - stat.mtimeMs > maxAgeMs;
         } else {
-          const stat = statSync3(sessionDir);
+          const stat = statSync4(sessionDir);
           isStale = now - stat.mtimeMs > maxAgeMs;
         }
         if (isStale) {
@@ -29817,7 +30147,7 @@ function updateStatusFile() {
 }
 
 // src/mcp/server/index.ts
-import { existsSync as existsSync11 } from "node:fs";
+import { existsSync as existsSync12 } from "node:fs";
 async function main() {
   let cachedProjectRoot;
   let cachedSessionId;
@@ -29843,7 +30173,7 @@ async function main() {
       const canonicalRoot = resolveCanonicalRoot(cachedProjectRoot);
       if (canonicalRoot && canonicalRoot !== cachedProjectRoot) {
         const canonicalMemDir = getProjectMemoryDir(canonicalRoot);
-        if (canonicalMemDir && existsSync11(canonicalMemDir)) {
+        if (canonicalMemDir && existsSync12(canonicalMemDir)) {
           dirs.push({
             path: canonicalMemDir,
             scope: "project",
@@ -29852,7 +30182,7 @@ async function main() {
         }
       }
       const nativeDir = getClaudeNativeMemoryDir(cachedProjectRoot);
-      if (nativeDir && existsSync11(nativeDir)) {
+      if (nativeDir && existsSync12(nativeDir)) {
         dirs.push({
           path: nativeDir,
           scope: "project",

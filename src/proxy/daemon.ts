@@ -1,23 +1,52 @@
 /**
  * Daemon wrapper for oh-my-claude proxy server
  *
- * Manages the proxy server as a background process with PID tracking.
- * Cross-platform support for Windows, macOS, and Linux.
+ * Manages the proxy server + dashboard as background processes with PID
+ * tracking. Cross-platform support for Windows, macOS, and Linux.
+ *
+ * Beta.8 hardening:
+ *   - DAEMON (full proxy) and DASHBOARD (dashboard-only) have separate PID
+ *     files so they can coexist without clobbering each other.
+ *   - PID file creation uses `openSync(path, 'wx')` (O_CREAT|O_EXCL) so we
+ *     never silently overwrite another live process's PID. On EEXIST we
+ *     check liveness and unlink stale files before retrying.
+ *   - `stopDaemon(kind)` / `isRunning(kind)` / `getPid(kind)` now take an
+ *     explicit target so we can't accidentally stop the dashboard when the
+ *     caller meant the proxy daemon or vice versa.
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
+import {
+	existsSync,
+	writeFileSync,
+	readFileSync,
+	unlinkSync,
+	openSync,
+	closeSync,
+	writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
-import { DASHBOARD_ORIGIN_FILE, DASHBOARD_PID_FILE } from '../cli/utils/paths';
+import {
+	DAEMON_PID_FILE,
+	DASHBOARD_ORIGIN_FILE,
+	DASHBOARD_PID_FILE,
+} from '../cli/utils/paths';
 
 const INSTALL_DIR = join(homedir(), '.claude', 'oh-my-claude');
 const SERVER_SCRIPT = join(INSTALL_DIR, 'dist', 'proxy', 'server.js');
 const DASHBOARD_SCRIPT = join(INSTALL_DIR, 'dist', 'proxy', 'dashboard.js');
 
+/** Which daemon a lifecycle call is targeting. */
+export type DaemonKind = 'daemon' | 'dashboard';
+
 /** How the running dashboard was launched (see DASHBOARD_ORIGIN_FILE). */
 export type DashboardOrigin = 'auto' | 'manual';
+
+function pidFileFor(kind: DaemonKind): string {
+	return kind === 'daemon' ? DAEMON_PID_FILE : DASHBOARD_PID_FILE;
+}
 
 /**
  * Read the origin marker for the running dashboard.
@@ -69,19 +98,80 @@ function isProcessRunning(pid: number): boolean {
 	}
 }
 
+/**
+ * Atomically claim the PID file for this kind. Returns true on success.
+ *
+ * On EEXIST we inspect the incumbent PID:
+ *  - If it's alive, bail (caller uses existing process).
+ *  - If it's dead/stale, unlink and retry once.
+ *
+ * This replaces the legacy `existsSync → writeFileSync` pattern which could
+ * overwrite a live process's PID during concurrent spawns. Callers that hit
+ * `'incumbent-alive'` should NOT spawn a new process.
+ */
+type ClaimResult =
+	| { status: 'claimed' }
+	| { status: 'incumbent-alive'; pid: number }
+	| { status: 'failed'; error: unknown };
+
+function claimPidFile(kind: DaemonKind, pid: number): ClaimResult {
+	const path = pidFileFor(kind);
+	for (let attempt = 0; attempt < 2; attempt++) {
+		try {
+			const fd = openSync(path, 'wx');
+			try {
+				writeSync(fd, String(pid));
+			} finally {
+				closeSync(fd);
+			}
+			return { status: 'claimed' };
+		} catch (err) {
+			const code = (err as NodeJS.ErrnoException | undefined)?.code;
+			if (code !== 'EEXIST') {
+				return { status: 'failed', error: err };
+			}
+			// Incumbent PID file — check liveness once.
+			try {
+				const existing = parseInt(readFileSync(path, 'utf-8').trim(), 10);
+				if (Number.isFinite(existing) && isProcessRunning(existing)) {
+					return { status: 'incumbent-alive', pid: existing };
+				}
+			} catch {
+				// Unreadable PID file — treat as stale and try to remove.
+			}
+			try {
+				unlinkSync(path);
+			} catch {
+				// Another racer may have unlinked; retry.
+			}
+		}
+	}
+	return {
+		status: 'failed',
+		error: new Error(`Failed to claim ${kind} PID file at ${path}`),
+	};
+}
+
 /** Get the proxy server script path */
 export function getServerScript(): string {
 	return SERVER_SCRIPT;
 }
 
-/** Check if the daemon is running */
-export function isRunning(): boolean {
-	if (!existsSync(DASHBOARD_PID_FILE)) {
+/**
+ * Check if the daemon of the given kind is running.
+ *
+ * Defaults to `'dashboard'` for backwards compatibility with pre-beta.8
+ * callers that only had one "daemon" concept (which was, in practice, the
+ * dashboard — the full proxy daemon was never shipped for production use).
+ */
+export function isRunning(kind: DaemonKind = 'dashboard'): boolean {
+	const path = pidFileFor(kind);
+	if (!existsSync(path)) {
 		return false;
 	}
 
 	try {
-		const pid = parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
+		const pid = parseInt(readFileSync(path, 'utf-8').trim(), 10);
 		return isProcessRunning(pid);
 	} catch {
 		return false;
@@ -97,14 +187,19 @@ export async function startDaemon(options?: {
 	const port = options?.port ?? 18910;
 	const controlPort = options?.controlPort ?? 18911;
 
-	// Check if already running
-	if (isRunning()) {
-		const pid = parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
+	// Check if already running — atomic claim below handles the race but an
+	// early check avoids an unnecessary spawn.
+	if (isRunning('daemon')) {
+		const pid = parseInt(readFileSync(DAEMON_PID_FILE, 'utf-8').trim(), 10);
 		if (isProcessRunning(pid)) {
 			return { pid, port, controlPort };
 		}
 		// Stale PID file, clean up
-		unlinkSync(DASHBOARD_PID_FILE);
+		try {
+			unlinkSync(DAEMON_PID_FILE);
+		} catch {
+			/* ignore — claim below will retry */
+		}
 	}
 
 	// Check if server script exists
@@ -151,9 +246,22 @@ export async function startDaemon(options?: {
 	// Background mode: detach from parent
 	proc.unref();
 
-	// Write PID file
-	writeFileSync(DASHBOARD_PID_FILE, String(pid));
-
+	// Atomically record PID; if a racer beat us, kill our just-spawned child
+	// and return the incumbent pid instead of overwriting the PID file.
+	const claim = claimPidFile('daemon', pid);
+	if (claim.status === 'claimed') {
+		return { pid, port, controlPort };
+	}
+	if (claim.status === 'incumbent-alive') {
+		try {
+			process.kill(pid, 'SIGTERM');
+		} catch {
+			/* ignore */
+		}
+		return { pid: claim.pid, port, controlPort };
+	}
+	// claim.status === 'failed': rare I/O issue. Leave child running; return
+	// our pid so callers can stop it manually.
 	return { pid, port, controlPort };
 }
 
@@ -172,14 +280,18 @@ export async function startDashboard(options?: {
 	const origin: DashboardOrigin = options?.origin ?? 'auto';
 
 	// Check if already running
-	if (isRunning()) {
-		const pid = parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
+	if (isRunning('dashboard')) {
+		const pid = parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim(), 10);
 		if (isProcessRunning(pid)) {
 			// Dashboard already up — refresh origin (write is sticky on manual)
 			writeDashboardOrigin(origin);
 			return { pid, port };
 		}
-		unlinkSync(DASHBOARD_PID_FILE);
+		try {
+			unlinkSync(DASHBOARD_PID_FILE);
+		} catch {
+			/* ignore */
+		}
 		clearDashboardOrigin();
 	}
 
@@ -222,8 +334,34 @@ export async function startDashboard(options?: {
 	}
 
 	proc.unref();
-	writeFileSync(DASHBOARD_PID_FILE, String(pid));
-	writeDashboardOrigin(origin);
+
+	const claim = claimPidFile('dashboard', pid);
+	if (claim.status === 'claimed') {
+		writeDashboardOrigin(origin);
+	} else if (claim.status === 'incumbent-alive') {
+		// Racer already started a dashboard; reuse it.
+		try {
+			process.kill(pid, 'SIGTERM');
+		} catch {
+			/* ignore */
+		}
+		writeDashboardOrigin(origin);
+		// Don't return early — still wait for the incumbent's /health below,
+		// but use the incumbent pid.
+		const incumbentPid = claim.pid;
+		for (let i = 0; i < 15; i++) {
+			await new Promise((r) => setTimeout(r, 200));
+			try {
+				const resp = await fetch(`http://localhost:${port}/health`, {
+					signal: AbortSignal.timeout(500),
+				});
+				if (resp.ok) return { pid: incumbentPid, port };
+			} catch {
+				/* keep waiting */
+			}
+		}
+		return { pid: incumbentPid, port };
+	}
 
 	// Wait for the server to be ready
 	for (let i = 0; i < 15; i++) {
@@ -241,20 +379,35 @@ export async function startDashboard(options?: {
 	return { pid, port };
 }
 
-/** Stop the proxy daemon */
-export function stopDaemon(): boolean {
-	if (!existsSync(DASHBOARD_PID_FILE)) {
-		clearDashboardOrigin();
+/**
+ * Stop the daemon of the given kind.
+ *
+ * Defaults to `'dashboard'` for backwards compatibility — the pre-beta.8
+ * call sites all targeted the dashboard PID file. When stopping the full
+ * proxy daemon, pass `'daemon'` explicitly.
+ */
+export function stopDaemon(kind: DaemonKind = 'dashboard'): boolean {
+	const path = pidFileFor(kind);
+	const clearOriginIfDashboard = () => {
+		if (kind === 'dashboard') clearDashboardOrigin();
+	};
+
+	if (!existsSync(path)) {
+		clearOriginIfDashboard();
 		return false;
 	}
 
 	try {
-		const pid = parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
+		const pid = parseInt(readFileSync(path, 'utf-8').trim(), 10);
 
-		if (!isProcessRunning(pid)) {
+		if (!Number.isFinite(pid) || !isProcessRunning(pid)) {
 			// Stale PID file
-			unlinkSync(DASHBOARD_PID_FILE);
-			clearDashboardOrigin();
+			try {
+				unlinkSync(path);
+			} catch {
+				/* ignore */
+			}
+			clearOriginIfDashboard();
 			return false;
 		}
 
@@ -275,28 +428,34 @@ export function stopDaemon(): boolean {
 			process.kill(pid, 'SIGKILL');
 		}
 
-		unlinkSync(DASHBOARD_PID_FILE);
-		clearDashboardOrigin();
+		try {
+			unlinkSync(path);
+		} catch {
+			/* ignore */
+		}
+		clearOriginIfDashboard();
 		return true;
 	} catch (error) {
 		// If we can't read the PID file, try to delete it
 		try {
-			unlinkSync(DASHBOARD_PID_FILE);
+			unlinkSync(path);
 		} catch {
 			// Ignore
 		}
-		clearDashboardOrigin();
+		clearOriginIfDashboard();
 		throw error;
 	}
 }
 
-/** Get the PID from the PID file */
-export function getPid(): number | null {
+/** Get the PID from the PID file for the given kind (defaults to dashboard). */
+export function getPid(kind: DaemonKind = 'dashboard'): number | null {
+	const path = pidFileFor(kind);
 	try {
-		if (!existsSync(DASHBOARD_PID_FILE)) {
+		if (!existsSync(path)) {
 			return null;
 		}
-		return parseInt(readFileSync(DASHBOARD_PID_FILE, 'utf-8').trim());
+		const pid = parseInt(readFileSync(path, 'utf-8').trim(), 10);
+		return Number.isFinite(pid) ? pid : null;
 	} catch {
 		return null;
 	}

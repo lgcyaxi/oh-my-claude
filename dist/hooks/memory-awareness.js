@@ -4,10 +4,10 @@ var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
 // src/hooks/user-prompt-submit/memory-awareness.ts
 import {
-  readFileSync as readFileSync6,
-  existsSync as existsSync6,
+  readFileSync as readFileSync7,
+  existsSync as existsSync7,
   readdirSync as readdirSync2,
-  mkdirSync as mkdirSync3,
+  mkdirSync as mkdirSync4,
   writeFileSync as writeFileSync3
 } from "node:fs";
 import { join as join6 } from "node:path";
@@ -240,40 +240,221 @@ function loadHookConfig() {
 }
 // src/memory/hooks/session.ts
 import {
-  existsSync as existsSync4,
-  readFileSync as readFileSync4,
-  writeFileSync as writeFileSync2,
-  mkdirSync as mkdirSync2,
-  statSync as statSync2,
+  existsSync as existsSync5,
+  readFileSync as readFileSync5,
+  mkdirSync as mkdirSync3,
+  statSync as statSync3,
   appendFileSync,
   readdirSync,
-  unlinkSync as unlinkSync2
+  unlinkSync as unlinkSync3
 } from "node:fs";
 import { join as join4 } from "node:path";
 import { homedir as homedir4 } from "node:os";
-var STATE_DIR2 = join4(homedir4(), ".claude", "oh-my-claude", "state");
-function loadState(projectCwd) {
-  try {
-    const stateFile = getStateFile(projectCwd);
-    if (existsSync4(stateFile)) {
-      const raw = readFileSync4(stateFile, "utf-8");
-      return JSON.parse(raw);
+
+// src/shared/fs/file-lock.ts
+import {
+  openSync,
+  closeSync,
+  unlinkSync as unlinkSync2,
+  existsSync as existsSync4,
+  mkdirSync as mkdirSync2,
+  writeFileSync as writeFileSync2,
+  renameSync,
+  readFileSync as readFileSync4,
+  statSync as statSync2,
+  chmodSync,
+  copyFileSync
+} from "fs";
+import { dirname } from "path";
+var DEFAULT_RETRIES = 10;
+var DEFAULT_BACKOFF_MS = 20;
+var DEFAULT_STALE_MS = 5000;
+function sleepBlockingMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {}
+}
+function acquireLock(lockPath, opts) {
+  const dir = dirname(lockPath);
+  for (let i = 0;i < opts.retries; i++) {
+    try {
+      if (!existsSync4(dir)) {
+        mkdirSync2(dir, { recursive: true });
+      }
+      return openSync(lockPath, "wx");
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") {
+        return null;
+      }
+      try {
+        const stat = statSync2(lockPath);
+        if (Date.now() - stat.mtimeMs > opts.staleMs) {
+          try {
+            unlinkSync2(lockPath);
+          } catch {}
+          continue;
+        }
+      } catch {}
+      sleepBlockingMs(opts.backoffMs + Math.random() * opts.backoffMs);
     }
+  }
+  return null;
+}
+function releaseLock(fd, lockPath) {
+  if (fd === null)
+    return;
+  try {
+    closeSync(fd);
   } catch {}
+  try {
+    unlinkSync2(lockPath);
+  } catch {}
+}
+function withFileLockSync(lockPath, fn, opts = {}) {
+  const resolved = {
+    retries: opts.retries ?? DEFAULT_RETRIES,
+    backoffMs: opts.backoffMs ?? DEFAULT_BACKOFF_MS,
+    staleMs: opts.staleMs ?? DEFAULT_STALE_MS
+  };
+  const fd = acquireLock(lockPath, resolved);
+  try {
+    return fn();
+  } finally {
+    releaseLock(fd, lockPath);
+  }
+}
+function atomicTempPath(path) {
+  return `${path}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function ensureParentDir(path) {
+  const dir = dirname(path);
+  if (!existsSync4(dir)) {
+    mkdirSync2(dir, { recursive: true });
+  }
+}
+function applyMode(path, mode) {
+  if (mode === undefined || process.platform === "win32")
+    return;
+  try {
+    chmodSync(path, mode);
+  } catch {}
+}
+function atomicWriteText(path, text, opts = {}) {
+  ensureParentDir(path);
+  const tmp = atomicTempPath(path);
+  writeFileSync2(tmp, text, "utf-8");
+  applyMode(tmp, opts.mode);
+  renameSync(tmp, path);
+  applyMode(path, opts.mode);
+}
+function atomicWriteJson(path, value, opts = {}) {
+  const indent = opts.indent ?? "\t";
+  const trailing = opts.trailingNewline ?? true;
+  const text = JSON.stringify(value, null, indent) + (trailing ? `
+` : "");
+  atomicWriteText(path, text, { mode: opts.mode });
+}
+
+class JsonCorruptError extends Error {
+  path;
+  backupPath;
+  cause;
+  name = "JsonCorruptError";
+  constructor(message, path, backupPath, cause) {
+    super(message);
+    this.path = path;
+    this.backupPath = backupPath;
+    this.cause = cause;
+  }
+}
+function backupCorruptFile(path) {
+  const backupPath = `${path}.corrupt-${Date.now()}.bak`;
+  try {
+    copyFileSync(path, backupPath);
+  } catch {}
+  return backupPath;
+}
+function loadJsonOrBackup(path, schema, opts = {}) {
+  if (!existsSync4(path))
+    return null;
+  let raw;
+  try {
+    raw = readFileSync4(path, "utf-8");
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Failed to read JSON file at ${path}: ${err.message}`, path, backupPath, err);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Failed to parse JSON at ${path}: ${err.message}`, path, backupPath, err);
+  }
+  try {
+    return schema.parse(parsed);
+  } catch (err) {
+    const backupPath = backupCorruptFile(path);
+    opts.onCorrupt?.(backupPath, err);
+    throw new JsonCorruptError(`Schema validation failed for ${path}: ${err.message}`, path, backupPath, err);
+  }
+}
+
+// src/memory/hooks/session.ts
+var STATE_DIR2 = join4(homedir4(), ".claude", "oh-my-claude", "state");
+var SessionStateSchema = {
+  parse(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new Error("session state must be an object");
+    }
+    const raw = input;
+    const lastSaveTimestamp = typeof raw.lastSaveTimestamp === "string" ? raw.lastSaveTimestamp : raw.lastSaveTimestamp === null ? null : null;
+    const lastSaveLogSizeKB = typeof raw.lastSaveLogSizeKB === "number" ? raw.lastSaveLogSizeKB : raw.lastSaveLogSizeKB === null ? null : null;
+    const saveCount = typeof raw.saveCount === "number" && Number.isFinite(raw.saveCount) ? raw.saveCount : 0;
+    return { lastSaveTimestamp, lastSaveLogSizeKB, saveCount };
+  }
+};
+var corruptStatePaths = new Set;
+function loadState(projectCwd) {
+  const stateFile = getStateFile(projectCwd);
+  try {
+    const loaded = loadJsonOrBackup(stateFile, SessionStateSchema, {
+      onCorrupt: (backupPath) => {
+        console.error(`[omc memory] session state at ${stateFile} was corrupt; ` + `backed up to ${backupPath}. Save skipped this run.`);
+      }
+    });
+    if (loaded !== null)
+      return loaded;
+  } catch (err) {
+    if (err instanceof JsonCorruptError) {
+      corruptStatePaths.add(stateFile);
+    } else {
+      console.error(`[omc memory] unexpected error loading session state at ${stateFile}: ${err.message}`);
+      corruptStatePaths.add(stateFile);
+    }
+  }
   return { lastSaveTimestamp: null, lastSaveLogSizeKB: null, saveCount: 0 };
 }
 function saveState(state, projectCwd) {
   try {
-    mkdirSync2(STATE_DIR2, { recursive: true });
-    writeFileSync2(getStateFile(projectCwd), JSON.stringify(state, null, 2), "utf-8");
+    const stateFile = getStateFile(projectCwd);
+    if (corruptStatePaths.has(stateFile))
+      return;
+    mkdirSync3(STATE_DIR2, { recursive: true });
+    atomicWriteJson(stateFile, state, {
+      indent: 2,
+      trailingNewline: false
+    });
   } catch {}
 }
 function getSessionLogSizeKB(projectCwd) {
   try {
     const logPath = getSessionLogPath(projectCwd);
-    if (!existsSync4(logPath))
+    if (!existsSync5(logPath))
       return 0;
-    const stats = statSync2(logPath);
+    const stats = statSync3(logPath);
     return Math.round(stats.size / 1024);
   } catch {
     return 0;
@@ -282,9 +463,9 @@ function getSessionLogSizeKB(projectCwd) {
 function readSessionLog(projectCwd) {
   try {
     const logPath = getSessionLogPath(projectCwd);
-    if (!existsSync4(logPath))
+    if (!existsSync5(logPath))
       return "";
-    const raw = readFileSync4(logPath, "utf-8").trim();
+    const raw = readFileSync5(logPath, "utf-8").trim();
     if (!raw)
       return "";
     const lines = raw.split(`
@@ -308,8 +489,8 @@ function readSessionLog(projectCwd) {
 function clearSessionLog(projectCwd) {
   try {
     const logPath = getSessionLogPath(projectCwd);
-    if (existsSync4(logPath)) {
-      unlinkSync2(logPath);
+    if (existsSync5(logPath)) {
+      unlinkSync3(logPath);
     }
   } catch {}
 }
@@ -319,7 +500,7 @@ function pruneEmptySessionLogs(options = {}) {
   const sessionsDir = join4(homedir4(), ".claude", "oh-my-claude", "memory", "sessions");
   let removed = 0;
   try {
-    if (!existsSync4(sessionsDir))
+    if (!existsSync5(sessionsDir))
       return 0;
     const entries = readdirSync(sessionsDir);
     const now = Date.now();
@@ -331,10 +512,10 @@ function pruneEmptySessionLogs(options = {}) {
       if (currentLogPath && full === currentLogPath)
         continue;
       try {
-        const s = statSync2(full);
+        const s = statSync3(full);
         const stale = now - s.mtimeMs > maxAgeMs;
         if (s.size === 0 || stale) {
-          unlinkSync2(full);
+          unlinkSync3(full);
           removed += 1;
         }
       } catch {}
@@ -347,8 +528,8 @@ function logUserPrompt(prompt, projectCwd) {
     return;
   try {
     const logDir = join4(homedir4(), ".claude", "oh-my-claude", "memory", "sessions");
-    if (!existsSync4(logDir)) {
-      mkdirSync2(logDir, { recursive: true });
+    if (!existsSync5(logDir)) {
+      mkdirSync3(logDir, { recursive: true });
     }
     const suffix = projectCwd ? `-${shortHash(projectCwd)}` : "";
     const logPath = join4(logDir, `active-session${suffix}.jsonl`);
@@ -363,25 +544,25 @@ function logUserPrompt(prompt, projectCwd) {
   } catch {}
 }
 // src/memory/hooks/timeline.ts
-import { existsSync as existsSync5, readFileSync as readFileSync5 } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync6 } from "node:fs";
 import { join as join5 } from "node:path";
 import { homedir as homedir5 } from "node:os";
 function getTimelineContent(projectCwd, maxLines = 80) {
   const lines = [];
   if (projectCwd) {
     const projectTimeline = join5(projectCwd, ".claude", "mem", "TIMELINE.md");
-    if (existsSync5(projectTimeline)) {
+    if (existsSync6(projectTimeline)) {
       try {
-        const content = readFileSync5(projectTimeline, "utf-8").trim();
+        const content = readFileSync6(projectTimeline, "utf-8").trim();
         if (content)
           lines.push(content);
       } catch {}
     }
   }
   const globalTimeline = join5(homedir5(), ".claude", "oh-my-claude", "memory", "TIMELINE.md");
-  if (existsSync5(globalTimeline)) {
+  if (existsSync6(globalTimeline)) {
     try {
-      const content = readFileSync5(globalTimeline, "utf-8").trim();
+      const content = readFileSync6(globalTimeline, "utf-8").trim();
       if (content) {
         if (lines.length > 0) {
           lines.push("");
@@ -441,11 +622,11 @@ function warnIfNonOmcProxyBaseUrl(sessionId) {
   }
   try {
     const runDir = join6(homedir6(), ".claude", "oh-my-claude", "run");
-    if (!existsSync6(runDir))
-      mkdirSync3(runDir, { recursive: true });
+    if (!existsSync7(runDir))
+      mkdirSync4(runDir, { recursive: true });
     const suffix = sessionId ? `-${sessionId}` : "";
     const marker = join6(runDir, `non-omc-proxy-warned${suffix}.flag`);
-    if (existsSync6(marker))
+    if (existsSync7(marker))
       return;
     writeFileSync3(marker, String(Date.now()), "utf-8");
   } catch {}
@@ -458,9 +639,9 @@ function loadRegistryPorts() {
   for (const rel of ["proxy-sessions.json", "proxy-instances.json"]) {
     try {
       const file = join6(base, rel);
-      if (!existsSync6(file))
+      if (!existsSync7(file))
         continue;
-      const raw = readFileSync6(file, "utf-8");
+      const raw = readFileSync7(file, "utf-8");
       const data = JSON.parse(raw);
       if (!Array.isArray(data))
         continue;
@@ -480,7 +661,7 @@ function countMemoryFilesInDir(baseDir) {
   let count = 0;
   for (const subdir of ["notes", "sessions"]) {
     const dir = join6(baseDir, subdir);
-    if (existsSync6(dir)) {
+    if (existsSync7(dir)) {
       try {
         count += readdirSync2(dir).filter((f) => f.endsWith(".md")).length;
       } catch {}
@@ -495,14 +676,14 @@ function getMemoryCount(projectCwd) {
   const seenDirs = new Set;
   if (projectCwd) {
     const projectMemDir = join6(projectCwd, ".claude", "mem");
-    if (existsSync6(projectMemDir)) {
+    if (existsSync7(projectMemDir)) {
       count += countMemoryFilesInDir(projectMemDir);
       seenDirs.add(projectMemDir);
     }
     const canonicalRoot = resolveCanonicalRoot(projectCwd);
     if (canonicalRoot && canonicalRoot !== projectCwd) {
       const canonicalMemDir = join6(canonicalRoot, ".claude", "mem");
-      if (existsSync6(canonicalMemDir) && !seenDirs.has(canonicalMemDir)) {
+      if (existsSync7(canonicalMemDir) && !seenDirs.has(canonicalMemDir)) {
         count += countMemoryFilesInDir(canonicalMemDir);
       }
     }
@@ -514,12 +695,12 @@ function getClaudeNativeMemory(projectCwd) {
     return null;
   try {
     const claudeProjectsDir = join6(homedir6(), ".claude", "projects");
-    if (!existsSync6(claudeProjectsDir))
+    if (!existsSync7(claudeProjectsDir))
       return null;
     const projectKey = projectCwd.replace(/[\\/]/g, "-").replace(/^-/, "");
     const memoryFile = join6(claudeProjectsDir, projectKey, "MEMORY.md");
-    if (existsSync6(memoryFile)) {
-      const content = readFileSync6(memoryFile, "utf-8").trim();
+    if (existsSync7(memoryFile)) {
+      const content = readFileSync7(memoryFile, "utf-8").trim();
       if (content && content.length > 10)
         return content;
     }
@@ -661,7 +842,7 @@ function quickRecall(keywords, projectCwd, limit = 3) {
   const scanDir = (baseDir, scope) => {
     for (const subdir of ["notes", "sessions"]) {
       const dir = join6(baseDir, subdir);
-      if (!existsSync6(dir))
+      if (!existsSync7(dir))
         continue;
       let files;
       try {
@@ -671,7 +852,7 @@ function quickRecall(keywords, projectCwd, limit = 3) {
       }
       for (const file of files) {
         try {
-          const content = readFileSync6(join6(dir, file), "utf-8");
+          const content = readFileSync7(join6(dir, file), "utf-8");
           const lower = content.toLowerCase();
           let score = 0;
           for (const kw of keywords) {
@@ -699,14 +880,14 @@ function quickRecall(keywords, projectCwd, limit = 3) {
   const seenDirs = new Set;
   if (projectCwd) {
     const projectMemDir = join6(projectCwd, ".claude", "mem");
-    if (existsSync6(projectMemDir)) {
+    if (existsSync7(projectMemDir)) {
       scanDir(projectMemDir, "project");
       seenDirs.add(projectMemDir);
     }
     const canonicalRoot = resolveCanonicalRoot(projectCwd);
     if (canonicalRoot && canonicalRoot !== projectCwd) {
       const canonicalMemDir = join6(canonicalRoot, ".claude", "mem");
-      if (existsSync6(canonicalMemDir) && !seenDirs.has(canonicalMemDir)) {
+      if (existsSync7(canonicalMemDir) && !seenDirs.has(canonicalMemDir)) {
         scanDir(canonicalMemDir, "project");
       }
     }
@@ -718,21 +899,21 @@ function quickRecall(keywords, projectCwd, limit = 3) {
 }
 var SIGNALS_DIR = join6(homedir6(), ".claude", "oh-my-claude", "signals", "completed");
 function scanCompletionSignals() {
-  if (!existsSync6(SIGNALS_DIR))
+  if (!existsSync7(SIGNALS_DIR))
     return [];
   const notifications = [];
   try {
-    const { unlinkSync: unlinkSync3 } = __require("node:fs");
+    const { unlinkSync: unlinkSync4 } = __require("node:fs");
     const files = readdirSync2(SIGNALS_DIR).filter((f) => f.endsWith(".json"));
     for (const file of files) {
       const filePath = join6(SIGNALS_DIR, file);
       try {
-        const signal = JSON.parse(readFileSync6(filePath, "utf-8"));
+        const signal = JSON.parse(readFileSync7(filePath, "utf-8"));
         notifications.push(`[@] ${signal.agentName}: ${signal.status}`);
-        unlinkSync3(filePath);
+        unlinkSync4(filePath);
       } catch {
         try {
-          unlinkSync3(filePath);
+          unlinkSync4(filePath);
         } catch {}
       }
     }
@@ -742,7 +923,7 @@ function scanCompletionSignals() {
 async function main() {
   let inputData = "";
   try {
-    inputData = readFileSync6(0, "utf-8");
+    inputData = readFileSync7(0, "utf-8");
   } catch {
     console.log(JSON.stringify({ decision: "approve" }));
     return;

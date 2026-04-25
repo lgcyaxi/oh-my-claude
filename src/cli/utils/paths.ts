@@ -20,8 +20,34 @@ export const PROXY_SCRIPT = join(INSTALL_DIR, "dist", "proxy", "server.js");
 /** Dashboard script path (single global web dashboard on port 18920) */
 export const DASHBOARD_SCRIPT = join(INSTALL_DIR, "dist", "proxy", "dashboard.js");
 
-/** Dashboard daemon PID file */
+/**
+ * PID file for the dashboard-only daemon (launched by `omc proxy dashboard`
+ * or implicitly by `omc cc`'s `ensureDashboard()`).
+ *
+ * HISTORICAL NOTE: Prior to beta.8 this file was ALSO used by `startDaemon()`
+ * (the full proxy daemon), which was never actually wired up for concurrent
+ * use but could have caused the two "daemons" to step on each other. They
+ * now have distinct PID files (see `DAEMON_PID_FILE`).
+ */
 export const DASHBOARD_PID_FILE = join(INSTALL_DIR, "dashboard.pid");
+
+/**
+ * PID file for the full proxy daemon (`startDaemon()` / `stopDaemon('daemon')`).
+ *
+ * Split from `DASHBOARD_PID_FILE` in beta.8 so the daemon and dashboard can
+ * coexist without clobbering each other's state. Both use atomic O_EXCL
+ * creation to detect live conflicts instead of trusting the file content.
+ */
+export const DAEMON_PID_FILE = join(INSTALL_DIR, "proxy-daemon.pid");
+
+/**
+ * Relative path to the canonical "this install is built" marker inside a
+ * package directory. Anywhere we need to decide whether a package directory
+ * looks like a finished build (update.ts, beta-channel.ts, scripts/prepare.cjs)
+ * we check for this file. Centralizing the constant prevents the beta.6-class
+ * drift where two call sites disagreed on the path.
+ */
+export const DIST_MARKER_REL = join("dist", "cli", "cli.js");
 
 /**
  * Dashboard origin marker. Written alongside `dashboard.pid` to record how

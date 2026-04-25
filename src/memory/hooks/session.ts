@@ -7,7 +7,6 @@
 import {
 	existsSync,
 	readFileSync,
-	writeFileSync,
 	mkdirSync,
 	statSync,
 	appendFileSync,
@@ -17,6 +16,12 @@ import {
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { shortHash, getStateFile, getSessionLogPath } from './paths';
+import {
+	JsonCorruptError,
+	atomicWriteJson,
+	loadJsonOrBackup,
+	type SchemaLike,
+} from '../../shared/fs/file-lock';
 
 const STATE_DIR = join(homedir(), '.claude', 'oh-my-claude', 'state');
 
@@ -28,15 +33,62 @@ export interface ContextMemoryState {
 	saveCount: number;
 }
 
-export function loadState(projectCwd?: string): ContextMemoryState {
-	try {
-		const stateFile = getStateFile(projectCwd);
-		if (existsSync(stateFile)) {
-			const raw = readFileSync(stateFile, 'utf-8');
-			return JSON.parse(raw);
+const SessionStateSchema: SchemaLike<ContextMemoryState> = {
+	parse(input: unknown): ContextMemoryState {
+		if (!input || typeof input !== 'object' || Array.isArray(input)) {
+			throw new Error('session state must be an object');
 		}
-	} catch {
-		// Ignore
+		const raw = input as Record<string, unknown>;
+		const lastSaveTimestamp =
+			typeof raw.lastSaveTimestamp === 'string'
+				? raw.lastSaveTimestamp
+				: raw.lastSaveTimestamp === null
+					? null
+					: null;
+		const lastSaveLogSizeKB =
+			typeof raw.lastSaveLogSizeKB === 'number'
+				? raw.lastSaveLogSizeKB
+				: raw.lastSaveLogSizeKB === null
+					? null
+					: null;
+		const saveCount =
+			typeof raw.saveCount === 'number' && Number.isFinite(raw.saveCount)
+				? raw.saveCount
+				: 0;
+		return { lastSaveTimestamp, lastSaveLogSizeKB, saveCount };
+	},
+};
+
+/**
+ * Tracks state files that failed to load cleanly during this hook run. We
+ * refuse to overwrite them on save so the `<state>.corrupt-<ts>.bak` backup
+ * can be inspected by the user. Cleared when the process exits.
+ */
+const corruptStatePaths = new Set<string>();
+
+export function loadState(projectCwd?: string): ContextMemoryState {
+	const stateFile = getStateFile(projectCwd);
+	try {
+		const loaded = loadJsonOrBackup(stateFile, SessionStateSchema, {
+			onCorrupt: (backupPath) => {
+				console.error(
+					`[omc memory] session state at ${stateFile} was corrupt; ` +
+						`backed up to ${backupPath}. Save skipped this run.`,
+				);
+			},
+		});
+		if (loaded !== null) return loaded;
+	} catch (err) {
+		if (err instanceof JsonCorruptError) {
+			corruptStatePaths.add(stateFile);
+		} else {
+			console.error(
+				`[omc memory] unexpected error loading session state at ${stateFile}: ${
+					(err as Error).message
+				}`,
+			);
+			corruptStatePaths.add(stateFile);
+		}
 	}
 	return { lastSaveTimestamp: null, lastSaveLogSizeKB: null, saveCount: 0 };
 }
@@ -46,14 +98,18 @@ export function saveState(
 	projectCwd?: string,
 ): void {
 	try {
+		const stateFile = getStateFile(projectCwd);
+		// Refuse to overwrite a file that just failed to parse — the `.bak`
+		// copy is waiting for the user. Without this guard, the next hook run
+		// would silently clobber the recovery copy with fresh defaults.
+		if (corruptStatePaths.has(stateFile)) return;
 		mkdirSync(STATE_DIR, { recursive: true });
-		writeFileSync(
-			getStateFile(projectCwd),
-			JSON.stringify(state, null, 2),
-			'utf-8',
-		);
+		atomicWriteJson(stateFile, state, {
+			indent: 2,
+			trailingNewline: false,
+		});
 	} catch {
-		// Ignore
+		// Ignore — hooks must never block session lifecycle on state write.
 	}
 }
 

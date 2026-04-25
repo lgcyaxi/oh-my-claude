@@ -144,7 +144,7 @@ export async function handleMemoryAiOp(
 					};
 				}
 
-				const { indexer } = await ctx.ensureIndexer();
+				const { indexer, embeddingProvider } = await ctx.ensureIndexer();
 
 				const results: Array<{
 					group: string;
@@ -204,7 +204,7 @@ export async function handleMemoryAiOp(
 							continue;
 						}
 
-						// Index the new merged file
+						// Index the new merged file (+ embed chunks eagerly)
 						await indexNewMemory(
 							{ id: createResult.data!.id, type: 'note' },
 							targetScope ??
@@ -214,6 +214,7 @@ export async function handleMemoryAiOp(
 								),
 							cachedProjectRoot,
 							indexer,
+							{ embeddingProvider },
 						);
 
 						// Delete original memories and remove from index.
@@ -720,7 +721,7 @@ export async function handleMemoryAiOp(
 					}
 				}
 
-				const { indexer } = await ctx.ensureIndexer();
+				const { indexer, embeddingProvider } = await ctx.ensureIndexer();
 
 				const createResult = createMemory(
 					{
@@ -758,7 +759,7 @@ export async function handleMemoryAiOp(
 					};
 				}
 
-				// Index the new summary file
+				// Index the new summary file (+ embed chunks eagerly)
 				if (createResult.data) {
 					await indexNewMemory(
 						{
@@ -772,6 +773,7 @@ export async function handleMemoryAiOp(
 							),
 						cachedProjectRoot,
 						indexer,
+						{ embeddingProvider },
 					);
 				}
 

@@ -5,7 +5,7 @@ import {
 	deleteMemory,
 	listMemories,
 	getMemoryStats,
-	searchMemories,
+	searchMemoriesEnvelope,
 	getDefaultWriteScope,
 	getProjectMemoryDir,
 	getMemoryDir,
@@ -173,13 +173,14 @@ export async function handleMemoryTool(
 				};
 			}
 
-			// Index the new file
+			// Index the new file (+ eagerly embed chunks when available)
 			if (result.data) {
 				await indexNewMemory(
 					result.data,
 					scope,
 					cachedProjectRoot,
 					indexer,
+					{ embeddingProvider },
 				);
 			}
 
@@ -241,7 +242,7 @@ export async function handleMemoryTool(
 			// Initialize indexer for tiered search
 			const { indexer, embeddingProvider } = await ctx.ensureIndexer();
 
-			const results = await searchMemories(
+			const envelope = await searchMemoriesEnvelope(
 				{
 					query,
 					type,
@@ -258,16 +259,15 @@ export async function handleMemoryTool(
 					embeddingProvider,
 				},
 			);
+			const results = envelope.results;
 
-			// Determine which tier was used
-			const searchTier =
-				results.length > 0
-					? (results[0]!.searchTier ?? 'legacy')
-					: indexer?.isReady() && embeddingProvider
-						? 'hybrid'
-						: indexer?.isReady()
-							? 'fts5'
-							: 'legacy';
+			// HIGH-10 (beta.8): Report the tier that actually ran, not just
+			// what we were capable of. When capability=hybrid but the
+			// embedding cache was empty we fall through to FTS5; the
+			// envelope now captures that distinction so the client
+			// (statusline, dashboard, compact flows) knows when embeddings
+			// haven't been backfilled yet.
+			const searchTier = envelope.executedTier;
 
 			return {
 				content: [
@@ -507,7 +507,9 @@ export async function handleMemoryTool(
 						'memory',
 						'index.db',
 					);
-					const searchTier = embeddingProvider ? 'hybrid' : 'fts5';
+					const capabilityTier = embeddingProvider
+						? 'hybrid'
+						: 'fts5';
 
 					indexStatus = {
 						initialized: true,
@@ -516,7 +518,12 @@ export async function handleMemoryTool(
 						embeddingProvider: embeddingProvider
 							? `${embeddingProvider.name}/${embeddingProvider.model}`
 							: null,
-						searchTier,
+						// HIGH-10 (beta.8): Distinguish capability (can do hybrid
+						// if queried) from executed tier (what ran per query,
+						// reported in `recall` responses). `searchTier` is kept
+						// as an alias of `capabilityTier` for backwards compat.
+						capabilityTier,
+						searchTier: capabilityTier,
 					};
 				} catch {
 					indexStatus = { initialized: false };
@@ -524,6 +531,7 @@ export async function handleMemoryTool(
 			} else {
 				indexStatus = {
 					initialized: false,
+					capabilityTier: 'legacy',
 					searchTier: 'legacy',
 				};
 			}

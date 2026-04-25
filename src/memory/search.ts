@@ -51,23 +51,54 @@ export interface TieredSearchOptions {
 }
 
 /**
+ * Envelope returned by `searchMemoriesEnvelope` that reports both the
+ * results and the actual executed tier (which may differ from the
+ * capability tier — e.g. "hybrid-capable" but ran FTS5-only because the
+ * embedding cache was empty). Introduced in beta.8 (HIGH-10).
+ */
+export interface SearchEnvelope {
+	results: SearchResult[];
+	/** Tier the caller advertised as available (hybrid/fts5/legacy). */
+	capabilityTier: SearchTier;
+	/** Tier that actually ran (hybrid requires both FTS matches AND vectors). */
+	executedTier: SearchTier;
+}
+
+/**
  * Search memories with three-tier automatic degradation.
  *
- * @param options - Search query and filters
- * @param projectRoot - Explicit project root for scoped search
- * @param tiered - Optional indexer + embedding provider for higher tiers
+ * Backwards-compatible wrapper around {@link searchMemoriesEnvelope} —
+ * returns only the results array. Prefer the envelope variant when you
+ * need to report the executed tier to users (MCP recall, statusline).
  */
 export async function searchMemories(
 	options: MemorySearchOptions,
 	projectRoot?: string,
 	tiered?: TieredSearchOptions,
 ): Promise<SearchResult[]> {
+	const envelope = await searchMemoriesEnvelope(
+		options,
+		projectRoot,
+		tiered,
+	);
+	return envelope.results;
+}
+
+/**
+ * Variant of {@link searchMemories} that also reports which tier was
+ * actually executed (see {@link SearchEnvelope}). Introduced in beta.8.
+ */
+export async function searchMemoriesEnvelope(
+	options: MemorySearchOptions,
+	projectRoot?: string,
+	tiered?: TieredSearchOptions,
+): Promise<SearchEnvelope> {
 	const indexer = tiered?.indexer;
 	const embeddingProvider = tiered?.embeddingProvider;
 	const snippetMaxChars = tiered?.snippetMaxChars ?? 300;
 
 	// Determine available tier
-	const tier: SearchTier =
+	const capabilityTier: SearchTier =
 		indexer?.isReady() && embeddingProvider
 			? 'hybrid'
 			: indexer?.isReady()
@@ -76,11 +107,15 @@ export async function searchMemories(
 
 	// If no query, tier doesn't matter — just list and return
 	if (!options.query || options.query.trim().length === 0) {
-		return searchLegacy(options, projectRoot);
+		return {
+			results: searchLegacy(options, projectRoot),
+			capabilityTier,
+			executedTier: 'legacy',
+		};
 	}
 
 	// Tier 1 or 2: Use indexer
-	if (tier !== 'legacy' && indexer?.isReady() && options.query) {
+	if (capabilityTier !== 'legacy' && indexer?.isReady() && options.query) {
 		try {
 			const limit = options.limit ?? 5;
 
@@ -94,8 +129,8 @@ export async function searchMemories(
 				augmentedQuery = `${augmentedQuery} ${options.concepts.join(' ')}`;
 			}
 
-			if (tier === 'hybrid' && embeddingProvider) {
-				return await searchHybrid(
+			if (capabilityTier === 'hybrid' && embeddingProvider) {
+				const results = await searchHybrid(
 					augmentedQuery,
 					limit,
 					indexer,
@@ -105,26 +140,46 @@ export async function searchMemories(
 					tiered?.hybridWeights,
 					snippetMaxChars,
 				);
-			} else {
-				return await searchFTS5(
-					augmentedQuery,
-					limit,
-					indexer,
-					options,
-					projectRoot,
-					snippetMaxChars,
-				);
+				// Executed tier read off the (uniform) per-result tag
+				// assigned inside searchHybrid → convertChunkResults. If
+				// the hybrid path downgraded to FTS-only (no embeddings)
+				// the results carry 'fts5'; otherwise 'hybrid'.
+				const executedTier: SearchTier =
+					results[0]?.searchTier ?? 'hybrid';
+				return {
+					results,
+					capabilityTier,
+					executedTier,
+				};
 			}
+
+			const fts = await searchFTS5(
+				augmentedQuery,
+				limit,
+				indexer,
+				options,
+				projectRoot,
+				snippetMaxChars,
+			);
+			return {
+				results: fts,
+				capabilityTier,
+				executedTier: 'fts5',
+			};
 		} catch (e) {
 			console.error(
-				`[search] Tier ${tier} failed, falling back to legacy:`,
+				`[search] Tier ${capabilityTier} failed, falling back to legacy:`,
 				e,
 			);
 		}
 	}
 
 	// Tier 3: Legacy in-memory search
-	return searchLegacy(options, projectRoot);
+	return {
+		results: searchLegacy(options, projectRoot),
+		capabilityTier,
+		executedTier: 'legacy',
+	};
 }
 
 // ---- Tier 1: Hybrid (FTS5 + Vector) ----
@@ -151,12 +206,14 @@ async function searchHybrid(
 
 	// Vector search
 	let vectorResults: VectorSearchResult[] = [];
+	let embeddingsAvailable = 0;
 	try {
 		const queryVec = await embeddingProvider.embed(query);
 		const embeddings = await indexer.getEmbeddings(
 			embeddingProvider.name,
 			embeddingProvider.model,
 		);
+		embeddingsAvailable = embeddings.size;
 
 		// Compute cosine similarity for all chunks
 		const scored: VectorSearchResult[] = [];
@@ -174,7 +231,16 @@ async function searchHybrid(
 		console.error('[search] Vector search failed, using FTS only:', e);
 	}
 
-	// Merge results
+	// HIGH-10 (beta.8): If no vectors were available for ANY chunk — e.g.
+	// the embedding cache is empty because the embed-on-write pipeline has
+	// never run and no background backfill happened — then we just ran an
+	// FTS5-only search even though the indexer reported 'hybrid' capability.
+	// Tag the results truthfully so callers (statusline, MCP envelope,
+	// dashboard) can surface the actual executed tier.
+	const hadVectors = embeddingsAvailable > 0;
+	const executedTier: SearchTier = hadVectors ? 'hybrid' : 'fts5';
+
+	// Merge results (no-op for vectorResults when hadVectors=false)
 	const merged = mergeHybridResults(
 		ftsResults.map((f) => ({
 			chunkId: f.chunkId,
@@ -193,7 +259,7 @@ async function searchHybrid(
 	return await convertChunkResults(
 		merged.slice(0, limit),
 		ftsResults,
-		'hybrid',
+		executedTier,
 		snippetMaxChars,
 		options,
 		projectRoot,

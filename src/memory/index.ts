@@ -41,6 +41,8 @@ export {
 	listMemories,
 	getMemoryStats,
 	resolveCanonicalRoot,
+	validateMemoryId,
+	MemoryIdInvalidError,
 } from './store';
 
 // Parser
@@ -55,8 +57,8 @@ export {
 } from './parser';
 
 // Search
-export { searchMemories } from './search';
-export type { SearchResult } from './search';
+export { searchMemories, searchMemoriesEnvelope } from './search';
+export type { SearchResult, SearchEnvelope } from './search';
 
 // Indexer (SQLite + FTS5)
 export {

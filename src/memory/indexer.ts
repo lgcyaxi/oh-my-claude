@@ -87,6 +87,18 @@ export interface MemoryIndexerOptions {
 	chunking?: Partial<ChunkingOptions>;
 }
 
+/**
+ * Minimum surface an embedding provider must expose for the on-write
+ * pipeline. Kept structural (not a direct import from `./embeddings`) so
+ * the indexer doesn't take a hard dependency on that module — callers
+ * already hold the resolved provider and pass it in.
+ */
+export interface EmbeddingProviderLike {
+	name: string;
+	model: string;
+	embed(text: string): Promise<number[]>;
+}
+
 // ---- Constants ----
 
 const DEFAULT_CHUNKING: ChunkingOptions = {
@@ -844,6 +856,91 @@ export class MemoryIndexer {
        )`,
 			[provider, model],
 		) as Array<{ id: string; hash: string; text: string }>;
+	}
+
+	/**
+	 * Get chunks for a specific file that don't have cached embeddings yet.
+	 * Scoped version of `getChunksWithoutEmbeddings`, used by the on-write
+	 * embedding pipeline (HIGH-9) so we only pay for the newly indexed
+	 * memory's chunks rather than the whole backlog.
+	 */
+	async getChunksWithoutEmbeddingsForFile(
+		filePath: string,
+		provider: string,
+		model: string,
+	): Promise<Array<{ id: string; hash: string; text: string }>> {
+		await this.init();
+		if (!this.db) return [];
+
+		return this.queryAll(
+			`SELECT c.id, c.hash, c.text FROM chunks c
+       WHERE c.path = ?
+         AND c.hash NOT IN (
+           SELECT ec.hash FROM embedding_cache ec
+           WHERE ec.provider = ? AND ec.model = ?
+         )`,
+			[filePath, provider, model],
+		) as Array<{ id: string; hash: string; text: string }>;
+	}
+
+	/**
+	 * Index a memory file AND eagerly compute + cache embeddings for its
+	 * chunks.
+	 *
+	 * This is the on-write embedding pipeline enabled in beta.8 (HIGH-9).
+	 * Previously `cacheEmbedding` was exported but never called from any
+	 * write path, so hybrid search was effectively disabled until a manual
+	 * backfill ran. Now every `saveMemory` → `indexNewMemory` flow lands
+	 * here (gated by `config.memory.embedding.onWrite`).
+	 *
+	 * On failure of any per-chunk embed call we log and keep going so one
+	 * malformed chunk doesn't poison the whole memory. Hybrid search will
+	 * transparently fall back to FTS-only when some chunks are missing
+	 * vectors (see HIGH-10).
+	 */
+	async indexMemoryWithEmbeddings(
+		filePath: string,
+		scope: MemoryScope,
+		projectRoot: string | undefined,
+		provider: EmbeddingProviderLike,
+	): Promise<{ embedded: number; skipped: number; failed: number }> {
+		await this.indexFile(filePath, scope, projectRoot);
+
+		const missing = await this.getChunksWithoutEmbeddingsForFile(
+			filePath,
+			provider.name,
+			provider.model,
+		);
+
+		let embedded = 0;
+		let failed = 0;
+		const skipped = 0;
+
+		for (const chunk of missing) {
+			try {
+				const vector = await provider.embed(chunk.text);
+				if (!Array.isArray(vector) || vector.length === 0) {
+					failed++;
+					continue;
+				}
+				await this.cacheEmbedding(
+					provider.name,
+					provider.model,
+					chunk.hash,
+					vector,
+				);
+				embedded++;
+			} catch (e) {
+				failed++;
+				console.error(
+					`[indexer] embed failed for chunk ${chunk.id}:`,
+					e instanceof Error ? e.message : e,
+				);
+			}
+		}
+
+		await this.flush();
+		return { embedded, skipped, failed };
 	}
 
 	/**

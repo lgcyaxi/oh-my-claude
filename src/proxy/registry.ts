@@ -21,6 +21,7 @@ import {
 	PROXY_REGISTRY,
 	getWindowsProxyRegistryPath,
 } from '../cli/utils/paths';
+import { withFileLockSync } from '../shared/fs/file-lock.js';
 
 /** A registered proxy session entry */
 export interface ProxySessionEntry {
@@ -140,25 +141,39 @@ function isPidAlive(pid: number): boolean {
 	}
 }
 
+const PROXY_REGISTRY_LOCK = PROXY_REGISTRY + '.lock';
+
+function getWindowsProxyRegistryLockPath(): string | null {
+	const winPath = getWindowsProxyRegistryPath();
+	return winPath ? `${winPath}.lock` : null;
+}
+
 /**
  * Register a new proxy session in the registry.
+ *
+ * Runs under a file lock so concurrent session startups (e.g. from parallel
+ * `omc cc` invocations) can't overwrite each other's entries.
  */
 export function registerProxySession(entry: ProxySessionEntry): void {
-	const entries = readProxyRegistry().filter(
-		(e) => e.sessionId !== entry.sessionId,
-	);
-	entries.push(entry);
-	writeRegistryAtomic(entries);
+	withFileLockSync(PROXY_REGISTRY_LOCK, () => {
+		const entries = readProxyRegistry().filter(
+			(e) => e.sessionId !== entry.sessionId,
+		);
+		entries.push(entry);
+		writeRegistryAtomic(entries);
+	});
 
-	// Dual-write to Windows-side registry when running in WSL2
 	const winPath = getWindowsProxyRegistryPath();
-	if (winPath) {
+	const winLock = getWindowsProxyRegistryLockPath();
+	if (winPath && winLock) {
 		try {
-			const winEntries = readRegistryAt(winPath).filter(
-				(e) => e.sessionId !== entry.sessionId,
-			);
-			winEntries.push({ ...entry, source: 'wsl2' });
-			writeRegistryAtomicAt(winPath, winEntries);
+			withFileLockSync(winLock, () => {
+				const winEntries = readRegistryAt(winPath).filter(
+					(e) => e.sessionId !== entry.sessionId,
+				);
+				winEntries.push({ ...entry, source: 'wsl2' });
+				writeRegistryAtomicAt(winPath, winEntries);
+			});
 		} catch {
 			// Best-effort — don't fail the session if Windows write fails
 		}
@@ -169,19 +184,23 @@ export function registerProxySession(entry: ProxySessionEntry): void {
  * Remove a session from the registry.
  */
 export function unregisterProxySession(sessionId: string): void {
-	const entries = readProxyRegistry().filter(
-		(e) => e.sessionId !== sessionId,
-	);
-	writeRegistryAtomic(entries);
+	withFileLockSync(PROXY_REGISTRY_LOCK, () => {
+		const entries = readProxyRegistry().filter(
+			(e) => e.sessionId !== sessionId,
+		);
+		writeRegistryAtomic(entries);
+	});
 
-	// Remove from Windows-side registry too
 	const winPath = getWindowsProxyRegistryPath();
-	if (winPath) {
+	const winLock = getWindowsProxyRegistryLockPath();
+	if (winPath && winLock) {
 		try {
-			const winEntries = readRegistryAt(winPath).filter(
-				(e) => e.sessionId !== sessionId,
-			);
-			writeRegistryAtomicAt(winPath, winEntries);
+			withFileLockSync(winLock, () => {
+				const winEntries = readRegistryAt(winPath).filter(
+					(e) => e.sessionId !== sessionId,
+				);
+				writeRegistryAtomicAt(winPath, winEntries);
+			});
 		} catch {
 			// Best-effort
 		}
@@ -199,15 +218,15 @@ export function unregisterProxySession(sessionId: string): void {
  * @returns Number of stale entries removed
  */
 export function cleanupStaleEntries(): number {
-	const entries = readProxyRegistry();
-	const alive = entries.filter(
-		(e) => Number.isInteger(e.pid) && e.pid > 0 && isPidAlive(e.pid),
-	);
-	const removed = entries.length - alive.length;
-
-	if (removed > 0) {
-		writeRegistryAtomic(alive);
-	}
-
-	return removed;
+	return withFileLockSync(PROXY_REGISTRY_LOCK, () => {
+		const entries = readProxyRegistry();
+		const alive = entries.filter(
+			(e) => Number.isInteger(e.pid) && e.pid > 0 && isPidAlive(e.pid),
+		);
+		const removed = entries.length - alive.length;
+		if (removed > 0) {
+			writeRegistryAtomic(alive);
+		}
+		return removed;
+	});
 }

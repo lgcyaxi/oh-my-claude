@@ -190,6 +190,7 @@ npm publish --access public
 - `src/proxy/response/cache.ts` - Response caching for session display
 - `src/proxy/control/` - Control API (health, status, switch, revert, sessions, memory, providers)
 - `src/proxy/state/switch.ts` - Signal file IPC (proxy-switch.json)
+- `src/shared/fs/file-lock.ts` - Reusable advisory lock + atomic write + `loadJsonOrBackup` primitives (foundation for all state-file RMW in beta.8+)
 - `src/proxy/auth/auth.ts` - Proxy auth (dual mode: api-key / oauth)
 - `src/proxy/sanitize.ts` + `src/proxy/sanitizers/` - Request sanitization
 - `src/assets/commands/memory/omc-mem-compact.md` - Slash command for AI-assisted memory compaction

@@ -5,9 +5,29 @@ import {
 	resolveCanonicalRoot,
 	regenerateTimelines,
 } from '../../memory';
+import type { EmbeddingProviderLike } from '../../memory/indexer';
+import { loadConfig } from '../../shared/config/loader';
 import { getConfiguredWriteScope } from '../shared/utils';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+
+/**
+ * Cached resolution of `memory.embedding.onWrite`. The config file is tiny
+ * and rarely changes, but indexNewMemory runs on every remember so we avoid
+ * redundant disk reads. Missing/corrupt config falls back to the default
+ * (true) — matches the Zod default declared in schema.ts.
+ */
+let cachedEmbedOnWrite: boolean | null = null;
+function readEmbedOnWriteFromConfig(): boolean {
+	if (cachedEmbedOnWrite !== null) return cachedEmbedOnWrite;
+	try {
+		const cfg = loadConfig();
+		cachedEmbedOnWrite = cfg.memory?.embedding?.onWrite !== false;
+	} catch {
+		cachedEmbedOnWrite = true;
+	}
+	return cachedEmbedOnWrite;
+}
 
 /** Best-effort timeline regeneration after any memory mutation */
 export function afterMemoryMutation(projectRoot: string | undefined): void {
@@ -21,12 +41,22 @@ export function afterMemoryMutation(projectRoot: string | undefined): void {
 /**
  * Index a newly created memory file into the SQLite FTS index.
  * Call after createMemory() to keep the index in sync.
+ *
+ * When an embedding provider is supplied AND `memory.embedding.onWrite`
+ * is enabled, the indexer also computes + caches vectors for every chunk
+ * of this memory so hybrid search is "warm" on the very next query
+ * (HIGH-9 beta.8). Absent a provider or with the knob disabled, this
+ * falls through to the previous FTS-only behaviour.
  */
 export async function indexNewMemory(
 	memoryData: { id: string; type: string },
 	scope: 'project' | 'global' | undefined,
 	projectRoot: string | undefined,
 	indexer: import('../../memory/indexer').MemoryIndexer | null,
+	opts?: {
+		embeddingProvider?: EmbeddingProviderLike | null;
+		embedOnWrite?: boolean;
+	},
 ): Promise<void> {
 	if (!indexer?.isReady()) return;
 	try {
@@ -37,12 +67,28 @@ export async function indexNewMemory(
 			actualScope === 'project' && projectRoot
 				? getProjectMemoryDir(projectRoot)
 				: getMemoryDir();
-		if (memDir) {
-			const subdir = memoryData.type === 'session' ? 'sessions' : 'notes';
-			const filePath = join(memDir, subdir, `${memoryData.id}.md`);
-			await indexer.indexFile(filePath, actualScope, projectRoot);
-			await indexer.flush();
+		if (!memDir) return;
+		const subdir = memoryData.type === 'session' ? 'sessions' : 'notes';
+		const filePath = join(memDir, subdir, `${memoryData.id}.md`);
+
+		const provider = opts?.embeddingProvider ?? null;
+		const embedOnWrite =
+			opts?.embedOnWrite !== undefined
+				? opts.embedOnWrite
+				: readEmbedOnWriteFromConfig();
+
+		if (embedOnWrite && provider) {
+			await indexer.indexMemoryWithEmbeddings(
+				filePath,
+				actualScope,
+				projectRoot,
+				provider,
+			);
+			return; // indexMemoryWithEmbeddings already flushes.
 		}
+
+		await indexer.indexFile(filePath, actualScope, projectRoot);
+		await indexer.flush();
 	} catch (e) {
 		console.error('[oh-my-claude] Post-write indexing failed:', e);
 	}

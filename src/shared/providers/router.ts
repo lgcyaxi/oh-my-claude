@@ -18,11 +18,53 @@ import {
   resolveProviderForCategory,
   getProviderDetails,
   isProviderConfigured,
+  getConfigPaths,
   type OhMyClaudeConfig,
 } from "../config";
+import { getAuthStorePath } from "../auth";
+import { statSync } from "node:fs";
 
 // Provider client cache
 const clientCache = new Map<string, ProviderClient>();
+
+// mtime cache for source-of-truth files (config + auth). When any watched
+// file's mtime advances, we drop the provider client cache so follow-up
+// routing calls rebuild clients with the latest baseUrl/apiKey/env state.
+// This addresses HIGH-12: previously `clearClientCache()` existed but had
+// zero call sites, so live edits to ~/.claude/oh-my-claude/oh-my-claude.json
+// or auth.json would keep serving a stale client until the daemon restarted.
+const watchedMtimes = new Map<string, number>();
+
+function getWatchedConfigPaths(): string[] {
+  return [...getConfigPaths(), getAuthStorePath()];
+}
+
+function maybeInvalidateClientCacheByMtime(): void {
+  const paths = getWatchedConfigPaths();
+  let anyChanged = false;
+  for (const p of paths) {
+    let current = 0;
+    try {
+      // statSync with throwIfNoEntry=false avoids throwing on missing files
+      const st = statSync(p, { throwIfNoEntry: false });
+      if (st) current = st.mtimeMs;
+    } catch {
+      // Missing / permission-denied — treat as absent; if the file later
+      // appears the transition from "unseen" to "present" still counts.
+    }
+    const hadPrev = watchedMtimes.has(p);
+    const prev = watchedMtimes.get(p) ?? 0;
+    watchedMtimes.set(p, current);
+    // Only treat this as a cache-invalidating event after we've seen the
+    // file at least once — the very first stat always "changes" from unseen.
+    if (hadPrev && current !== prev) {
+      anyChanged = true;
+    }
+  }
+  if (anyChanged) {
+    clientCache.clear();
+  }
+}
 
 /**
  * Get or create a provider client
@@ -31,6 +73,10 @@ function getProviderClient(
   providerName: string,
   config: OhMyClaudeConfig
 ): ProviderClient {
+  // Drop stale clients before consulting the cache so live edits to
+  // config/auth files take effect without requiring a daemon restart.
+  maybeInvalidateClientCacheByMtime();
+
   // Check cache first
   const cached = clientCache.get(providerName);
   if (cached) {

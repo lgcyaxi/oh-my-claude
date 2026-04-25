@@ -4486,6 +4486,7 @@ var init_types3 = __esm(() => {
 // src/shared/auth/store.ts
 var exports_store = {};
 __export(exports_store, {
+  writeSecretFile: () => writeSecretFile,
   setCredential: () => setCredential,
   saveAuthStore: () => saveAuthStore,
   removeCredential: () => removeCredential,
@@ -4495,27 +4496,31 @@ __export(exports_store, {
   getCredential: () => getCredential,
   getAuthStorePath: () => getAuthStorePath
 });
-import { existsSync as existsSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, chmodSync } from "fs";
+import { existsSync as existsSync3, readFileSync as readFileSync3, writeFileSync as writeFileSync2, mkdirSync as mkdirSync3, chmodSync as chmodSync2, utimesSync } from "fs";
 import { join as join2 } from "path";
 import { homedir as homedir2, platform } from "os";
 function ensureAuthDir() {
-  if (!existsSync2(AUTH_DIR)) {
-    mkdirSync2(AUTH_DIR, { recursive: true });
+  if (!existsSync3(AUTH_DIR)) {
+    mkdirSync3(AUTH_DIR, { recursive: true });
   }
 }
 function setFilePermissions(path) {
   if (platform() === "win32")
     return;
   try {
-    chmodSync(path, 384);
+    chmodSync2(path, 384);
   } catch {}
+}
+function writeSecretFile(path, content, encoding = "utf-8") {
+  writeFileSync2(path, content, encoding);
+  setFilePermissions(path);
 }
 function loadAuthStore() {
   try {
-    if (!existsSync2(AUTH_PATH)) {
+    if (!existsSync3(AUTH_PATH)) {
       return { version: 1, credentials: {} };
     }
-    const content = readFileSync2(AUTH_PATH, "utf-8");
+    const content = readFileSync3(AUTH_PATH, "utf-8");
     const parsed = JSON.parse(content);
     return AuthStoreSchema.parse(parsed);
   } catch {
@@ -4527,6 +4532,10 @@ function saveAuthStore(store) {
   const content = JSON.stringify(store, null, 2);
   writeFileSync2(AUTH_PATH, content, "utf-8");
   setFilePermissions(AUTH_PATH);
+  try {
+    const now = new Date;
+    utimesSync(AUTH_PATH, now, now);
+  } catch {}
 }
 function getCredential(provider) {
   const store = loadAuthStore();
@@ -4616,15 +4625,22 @@ async function refreshOpenAI(provider, cred) {
     tokenCache.set(provider, { token: cred.accessToken, expiresAt: cred.expiresAt });
     return cred.accessToken;
   }
-  const response = await fetch("https://auth.openai.com/oauth/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: cred.refreshToken,
-      client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
-    })
-  });
+  let response;
+  try {
+    response = await fetch("https://auth.openai.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: cred.refreshToken,
+        client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`OpenAI token refresh network error: ${msg}`);
+  }
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`OpenAI token refresh failed (${response.status}): ${text}`);
@@ -5006,18 +5022,18 @@ var init_zhipu = __esm(() => {
 });
 
 // src/shared/auth/minimax.ts
-import { existsSync as existsSync15, readFileSync as readFileSync8 } from "fs";
+import { existsSync as existsSync16, readFileSync as readFileSync9 } from "fs";
 import { join as join18 } from "path";
 import { homedir as homedir11 } from "os";
 function hasMiniMaxCredential() {
-  return existsSync15(CREDS_PATH);
+  return existsSync16(CREDS_PATH);
 }
 function getMiniMaxCredential() {
-  if (!existsSync15(CREDS_PATH)) {
+  if (!existsSync16(CREDS_PATH)) {
     return null;
   }
   try {
-    const creds = JSON.parse(readFileSync8(CREDS_PATH, "utf-8"));
+    const creds = JSON.parse(readFileSync9(CREDS_PATH, "utf-8"));
     if (creds.cookie && creds.groupId) {
       return creds;
     }
@@ -5149,18 +5165,18 @@ var init_minimax2 = __esm(() => {
 });
 
 // src/shared/auth/kimi.ts
-import { existsSync as existsSync16, readFileSync as readFileSync9 } from "fs";
+import { existsSync as existsSync17, readFileSync as readFileSync10 } from "fs";
 import { join as join19 } from "path";
 import { homedir as homedir12 } from "os";
 function hasKimiCredential() {
-  return existsSync16(CREDS_PATH2);
+  return existsSync17(CREDS_PATH2);
 }
 function getKimiCredential() {
-  if (!existsSync16(CREDS_PATH2)) {
+  if (!existsSync17(CREDS_PATH2)) {
     return null;
   }
   try {
-    const raw = JSON.parse(readFileSync9(CREDS_PATH2, "utf-8"));
+    const raw = JSON.parse(readFileSync10(CREDS_PATH2, "utf-8"));
     const creds = raw?.credential ?? raw;
     if (creds?.token && creds?.cookie) {
       return {
@@ -5248,18 +5264,18 @@ var init_kimi2 = __esm(() => {
 });
 
 // src/shared/auth/aliyun.ts
-import { existsSync as existsSync17, readFileSync as readFileSync10 } from "fs";
+import { existsSync as existsSync18, readFileSync as readFileSync11 } from "fs";
 import { join as join20 } from "path";
 import { homedir as homedir13 } from "os";
 function hasAliyunCredential() {
-  return existsSync17(CREDS_PATH3);
+  return existsSync18(CREDS_PATH3);
 }
 function getAliyunCredential() {
-  if (!existsSync17(CREDS_PATH3)) {
+  if (!existsSync18(CREDS_PATH3)) {
     return null;
   }
   try {
-    const creds = JSON.parse(readFileSync10(CREDS_PATH3, "utf-8"));
+    const creds = JSON.parse(readFileSync11(CREDS_PATH3, "utf-8"));
     if (creds.cookie) {
       return creds;
     }
@@ -5447,7 +5463,7 @@ var exports_usage = {};
 __export(exports_usage, {
   handleUsageRequest: () => handleUsageRequest
 });
-import { readFileSync as readFileSync11, existsSync as existsSync18 } from "fs";
+import { readFileSync as readFileSync12, existsSync as existsSync19 } from "fs";
 import { join as join21 } from "path";
 import { homedir as homedir14 } from "os";
 function ensureApiEnv() {
@@ -5456,9 +5472,9 @@ function ensureApiEnv() {
   envLoaded = true;
   try {
     const envFile = join21(homedir14(), ".zshrc.api");
-    if (!existsSync18(envFile))
+    if (!existsSync19(envFile))
       return;
-    const content = readFileSync11(envFile, "utf-8");
+    const content = readFileSync12(envFile, "utf-8");
     for (const line of content.split(`
 `)) {
       const trimmed = line.trim();
@@ -5537,19 +5553,128 @@ var init_usage = () => {};
 
 // src/proxy/state/switch.ts
 init_types();
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "fs";
-import { join, dirname } from "path";
+import { existsSync as existsSync2, readFileSync as readFileSync2, mkdirSync as mkdirSync2 } from "fs";
+import { join, dirname as dirname2 } from "path";
 import { homedir } from "os";
+
+// src/shared/fs/file-lock.ts
+import {
+  openSync,
+  closeSync,
+  unlinkSync,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  renameSync,
+  readFileSync,
+  statSync,
+  chmodSync,
+  copyFileSync
+} from "fs";
+import { dirname } from "path";
+var DEFAULT_RETRIES = 10;
+var DEFAULT_BACKOFF_MS = 20;
+var DEFAULT_STALE_MS = 5000;
+function sleepBlockingMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {}
+}
+function acquireLock(lockPath, opts) {
+  const dir = dirname(lockPath);
+  for (let i = 0;i < opts.retries; i++) {
+    try {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      return openSync(lockPath, "wx");
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") {
+        return null;
+      }
+      try {
+        const stat = statSync(lockPath);
+        if (Date.now() - stat.mtimeMs > opts.staleMs) {
+          try {
+            unlinkSync(lockPath);
+          } catch {}
+          continue;
+        }
+      } catch {}
+      sleepBlockingMs(opts.backoffMs + Math.random() * opts.backoffMs);
+    }
+  }
+  return null;
+}
+function releaseLock(fd, lockPath) {
+  if (fd === null)
+    return;
+  try {
+    closeSync(fd);
+  } catch {}
+  try {
+    unlinkSync(lockPath);
+  } catch {}
+}
+function withFileLockSync(lockPath, fn, opts = {}) {
+  const resolved = {
+    retries: opts.retries ?? DEFAULT_RETRIES,
+    backoffMs: opts.backoffMs ?? DEFAULT_BACKOFF_MS,
+    staleMs: opts.staleMs ?? DEFAULT_STALE_MS
+  };
+  const fd = acquireLock(lockPath, resolved);
+  try {
+    return fn();
+  } finally {
+    releaseLock(fd, lockPath);
+  }
+}
+function atomicTempPath(path) {
+  return `${path}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function ensureParentDir(path) {
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+}
+function applyMode(path, mode) {
+  if (mode === undefined || process.platform === "win32")
+    return;
+  try {
+    chmodSync(path, mode);
+  } catch {}
+}
+function atomicWriteText(path, text, opts = {}) {
+  ensureParentDir(path);
+  const tmp = atomicTempPath(path);
+  writeFileSync(tmp, text, "utf-8");
+  applyMode(tmp, opts.mode);
+  renameSync(tmp, path);
+  applyMode(path, opts.mode);
+}
+function atomicWriteJson(path, value, opts = {}) {
+  const indent = opts.indent ?? "\t";
+  const trailing = opts.trailingNewline ?? true;
+  const text = JSON.stringify(value, null, indent) + (trailing ? `
+` : "");
+  atomicWriteText(path, text, { mode: opts.mode });
+}
+
+// src/proxy/state/switch.ts
 function getSwitchStatePath() {
   return join(homedir(), ".claude", "oh-my-claude", "proxy-switch.json");
+}
+function getSwitchStateLockPath() {
+  return getSwitchStatePath() + ".lock";
 }
 function readSwitchState() {
   const statePath = getSwitchStatePath();
   try {
-    if (!existsSync(statePath)) {
+    if (!existsSync2(statePath)) {
       return { ...DEFAULT_SWITCH_STATE };
     }
-    const content = readFileSync(statePath, "utf-8");
+    const content = readFileSync2(statePath, "utf-8");
     const parsed = JSON.parse(content);
     if (typeof parsed.switched !== "boolean") {
       return { ...DEFAULT_SWITCH_STATE };
@@ -5566,13 +5691,16 @@ function readSwitchState() {
 }
 function writeSwitchState(state) {
   const statePath = getSwitchStatePath();
-  const dir = dirname(statePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+  const dir = dirname2(statePath);
+  if (!existsSync2(dir)) {
+    mkdirSync2(dir, { recursive: true });
   }
-  const tmpPath = `${statePath}.tmp`;
-  writeFileSync(tmpPath, JSON.stringify(state, null, 2), "utf-8");
-  renameSync(tmpPath, statePath);
+  withFileLockSync(getSwitchStateLockPath(), () => {
+    atomicWriteJson(statePath, state, {
+      indent: 2,
+      trailingNewline: false
+    });
+  });
 }
 function resetSwitchState() {
   writeSwitchState({ ...DEFAULT_SWITCH_STATE });
@@ -5773,11 +5901,11 @@ async function cacheUsageResponse(response) {
     const data = await response.json();
     if (!data.five_hour)
       return;
-    const { mkdirSync: mkdirSync2, writeFileSync: writeFileSync2 } = await import("fs");
+    const { mkdirSync: mkdirSync3, writeFileSync: writeFileSync2 } = await import("fs");
     const { join: join2 } = await import("path");
     const { homedir: homedir2 } = await import("os");
     const cacheDir = join2(homedir2(), ".claude", "oh-my-claude", "cache");
-    mkdirSync2(cacheDir, { recursive: true });
+    mkdirSync3(cacheDir, { recursive: true });
     writeFileSync2(join2(cacheDir, "api_usage.json"), JSON.stringify({
       timestamp: Date.now(),
       five_hour: data.five_hour,
@@ -5788,13 +5916,13 @@ async function cacheUsageResponse(response) {
 
 // src/proxy/auth/auth.ts
 import {
-  existsSync as existsSync4,
-  readFileSync as readFileSync4,
+  existsSync as existsSync5,
+  readFileSync as readFileSync5,
   writeFileSync as writeFileSync3,
-  mkdirSync as mkdirSync3,
-  chmodSync as chmodSync2
+  mkdirSync as mkdirSync4,
+  chmodSync as chmodSync3
 } from "fs";
-import { join as join4, dirname as dirname2 } from "path";
+import { join as join4, dirname as dirname3 } from "path";
 import { homedir as homedir4 } from "os";
 import { randomUUID } from "crypto";
 
@@ -5872,7 +6000,8 @@ var MemoryConfigSchema = exports_external.object({
   embedding: exports_external.object({
     provider: exports_external.enum(["custom", "zhipu", "none"]).default("custom"),
     model: exports_external.string().default("embedding-3"),
-    dimensions: exports_external.number().min(64).max(8192).optional()
+    dimensions: exports_external.number().min(64).max(8192).optional(),
+    onWrite: exports_external.boolean().default(true)
   }).optional(),
   chunking: exports_external.object({
     tokens: exports_external.number().min(100).max(2000).default(400),
@@ -5910,7 +6039,8 @@ var ProxyConfigSchema = exports_external.object({
   port: exports_external.number().min(1024).max(65535).default(18910),
   controlPort: exports_external.number().min(1024).max(65535).default(18911),
   enabled: exports_external.boolean().default(false),
-  failClosed: exports_external.boolean().default(true)
+  failClosed: exports_external.boolean().default(true),
+  maxBodyBytes: exports_external.number().int().default(4 * 1024 * 1024)
 });
 var OhMyClaudeConfigSchema = exports_external.object({
   $schema: exports_external.string().optional(),
@@ -5983,7 +6113,7 @@ var OhMyClaudeConfigSchema = exports_external.object({
 });
 var DEFAULT_CONFIG = OhMyClaudeConfigSchema.parse({});
 // src/shared/config/loader.ts
-import { readFileSync as readFileSync3, existsSync as existsSync3 } from "fs";
+import { readFileSync as readFileSync4, existsSync as existsSync4 } from "fs";
 import { homedir as homedir3 } from "os";
 import { join as join3 } from "path";
 init_types3();
@@ -6000,9 +6130,9 @@ function getConfigPaths() {
 function loadConfig() {
   const configPaths = getConfigPaths();
   for (const configPath of configPaths) {
-    if (existsSync3(configPath)) {
+    if (existsSync4(configPath)) {
       try {
-        const content = readFileSync3(configPath, "utf-8");
+        const content = readFileSync4(configPath, "utf-8");
         const parsed = JSON.parse(content);
         return OhMyClaudeConfigSchema.parse(parsed);
       } catch (error) {
@@ -6070,10 +6200,10 @@ function getAuthConfigPath() {
 function readAuthConfig() {
   const authPath = getAuthConfigPath();
   try {
-    if (!existsSync4(authPath)) {
+    if (!existsSync5(authPath)) {
       return null;
     }
-    const content = readFileSync4(authPath, "utf-8");
+    const content = readFileSync5(authPath, "utf-8");
     const parsed = JSON.parse(content);
     if (!parsed.proxyToken) {
       return null;
@@ -6088,13 +6218,13 @@ function readAuthConfig() {
 }
 function writeAuthConfig(config) {
   const authPath = getAuthConfigPath();
-  const dir = dirname2(authPath);
-  if (!existsSync4(dir)) {
-    mkdirSync3(dir, { recursive: true });
+  const dir = dirname3(authPath);
+  if (!existsSync5(dir)) {
+    mkdirSync4(dir, { recursive: true });
   }
   writeFileSync3(authPath, JSON.stringify(config, null, 2), "utf-8");
   try {
-    chmodSync2(authPath, 384);
+    chmodSync3(authPath, 384);
   } catch {}
 }
 function generateProxyToken() {
@@ -6186,6 +6316,16 @@ async function getProviderAuth(providerName) {
 
 // src/proxy/response/stream.ts
 var UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
+function buildUpstreamSignal(clientSignal, timeoutMs = UPSTREAM_TIMEOUT_MS) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  if (!clientSignal)
+    return timeoutSignal;
+  const any = AbortSignal.any;
+  if (typeof any === "function") {
+    return any([clientSignal, timeoutSignal]);
+  }
+  return timeoutSignal;
+}
 function createStreamingResponse(upstreamResponse, overrideHeaders, originalModel, providerModel) {
   const contentType = upstreamResponse.headers.get("content-type") ?? "";
   const isSSE = contentType.includes("text/event-stream");
@@ -6276,7 +6416,7 @@ async function forwardToUpstream(originalRequest, targetUrl, apiKey, bodyOverrid
     method: originalRequest.method,
     headers,
     body,
-    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+    signal: buildUpstreamSignal(originalRequest.signal, UPSTREAM_TIMEOUT_MS)
   });
   return upstreamResponse;
 }
@@ -6520,7 +6660,12 @@ async function handlePassthrough(req, reqId, bodyText, sessionTag = "") {
 // src/proxy/sanitizers/deepseek.ts
 function sanitizeDeepSeekV4(body, opts = {}) {
   const model = typeof body.model === "string" ? body.model : "";
+  const thinkingDisabled = isThinkingExplicitlyDisabled(body);
   const thinkingRequested = isThinkingExplicitlyEnabled(body);
+  if (thinkingDisabled) {
+    applyFastPath(body);
+    return;
+  }
   const useThinkingPath = (() => {
     if (opts.effort)
       return true;
@@ -6535,6 +6680,12 @@ function sanitizeDeepSeekV4(body, opts = {}) {
     return;
   }
   applyFastPath(body);
+}
+function isThinkingExplicitlyDisabled(body) {
+  const t = body.thinking;
+  if (!t || typeof t !== "object")
+    return false;
+  return t.type === "disabled";
 }
 function applyThinkingPath(body, effort) {
   ensureThinkingEnabled(body);
@@ -7234,7 +7385,7 @@ async function forwardToProvider(req, targetUrl, apiKey, body, isOpenAIFormat, p
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(300000)
+    signal: buildUpstreamSignal(req.signal, 300000)
   });
 }
 
@@ -7434,6 +7585,7 @@ class ResponsesToAnthropicStreamConverter extends TransformStream {
       case "response.failed": {
         const error = data.error;
         const errorMsg = error?.message ?? "Unknown error from Codex API";
+        const errorType = error?.type ?? "api_error";
         for (const blockIdx of this.openBlocks) {
           this.emitSSE(controller, "content_block_stop", {
             type: "content_block_stop",
@@ -7441,13 +7593,12 @@ class ResponsesToAnthropicStreamConverter extends TransformStream {
           });
         }
         this.openBlocks.clear();
-        this.emitSSE(controller, "message_delta", {
-          type: "message_delta",
-          delta: { stop_reason: "end_turn", stop_sequence: null },
-          usage: { output_tokens: this.outputTokens }
-        });
-        this.emitSSE(controller, "message_stop", {
-          type: "message_stop"
+        this.emitSSE(controller, "error", {
+          type: "error",
+          error: {
+            type: errorType,
+            message: errorMsg
+          }
         });
         console.error(`[responses-converter] Response failed: ${errorMsg}`);
         break;
@@ -8000,10 +8151,52 @@ async function handleModelsRequest(req, sessionId) {
 }
 
 // src/proxy/handlers/index.ts
+function buildBodyTooLargeResponse(limit, actual) {
+  const message = actual !== undefined ? `Request body exceeds proxy.maxBodyBytes (${actual} > ${limit})` : `Request body exceeds proxy.maxBodyBytes (${limit})`;
+  return new Response(JSON.stringify({
+    type: "error",
+    error: { type: "request_too_large", message }
+  }), {
+    status: 413,
+    headers: { "content-type": "application/json" }
+  });
+}
+async function readBodyWithLimit(req) {
+  const cfg = loadConfig();
+  const limit = cfg.proxy?.maxBodyBytes ?? 4 * 1024 * 1024;
+  if (limit > 0) {
+    const cl = req.headers.get("content-length");
+    if (cl) {
+      const declared = Number.parseInt(cl, 10);
+      if (Number.isFinite(declared) && declared > limit) {
+        return {
+          ok: false,
+          response: buildBodyTooLargeResponse(limit, declared)
+        };
+      }
+    }
+  }
+  const bodyText = await req.text();
+  if (limit > 0) {
+    const byteLen = Buffer.byteLength(bodyText, "utf8");
+    if (byteLen > limit) {
+      return {
+        ok: false,
+        response: buildBodyTooLargeResponse(limit, byteLen)
+      };
+    }
+  }
+  return { ok: true, bodyText };
+}
 async function handleMessages(req, sessionId) {
   const reqId = nextRequestId();
   const sessionTag = sessionId ? ` [s:${sessionId.slice(0, 8)}]` : "";
-  const bodyText = await req.text();
+  const bodyOutcome = await readBodyWithLimit(req);
+  if (!bodyOutcome.ok) {
+    console.error(`[proxy #${reqId}]${sessionTag} Request body rejected (413)`);
+    return bodyOutcome.response;
+  }
+  const bodyText = bodyOutcome.bodyText;
   try {
     let parsedBody;
     try {
@@ -8587,9 +8780,41 @@ function createOpenAIClient() {
   });
 }
 
+// src/shared/auth/index.ts
+init_store();
+init_token_manager();
+init_types3();
+
 // src/shared/providers/router.ts
+import { statSync as statSync2 } from "fs";
 var clientCache = new Map;
+var watchedMtimes = new Map;
+function getWatchedConfigPaths() {
+  return [...getConfigPaths(), getAuthStorePath()];
+}
+function maybeInvalidateClientCacheByMtime() {
+  const paths = getWatchedConfigPaths();
+  let anyChanged = false;
+  for (const p of paths) {
+    let current = 0;
+    try {
+      const st = statSync2(p, { throwIfNoEntry: false });
+      if (st)
+        current = st.mtimeMs;
+    } catch {}
+    const hadPrev = watchedMtimes.has(p);
+    const prev = watchedMtimes.get(p) ?? 0;
+    watchedMtimes.set(p, current);
+    if (hadPrev && current !== prev) {
+      anyChanged = true;
+    }
+  }
+  if (anyChanged) {
+    clientCache.clear();
+  }
+}
 function getProviderClient(providerName, config) {
+  maybeInvalidateClientCacheByMtime();
   const cached = clientCache.get(providerName);
   if (cached) {
     return cached;
@@ -8846,7 +9071,7 @@ async function handleAnthropicPassthrough(messages, model, temperature, maxToken
 }
 
 // src/proxy/control/registry.ts
-import { readFileSync as readFileSync5, writeFileSync as writeFileSync4, existsSync as existsSync5, renameSync as renameSync2 } from "fs";
+import { readFileSync as readFileSync6, writeFileSync as writeFileSync4, existsSync as existsSync6, renameSync as renameSync2 } from "fs";
 import { join as join5 } from "path";
 import { homedir as homedir5 } from "os";
 function getRegistryPath() {
@@ -8854,10 +9079,10 @@ function getRegistryPath() {
 }
 function readRegistry() {
   const registryPath = getRegistryPath();
-  if (!existsSync5(registryPath)) {
+  if (!existsSync6(registryPath)) {
     throw new Error(`Registry not found at ${registryPath}`);
   }
-  return JSON.parse(readFileSync5(registryPath, "utf-8"));
+  return JSON.parse(readFileSync6(registryPath, "utf-8"));
 }
 function writeRegistry(registry) {
   const registryPath = getRegistryPath();
@@ -9006,13 +9231,13 @@ async function handleConfigRequest(_req, path, corsHeaders) {
 
 // src/proxy/state/instance-registry.ts
 import {
-  readFileSync as readFileSync6,
+  readFileSync as readFileSync7,
   writeFileSync as writeFileSync5,
-  existsSync as existsSync6,
-  mkdirSync as mkdirSync4,
-  openSync,
-  closeSync,
-  unlinkSync
+  existsSync as existsSync7,
+  mkdirSync as mkdirSync5,
+  openSync as openSync2,
+  closeSync as closeSync2,
+  unlinkSync as unlinkSync2
 } from "fs";
 import { join as join6 } from "path";
 import { homedir as homedir6 } from "os";
@@ -9023,17 +9248,17 @@ var STALE_TTL_MS = 5 * 60 * 1000;
 var LOCK_RETRIES = 10;
 var LOCK_BASE_BACKOFF_MS = 20;
 var LOCK_STALE_MS = 5000;
-function sleepBlockingMs(ms) {
+function sleepBlockingMs2(ms) {
   const end = Date.now() + ms;
   while (Date.now() < end) {}
 }
 function acquireRegistryLock() {
   for (let i = 0;i < LOCK_RETRIES; i++) {
     try {
-      if (!existsSync6(REGISTRY_DIR)) {
-        mkdirSync4(REGISTRY_DIR, { recursive: true });
+      if (!existsSync7(REGISTRY_DIR)) {
+        mkdirSync5(REGISTRY_DIR, { recursive: true });
       }
-      return openSync(LOCK_FILE, "wx");
+      return openSync2(LOCK_FILE, "wx");
     } catch (err) {
       const code = err?.code;
       if (code !== "EEXIST") {
@@ -9043,12 +9268,12 @@ function acquireRegistryLock() {
         const stat = __require("fs").statSync(LOCK_FILE);
         if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
           try {
-            unlinkSync(LOCK_FILE);
+            unlinkSync2(LOCK_FILE);
           } catch {}
           continue;
         }
       } catch {}
-      sleepBlockingMs(LOCK_BASE_BACKOFF_MS + Math.random() * LOCK_BASE_BACKOFF_MS);
+      sleepBlockingMs2(LOCK_BASE_BACKOFF_MS + Math.random() * LOCK_BASE_BACKOFF_MS);
     }
   }
   return null;
@@ -9057,10 +9282,10 @@ function releaseRegistryLock(fd) {
   if (fd === null)
     return;
   try {
-    closeSync(fd);
+    closeSync2(fd);
   } catch {}
   try {
-    unlinkSync(LOCK_FILE);
+    unlinkSync2(LOCK_FILE);
   } catch {}
 }
 function withRegistryLock(fn) {
@@ -9080,13 +9305,16 @@ function isPidAlive(pid) {
   }
 }
 function readInstances() {
-  if (!existsSync6(REGISTRY_FILE))
+  return readInstancesLockFree();
+}
+function readInstancesLockFree() {
+  if (!existsSync7(REGISTRY_FILE))
     return [];
   try {
-    const data = JSON.parse(readFileSync6(REGISTRY_FILE, "utf-8"));
+    const data = JSON.parse(readFileSync7(REGISTRY_FILE, "utf-8"));
     const instances = Array.isArray(data) ? data : [];
     const now = Date.now();
-    const alive = instances.filter((i) => {
+    return instances.filter((i) => {
       const heartbeat = new Date(i.lastHeartbeat).getTime();
       if (now - heartbeat >= STALE_TTL_MS)
         return false;
@@ -9094,16 +9322,35 @@ function readInstances() {
         return false;
       return true;
     });
-    if (alive.length < instances.length) {
-      writeInstances(alive);
-    }
-    return alive;
   } catch {
     return [];
   }
 }
+function pruneInstances() {
+  const raw = existsSync7(REGISTRY_FILE) ? (() => {
+    try {
+      return JSON.parse(readFileSync7(REGISTRY_FILE, "utf-8"));
+    } catch {
+      return [];
+    }
+  })() : [];
+  const instances = Array.isArray(raw) ? raw : [];
+  const now = Date.now();
+  const alive = instances.filter((i) => {
+    const heartbeat = new Date(i.lastHeartbeat).getTime();
+    if (now - heartbeat >= STALE_TTL_MS)
+      return false;
+    if (!isPidAlive(i.pid))
+      return false;
+    return true;
+  });
+  if (alive.length < instances.length) {
+    writeInstances(alive);
+  }
+  return alive;
+}
 function writeInstances(instances) {
-  mkdirSync4(REGISTRY_DIR, { recursive: true });
+  mkdirSync5(REGISTRY_DIR, { recursive: true });
   const tmpPath = REGISTRY_FILE + ".tmp";
   writeFileSync5(tmpPath, JSON.stringify(instances, null, "\t") + `
 `, "utf-8");
@@ -9112,7 +9359,7 @@ function writeInstances(instances) {
 }
 function registerInstance(instance) {
   withRegistryLock(() => {
-    const instances = readInstances();
+    const instances = pruneInstances();
     const filtered = instances.filter((i) => i.sessionId !== instance.sessionId && i.port !== instance.port);
     filtered.push({
       ...instance,
@@ -9123,13 +9370,13 @@ function registerInstance(instance) {
 }
 function deregisterInstance(sessionId) {
   withRegistryLock(() => {
-    const instances = readInstances();
+    const instances = pruneInstances();
     writeInstances(instances.filter((i) => i.sessionId !== sessionId));
   });
 }
 function heartbeatInstance(sessionId) {
   withRegistryLock(() => {
-    const instances = readInstances();
+    const instances = pruneInstances();
     const instance = instances.find((i) => i.sessionId === sessionId);
     if (instance) {
       instance.lastHeartbeat = new Date().toISOString();
@@ -9192,7 +9439,7 @@ async function handleInstancesRequest(_req, corsHeaders) {
 // src/proxy/control/sessions/handler.ts
 import { readdir as readdir2, readFile as readFile3, writeFile as writeFile2, stat as stat3, unlink, rm } from "fs/promises";
 import { join as join9 } from "path";
-import { existsSync as existsSync8 } from "fs";
+import { existsSync as existsSync9 } from "fs";
 
 // src/proxy/control/sessions/path.ts
 import { readdir, readFile, stat } from "fs/promises";
@@ -9407,10 +9654,10 @@ async function parseConversation(filePath) {
 // src/proxy/control/sessions/ai-rename.ts
 import { readFile as readFile2, writeFile, stat as stat2 } from "fs/promises";
 import { join as join8 } from "path";
-import { existsSync as existsSync7 } from "fs";
+import { existsSync as existsSync8 } from "fs";
 async function handleAiRename(req, folder, sessionId, corsHeaders) {
   const jsonlPath = join8(PROJECTS_DIR, folder, `${sessionId}.jsonl`);
-  if (!existsSync7(jsonlPath)) {
+  if (!existsSync8(jsonlPath)) {
     return jsonResponse({ error: "Session not found" }, 404, corsHeaders);
   }
   let bodyProvider;
@@ -9747,11 +9994,11 @@ async function handleGetConversation(folder, sessionId, corsHeaders) {
     modified: indexEntry.modified,
     gitBranch: indexEntry.gitBranch
   } : null;
-  if (existsSync8(filePath)) {
+  if (existsSync9(filePath)) {
     const entries = await parseConversation(filePath);
     return jsonResponse({ sessionId, folder, meta, entries }, 200, corsHeaders);
   }
-  if (existsSync8(sessionDir)) {
+  if (existsSync9(sessionDir)) {
     return jsonResponse({
       sessionId,
       folder,
@@ -9781,7 +10028,7 @@ async function handleGetSessionMeta(folder, sessionId, corsHeaders) {
   }
   const filePath = join9(PROJECTS_DIR, folder, `${sessionId}.jsonl`);
   const sessionDir = join9(PROJECTS_DIR, folder, sessionId);
-  if (existsSync8(filePath)) {
+  if (existsSync9(filePath)) {
     let fileMtime = new Date;
     try {
       fileMtime = (await stat3(filePath)).mtime;
@@ -9801,7 +10048,7 @@ async function handleGetSessionMeta(folder, sessionId, corsHeaders) {
       }, 200, corsHeaders);
     }
   }
-  if (existsSync8(sessionDir)) {
+  if (existsSync9(sessionDir)) {
     let dirMtime = new Date;
     try {
       dirMtime = (await stat3(sessionDir)).mtime;
@@ -9837,8 +10084,8 @@ async function handleRenameSession(req, folder, sessionId, corsHeaders) {
   }
   const jsonlPath = join9(PROJECTS_DIR, folder, `${sessionId}.jsonl`);
   const sessionDir = join9(PROJECTS_DIR, folder, sessionId);
-  const hasJsonl = existsSync8(jsonlPath);
-  const hasDir = existsSync8(sessionDir);
+  const hasJsonl = existsSync9(jsonlPath);
+  const hasDir = existsSync9(sessionDir);
   if (!hasJsonl && !hasDir) {
     return jsonResponse({ error: "Session not found" }, 404, corsHeaders);
   }
@@ -9905,8 +10152,8 @@ async function handleRenameSession(req, folder, sessionId, corsHeaders) {
 async function handleDeleteSession(folder, sessionId, corsHeaders) {
   const jsonlPath = join9(PROJECTS_DIR, folder, `${sessionId}.jsonl`);
   const sessionDir = join9(PROJECTS_DIR, folder, sessionId);
-  const hasJsonl = existsSync8(jsonlPath);
-  const hasDir = existsSync8(sessionDir);
+  const hasJsonl = existsSync9(jsonlPath);
+  const hasDir = existsSync9(sessionDir);
   let hasIndexEntry = false;
   if (!hasJsonl && !hasDir) {
     const index = await readSessionIndex(folder);
@@ -9949,7 +10196,7 @@ async function handleCleanupEmpty(folder, corsHeaders) {
         if (file.filePath)
           await unlink(file.filePath);
         const sessionDir = join9(PROJECTS_DIR, folder, file.sessionId);
-        if (existsSync8(sessionDir)) {
+        if (existsSync9(sessionDir)) {
           await rm(sessionDir, { recursive: true });
         }
         deleted.push(file.sessionId);
@@ -9992,7 +10239,7 @@ async function handleCleanupOld(folder, days, corsHeaders) {
         if (file.filePath)
           await unlink(file.filePath);
         const sessionDir = join9(PROJECTS_DIR, folder, file.sessionId);
-        if (existsSync8(sessionDir)) {
+        if (existsSync9(sessionDir)) {
           await rm(sessionDir, { recursive: true });
         }
         deleted.push(file.sessionId);
@@ -10027,7 +10274,7 @@ async function handleCleanupOld(folder, days, corsHeaders) {
 }
 async function handleDeleteProject(folder, corsHeaders) {
   const dirPath = join9(PROJECTS_DIR, folder);
-  if (!existsSync8(dirPath)) {
+  if (!existsSync9(dirPath)) {
     return jsonResponse({ error: "Project not found" }, 404, corsHeaders);
   }
   try {
@@ -10040,13 +10287,13 @@ async function handleDeleteProject(folder, corsHeaders) {
 // src/proxy/control/memory/handler.ts
 import { readdir as readdir6, readFile as readFile7, writeFile as writeFile5, unlink as unlink3 } from "fs/promises";
 import { join as join15 } from "path";
-import { existsSync as existsSync12 } from "fs";
+import { existsSync as existsSync13 } from "fs";
 
 // src/proxy/control/memory/path.ts
 import { readdir as readdir3 } from "fs/promises";
 import { join as join10 } from "path";
 import { homedir as homedir8 } from "os";
-import { existsSync as existsSync9 } from "fs";
+import { existsSync as existsSync10 } from "fs";
 import { createReadStream as createReadStream3 } from "fs";
 import { createInterface as createInterface3 } from "readline";
 var GLOBAL_MEMORY_DIR = join10(homedir8(), ".claude", "oh-my-claude", "memory");
@@ -10132,7 +10379,7 @@ async function findOmcProjectMemDirs() {
         continue;
       seenRoots.add(cwd);
       const memBaseDir = join10(cwd, ".claude", "mem");
-      if (existsSync9(memBaseDir)) {
+      if (existsSync10(memBaseDir)) {
         const segments = cwd.replace(/\\/g, "/").split("/");
         const projName = segments[segments.length - 1] ?? f.name;
         if (!omcProjectRoots.has(projName)) {
@@ -10140,7 +10387,7 @@ async function findOmcProjectMemDirs() {
         }
         for (const sub of ["notes", "sessions"]) {
           const subDir = join10(memBaseDir, sub);
-          if (existsSync9(subDir)) {
+          if (existsSync10(subDir)) {
             results.push({
               dir: subDir,
               projectName: projName,
@@ -10156,10 +10403,10 @@ async function findOmcProjectMemDirs() {
 function resolveMemoryPath(scope, id) {
   if (scope === "global") {
     const notesPath = join10(GLOBAL_MEMORY_DIR, "notes", `${id}.md`);
-    if (existsSync9(notesPath))
+    if (existsSync10(notesPath))
       return notesPath;
     const sessionsPath = join10(GLOBAL_MEMORY_DIR, "sessions", `${id}.md`);
-    if (existsSync9(sessionsPath))
+    if (existsSync10(sessionsPath))
       return sessionsPath;
     return notesPath;
   }
@@ -10180,7 +10427,7 @@ function resolveMemoryPath(scope, id) {
 // src/proxy/control/memory/io.ts
 import { readdir as readdir4, readFile as readFile4 } from "fs/promises";
 import { join as join11 } from "path";
-import { existsSync as existsSync10 } from "fs";
+import { existsSync as existsSync11 } from "fs";
 function parseFrontmatter(raw) {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (!match)
@@ -10205,7 +10452,7 @@ function parseFrontmatter(raw) {
   return { meta, content: match[2].trim() };
 }
 async function readMemoryFiles(dir, scope) {
-  if (!existsSync10(dir))
+  if (!existsSync11(dir))
     return [];
   const files = await readdir4(dir);
   const entries = [];
@@ -10237,7 +10484,7 @@ async function readMemoryFiles(dir, scope) {
   return entries.sort((a, b) => new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime());
 }
 async function readMemoryFilesWithPaths(dir) {
-  if (!existsSync10(dir))
+  if (!existsSync11(dir))
     return [];
   const files = await readdir4(dir);
   const entries = [];
@@ -10585,13 +10832,13 @@ async function collectMemoryEntries(targetProject, fullContent) {
 // src/proxy/control/memory/timeline.ts
 import { readdir as readdir5, readFile as readFile5, writeFile as writeFile3 } from "fs/promises";
 import { join as join13 } from "path";
-import { existsSync as existsSync11 } from "fs";
+import { existsSync as existsSync12 } from "fs";
 async function regenerateTimeline(memRoot) {
   const entries = [];
   const boilerplate = new Set(["auto-capture", "session-end", "context-threshold"]);
   for (const sub of ["notes", "sessions"]) {
     const dir = join13(memRoot, sub);
-    if (!existsSync11(dir))
+    if (!existsSync12(dir))
       continue;
     const files = await readdir5(dir);
     for (const file of files) {
@@ -11166,10 +11413,10 @@ async function handleListMemories(corsHeaders) {
       if (!proj.isDirectory())
         continue;
       const memDir = join15(PROJECTS_DIR2, proj.name, "memory");
-      if (!existsSync12(memDir))
+      if (!existsSync13(memDir))
         continue;
       const memoryMdPath = join15(memDir, "MEMORY.md");
-      if (existsSync12(memoryMdPath)) {
+      if (existsSync13(memoryMdPath)) {
         try {
           const raw = await readFile7(memoryMdPath, "utf-8");
           const titleMatch = raw.match(/^#\s+(.+)$/m);
@@ -11188,7 +11435,7 @@ async function handleListMemories(corsHeaders) {
         } catch {}
       }
       const notesDir = join15(memDir, "notes");
-      if (existsSync12(notesDir)) {
+      if (existsSync13(notesDir)) {
         const notes = await readMemoryFiles(notesDir, "project");
         for (const note of notes) {
           projectEntries.push({
@@ -11238,7 +11485,7 @@ async function handleListMemories(corsHeaders) {
 }
 async function handleGetMemory(scope, id, corsHeaders) {
   const filePath = resolveMemoryPath(scope, id);
-  if (!filePath || !existsSync12(filePath)) {
+  if (!filePath || !existsSync13(filePath)) {
     return jsonResponse({ error: "Memory not found" }, 404, corsHeaders);
   }
   const raw = await readFile7(filePath, "utf-8");
@@ -11278,7 +11525,7 @@ async function handleUpdateMemory(req, scope, id, corsHeaders) {
 }
 async function handleDeleteMemory(scope, id, corsHeaders) {
   const filePath = resolveMemoryPath(scope, id);
-  if (!filePath || !existsSync12(filePath)) {
+  if (!filePath || !existsSync13(filePath)) {
     return jsonResponse({ error: "Memory not found" }, 404, corsHeaders);
   }
   try {
@@ -11315,13 +11562,13 @@ async function handleMemoryOperation(req, action, corsHeaders) {
 import { readFile as readFile8, writeFile as writeFile6, readdir as readdir7 } from "fs/promises";
 import { join as join16 } from "path";
 import { homedir as homedir9 } from "os";
-import { existsSync as existsSync13 } from "fs";
+import { existsSync as existsSync14 } from "fs";
 import { createReadStream as createReadStream4 } from "fs";
 import { createInterface as createInterface4 } from "readline";
 var GLOBAL_PREFS_FILE = join16(homedir9(), ".claude", "oh-my-claude", "preferences.json");
 var PROJECTS_DIR3 = join16(homedir9(), ".claude", "projects");
 async function readPrefs(filePath = GLOBAL_PREFS_FILE) {
-  if (!existsSync13(filePath))
+  if (!existsSync14(filePath))
     return {};
   try {
     const raw = await readFile8(filePath, "utf-8");
@@ -11396,7 +11643,7 @@ async function findProjectPrefs() {
       if (!cwd)
         continue;
       const prefsFile = join16(cwd, ".claude", "preferences.json");
-      if (existsSync13(prefsFile)) {
+      if (existsSync14(prefsFile)) {
         const segments = cwd.replace(/\\/g, "/").split("/");
         results.push({
           projectName: segments[segments.length - 1] ?? f.name,
@@ -11459,8 +11706,8 @@ async function handlePreferencesRequest(req, path, corsHeaders) {
     let targetFile = GLOBAL_PREFS_FILE;
     if (body.projectPath) {
       const projFile = join16(body.projectPath, ".claude", "preferences.json");
-      const { mkdirSync: mkdirSync5 } = await import("fs");
-      mkdirSync5(join16(body.projectPath, ".claude"), { recursive: true });
+      const { mkdirSync: mkdirSync6 } = await import("fs");
+      mkdirSync6(join16(body.projectPath, ".claude"), { recursive: true });
       targetFile = projFile;
     }
     const prefs = await readPrefs(targetFile);
@@ -11505,7 +11752,7 @@ async function handlePreferencesRequest(req, path, corsHeaders) {
   return jsonResponse({ error: "Not found" }, 404, corsHeaders);
 }
 // src/proxy/control/web-static.ts
-import { existsSync as existsSync14, readFileSync as readFileSync7 } from "fs";
+import { existsSync as existsSync15, readFileSync as readFileSync8 } from "fs";
 import { join as join17, extname } from "path";
 import { homedir as homedir10 } from "os";
 var __dirname = "D:\\Github\\oh-my-claude\\src\\proxy\\control";
@@ -11536,7 +11783,7 @@ function resolveWebDir() {
   if (cachedWebDir !== null)
     return cachedWebDir;
   for (const dir of getWebDirs()) {
-    if (existsSync14(join17(dir, "index.html"))) {
+    if (existsSync15(join17(dir, "index.html"))) {
       cachedWebDir = dir;
       return dir;
     }
@@ -11547,7 +11794,7 @@ var cachedIndexHtml = null;
 function getIndexHtml(webDir) {
   if (cachedIndexHtml !== null)
     return cachedIndexHtml;
-  cachedIndexHtml = readFileSync7(join17(webDir, "index.html"));
+  cachedIndexHtml = readFileSync8(join17(webDir, "index.html"));
   return cachedIndexHtml;
 }
 function serveWebAsset(assetPath) {
@@ -11568,10 +11815,10 @@ function serveWebAsset(assetPath) {
       }
     });
   }
-  if (existsSync14(filePath)) {
+  if (existsSync15(filePath)) {
     const ext = extname(filePath);
     const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
-    return new Response(readFileSync7(filePath), {
+    return new Response(readFileSync8(filePath), {
       headers: {
         "content-type": contentType,
         "cache-control": ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable"

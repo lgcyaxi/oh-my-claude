@@ -206,6 +206,93 @@ function inferCategory(
 	return bestScore >= 2 ? bestCategory : undefined;
 }
 
+// ---- Memory ID validation (HIGH-11 beta.8) ----
+
+/**
+ * Raised when a caller passes a memory id that could escape the memory
+ * directory (e.g. "../etc/passwd", "foo/bar", "con.md" on Windows) or
+ * contain characters we'd rather not see on disk.
+ *
+ * We fail closed: untrusted AI tool input flows into id-based fs paths
+ * via `getMemory` / `updateMemory` / `deleteMemory`, and there's no
+ * legitimate reason to accept path separators, null bytes, or leading
+ * dots in an id.
+ */
+export class MemoryIdInvalidError extends Error {
+	readonly id: string;
+	constructor(id: string, reason: string) {
+		super(`Invalid memory id "${id}": ${reason}`);
+		this.name = 'MemoryIdInvalidError';
+		this.id = id;
+	}
+}
+
+/** Upper bound on id length — arbitrary but comfortably longer than our
+ *  generator ever produces (`generateMemoryId` outputs date-title slugs). */
+const MEMORY_ID_MAX_LENGTH = 200;
+
+/**
+ * Canonical memory id shape.
+ *
+ * Accepts: letters, digits, underscore, dash, dot (for fraction-like
+ * suffixes), colon (used by legacy chunk ids), plus the `/` forward slash
+ * for rare nested suggestions — **but only if flanked by safe chars** —
+ * explicitly rejected by the checks below. We keep the pattern strict and
+ * tell users to rename if they hit the edge.
+ */
+const MEMORY_ID_PATTERN = /^[A-Za-z0-9_\-.:]+$/;
+
+/**
+ * Validate a memory id before using it in a filesystem path. Throws
+ * {@link MemoryIdInvalidError} on any violation. Returns the id unchanged
+ * so it can be used inline: `const safe = validateMemoryId(id);`.
+ *
+ * The rules intentionally overlap so we reject pathological input at the
+ * earliest check:
+ *  - Type check
+ *  - Non-empty + length cap
+ *  - No null bytes (guards against truncation-based bypasses)
+ *  - No path separators or current/parent dir references
+ *  - Whitelist regex (letters/digits/_-.: only)
+ *  - No leading dot (reserved / dotfiles)
+ */
+export function validateMemoryId(id: unknown): string {
+	if (typeof id !== 'string') {
+		throw new MemoryIdInvalidError(String(id), 'must be a string');
+	}
+	if (id.length === 0) {
+		throw new MemoryIdInvalidError(id, 'must be non-empty');
+	}
+	if (id.length > MEMORY_ID_MAX_LENGTH) {
+		throw new MemoryIdInvalidError(
+			id,
+			`exceeds maximum length of ${MEMORY_ID_MAX_LENGTH}`,
+		);
+	}
+	if (id.includes('\0')) {
+		throw new MemoryIdInvalidError(id, 'must not contain null bytes');
+	}
+	if (id.includes('/') || id.includes('\\')) {
+		throw new MemoryIdInvalidError(id, 'must not contain path separators');
+	}
+	if (id === '.' || id === '..' || id.startsWith('..')) {
+		throw new MemoryIdInvalidError(
+			id,
+			'must not reference parent/current directory',
+		);
+	}
+	if (id.startsWith('.')) {
+		throw new MemoryIdInvalidError(id, 'must not start with a dot');
+	}
+	if (!MEMORY_ID_PATTERN.test(id)) {
+		throw new MemoryIdInvalidError(
+			id,
+			'must match /^[A-Za-z0-9_\\-.:]+$/',
+		);
+	}
+	return id;
+}
+
 // ---- Project detection helpers ----
 
 /**
@@ -455,7 +542,10 @@ export function createMemory(
 		// Use provided createdAt for date prefix (compact preserves original dates)
 		const createdAt = input.createdAt ?? now;
 		const idDate = input.createdAt ? new Date(input.createdAt) : undefined;
-		const id = generateMemoryId(title, idDate);
+		// generateMemoryId should produce safe ids, but validate defensively —
+		// a future refactor that slips in user content would otherwise escape
+		// the memory directory on disk.
+		const id = validateMemoryId(generateMemoryId(title, idDate));
 
 		const category =
 			input.category ??
@@ -513,14 +603,18 @@ export function getMemory(
 	projectRoot?: string,
 ): MemoryResult<MemoryEntry> {
 	try {
+		const safeId = validateMemoryId(id);
 		const dirs = getMemoryDirForScope(scope, projectRoot);
 
 		for (const baseDir of dirs) {
 			for (const type of ['session', 'note'] as MemoryType[]) {
-				const filePath = join(getTypeDir(baseDir, type), `${id}.md`);
+				const filePath = join(
+					getTypeDir(baseDir, type),
+					`${safeId}.md`,
+				);
 				if (existsSync(filePath)) {
 					const raw = readFileSync(filePath, 'utf-8');
-					const entry = parseMemoryFile(id, raw);
+					const entry = parseMemoryFile(safeId, raw);
 					if (entry) {
 						// Add scope metadata
 						const projectDir = getProjectMemoryDir(projectRoot);
@@ -532,8 +626,11 @@ export function getMemory(
 				}
 			}
 		}
-		return { success: false, error: `Memory "${id}" not found` };
+		return { success: false, error: `Memory "${safeId}" not found` };
 	} catch (error) {
+		if (error instanceof MemoryIdInvalidError) {
+			return { success: false, error: error.message };
+		}
 		return { success: false, error: `Failed to read memory: ${error}` };
 	}
 }
@@ -547,11 +644,12 @@ export function updateMemory(
 	projectRoot?: string,
 ): MemoryResult<MemoryEntry> {
 	try {
-		const existing = getMemory(id, 'all', projectRoot);
+		const safeId = validateMemoryId(id);
+		const existing = getMemory(safeId, 'all', projectRoot);
 		if (!existing.success || !existing.data) {
 			return {
 				success: false,
-				error: existing.error ?? `Memory "${id}" not found`,
+				error: existing.error ?? `Memory "${safeId}" not found`,
 			};
 		}
 
@@ -575,6 +673,9 @@ export function updateMemory(
 
 		return { success: true, data: entry };
 	} catch (error) {
+		if (error instanceof MemoryIdInvalidError) {
+			return { success: false, error: error.message };
+		}
 		return { success: false, error: `Failed to update memory: ${error}` };
 	}
 }
@@ -591,19 +692,26 @@ export function deleteMemory(
 	projectRoot?: string,
 ): MemoryResult {
 	try {
+		const safeId = validateMemoryId(id);
 		const dirs = getMemoryDirForScope(scope, projectRoot);
 
 		for (const baseDir of dirs) {
 			for (const type of ['session', 'note'] as MemoryType[]) {
-				const filePath = join(getTypeDir(baseDir, type), `${id}.md`);
+				const filePath = join(
+					getTypeDir(baseDir, type),
+					`${safeId}.md`,
+				);
 				if (existsSync(filePath)) {
 					unlinkSync(filePath);
 					return { success: true };
 				}
 			}
 		}
-		return { success: false, error: `Memory "${id}" not found` };
+		return { success: false, error: `Memory "${safeId}" not found` };
 	} catch (error) {
+		if (error instanceof MemoryIdInvalidError) {
+			return { success: false, error: error.message };
+		}
 		return { success: false, error: `Failed to delete memory: ${error}` };
 	}
 }

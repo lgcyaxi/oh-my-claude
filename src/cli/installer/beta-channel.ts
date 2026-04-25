@@ -9,6 +9,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import { getInstallDir } from './index';
+import { DIST_MARKER_REL } from '../utils/paths';
 import { toErrorMessage } from '../../shared/utils';
 
 /**
@@ -147,9 +148,9 @@ export async function installFromGitHub(
 		}).trim();
 		const globalPkgDir = join(globalRoot, '@lgcyaxi', 'oh-my-claude');
 
-		if (!existsSync(join(globalPkgDir, 'dist', 'cli', 'cli.js'))) {
+		if (!existsSync(join(globalPkgDir, DIST_MARKER_REL))) {
 			console.log(
-				'Building from source (dist/cli/cli.js not found; prepare script was likely skipped)...',
+				`Building from source (${DIST_MARKER_REL} not found; prepare script was likely skipped)...`,
 			);
 			execSync('bun run build:all', {
 				cwd: globalPkgDir,

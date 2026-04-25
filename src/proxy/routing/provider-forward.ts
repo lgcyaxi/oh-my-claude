@@ -6,7 +6,7 @@
  * cleaning up provider-specific incompatible headers.
  */
 
-import { forwardToUpstream } from '../response/stream';
+import { forwardToUpstream, buildUpstreamSignal } from '../response/stream';
 
 /**
  * Forward a request to either an OpenAI-format or Anthropic-format upstream.
@@ -67,10 +67,12 @@ export async function forwardToProvider(
 		}
 	}
 
+	// MED-3: forward the client's AbortSignal alongside the 5-min timeout
+	// so a Ctrl+C from Claude Code cancels the upstream fetch too.
 	return fetch(targetUrl, {
 		method: 'POST',
 		headers,
 		body: JSON.stringify(body),
-		signal: AbortSignal.timeout(5 * 60 * 1000), // 5 min timeout
+		signal: buildUpstreamSignal(req.signal, 5 * 60 * 1000),
 	});
 }
