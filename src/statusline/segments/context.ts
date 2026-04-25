@@ -16,16 +16,28 @@ import type {
 	StyleConfig,
 } from './types';
 import { wrapBrackets, applyColor } from './index';
+import { readSwitchState } from '../../proxy/state/switch';
+import type { ProxySwitchState } from '../../proxy/state/types';
+import { DEFAULT_PROXY_CONFIG } from '../../proxy/state/types';
 
 // Context window sizes for different models (in tokens).
 // Matching is substring-based (modelId.toLowerCase().includes(pattern)),
 // so more specific patterns must come before broader ones.
 const CONTEXT_WINDOWS: Record<string, number> = {
-	// Claude 4.6
-	'claude-opus-4-6': 200_000,
+	// Claude 4.7 — new default, Opus carries a 1M window at standard pricing
+	// (https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7).
+	// Sonnet / Haiku 4.7 remain at 200K.
+	'claude-opus-4-7': 1_000_000,
+	'claude-sonnet-4-7': 200_000,
+	'claude-haiku-4-7': 200_000,
+	// Claude 4.6 — Opus 4.6 also ships with a 1M context window
+	// (https://www.anthropic.com/news/claude-opus-4-6). Earlier entries were
+	// wrong at 200K; fixed here.
+	'claude-opus-4-6': 1_000_000,
 	'claude-sonnet-4-6': 200_000,
 	'claude-haiku-4-6': 200_000,
-	// Claude 4.5
+	// Claude 4.5 (Sonnet 4.5 can negotiate 1M via beta flag, but the
+	// unflagged default is still 200K — keep conservative.)
 	'claude-opus-4-5': 200_000,
 	'claude-sonnet-4-5': 200_000,
 	'claude-haiku-4-5': 200_000,
@@ -33,11 +45,25 @@ const CONTEXT_WINDOWS: Record<string, number> = {
 	'claude-3-opus': 200_000,
 	'claude-3-sonnet': 200_000,
 	'claude-3-haiku': 200_000,
-	// DeepSeek (deepseek-v4-pro — unified thinking model)
-	deepseek: 128_000,
-	// ZhiPu GLM (glm-5.1 before glm-5 before glm-4 — specificity)
+	// DeepSeek V4 (上下文长度 1M per official pricing docs —
+	// https://api-docs.deepseek.com/zh-cn/quick_start/pricing).
+	// Legacy `deepseek-chat` / `deepseek-reasoner` names are hard-removed.
+	'deepseek-v4-pro': 1_000_000,
+	'deepseek-v4-flash': 1_000_000,
+	deepseek: 1_000_000,
+	// ZhiPu GLM — official numbers sourced per row, most-specific first so
+	// substring matching picks the right window.
+	// - GLM-5.1   : 200K (docs.bigmodel.cn/cn/guide/models/text/glm-5.1)
+	// - GLM-5-Turbo: 128K (bigmodel 模型矩阵 / aipuzi 对比表)
+	// - GLM-5     : 200K (glm-5.org overview)
+	// - GLM-4.6   : 200K (docs.z.ai/guides/llm/glm-4.6)
+	// - GLM-4.5 / 4.5-Air: 128K (docs.z.ai/guides/llm/glm-4.5)
 	'glm-5.1': 200_000,
+	'glm-5-turbo': 128_000,
 	'glm-5': 200_000,
+	'glm-4.6': 200_000,
+	'glm-4.5-air': 128_000,
+	'glm-4.5': 128_000,
 	'glm-4': 128_000,
 	// MiniMax
 	minimax: 204_800,
@@ -77,9 +103,22 @@ interface TranscriptEntry {
 	type?: string;
 	message?: {
 		usage?: RawUsage;
+		model?: string;
 	};
 	uuid?: string;
 	summary?: string;
+}
+
+/** Bundle of data pulled off the latest assistant entry in the transcript. */
+interface TranscriptTail {
+	usage: RawUsage;
+	/**
+	 * Upstream model string the provider echoed back (e.g. `qwen3.6-plus`,
+	 * `glm-4.6`, `deepseek-v4-pro`, `claude-opus-4-7-20260416`). This is the
+	 * most authoritative signal — it reflects what the response was actually
+	 * billed against, regardless of what Claude Code sent in stdin.
+	 */
+	model?: string;
 }
 
 /**
@@ -108,9 +147,18 @@ function normalizeUsage(raw: RawUsage): {
 }
 
 /**
- * Parse transcript JSONL to get latest token usage
+ * Parse the Claude Code transcript JSONL and return the latest assistant
+ * message's `{ usage, model }` tuple.
+ *
+ * Claude Code records one line per event. The assistant entries mirror the
+ * raw API response, so `message.model` holds the exact model string the
+ * upstream provider billed the response against — e.g. `qwen3.6-plus` when
+ * the oh-my-claude proxy has rewritten the request, or `claude-opus-4-7-…`
+ * for native Claude. That makes it a strictly better signal than either
+ * Claude Code's stdin `model.id` (the client-side view) or our proxy
+ * switch-state file (requires an HTTP round-trip and can race first-turn).
  */
-function parseTranscript(transcriptPath: string): RawUsage | null {
+function parseTranscriptTail(transcriptPath: string): TranscriptTail | null {
 	try {
 		if (!existsSync(transcriptPath)) {
 			return null;
@@ -134,7 +182,10 @@ function parseTranscript(transcriptPath: string): RawUsage | null {
 
 				// Look for assistant messages with usage
 				if (entry.type === 'assistant' && entry.message?.usage) {
-					return entry.message.usage;
+					return {
+						usage: entry.message.usage,
+						model: entry.message.model,
+					};
 				}
 			} catch {
 				// Skip invalid JSON lines
@@ -148,9 +199,16 @@ function parseTranscript(transcriptPath: string): RawUsage | null {
 }
 
 /**
- * Parse explicit context window suffix from model ID.
- * Claude Code appends [1m], [200k], etc. to signal the actual context window.
- * Returns the parsed size in tokens, or null if no suffix found.
+ * Parse an explicit context-window suffix from the model ID
+ * (e.g. `claude-opus-4-6[1m]`, `deepseek-v4-pro[1m]`, `glm-5.1[200k]`).
+ *
+ * Claude Code honours this suffix when set via `ANTHROPIC_MODEL=<model>[<size>]`.
+ * oh-my-claude does not inject it — tier mapping runs proxy-side through
+ * `claudeTierMap` in `models-registry.json`, so the effective model is
+ * discovered via `resolveEffectiveModelId()` above. This parser is kept as a
+ * passthrough for users who configure `ANTHROPIC_MODEL` manually.
+ *
+ * Returns the parsed size in tokens, or null if no suffix is present.
  */
 function parseContextSuffix(modelId: string): number | null {
 	const match = modelId.match(/\[(\d+(?:\.\d+)?)(k|m)\]/i);
@@ -193,6 +251,79 @@ function formatTokens(count: number): string {
 	return String(count);
 }
 
+// ── Proxy switch-state helpers ─────────────────────────────────────────────
+// Mirrors the identical helpers in `./model.ts` and `./proxy.ts`. Kept
+// inlined for tight focus; dedup opportunity is tracked separately.
+
+/** Control port from env override or default. */
+function getControlPort(): number {
+	const envPort = process.env.OMC_PROXY_CONTROL_PORT;
+	if (envPort) {
+		const parsed = parseInt(envPort, 10);
+		if (!isNaN(parsed)) return parsed;
+	}
+	return DEFAULT_PROXY_CONFIG.controlPort;
+}
+
+/** Extract session ID from ANTHROPIC_BASE_URL path `/s/{id}`. */
+function extractSessionId(): string | undefined {
+	const baseUrl = process.env.ANTHROPIC_BASE_URL;
+	if (!baseUrl) return undefined;
+	try {
+		const url = new URL(baseUrl);
+		const match = url.pathname.match(/^\/s\/([a-zA-Z0-9_-]+)\/?$/);
+		return match ? match[1] : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Query the proxy control API for session-scoped switch state. */
+async function fetchStatusFromControlApi(
+	sessionId: string,
+): Promise<ProxySwitchState | null> {
+	try {
+		const controlPort = getControlPort();
+		const url = `http://localhost:${controlPort}/status?session=${sessionId}`;
+		const resp = await fetch(url, { signal: AbortSignal.timeout(500) });
+		if (!resp.ok) return null;
+		return (await resp.json()) as ProxySwitchState;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Warm-start fallback: when the transcript is still empty (first turn) but a
+ * proxy session is active, consult the control API / switch-state file for
+ * the model the proxy has been told to route to.
+ *
+ * This is only used when the transcript can't answer yet — once the first
+ * assistant response lands, `message.model` from the transcript takes over
+ * and we stop round-tripping the proxy.
+ */
+async function resolveSwitchedModelId(): Promise<string | null> {
+	try {
+		const sessionId = extractSessionId();
+		const hasProxySession = !!(
+			sessionId || process.env.OMC_PROXY_CONTROL_PORT
+		);
+		let switchState: ProxySwitchState | null = null;
+		if (sessionId) {
+			switchState = await fetchStatusFromControlApi(sessionId);
+		}
+		if (!switchState && hasProxySession) {
+			switchState = readSwitchState();
+		}
+		if (switchState?.switched && switchState.model) {
+			return switchState.model;
+		}
+	} catch {
+		// Proxy state unavailable — caller falls back to stdin.
+	}
+	return null;
+}
+
 /**
  * Collect context/token information
  */
@@ -210,10 +341,12 @@ async function collectContextData(
 		};
 	}
 
-	// Parse transcript for usage data
-	const rawUsage = parseTranscript(claudeCodeInput.transcript_path);
+	// Pull latest { usage, model } off the transcript. The transcript is
+	// the source of truth — Claude Code records the raw assistant response,
+	// so `message.model` is exactly what the upstream provider billed.
+	const tail = parseTranscriptTail(claudeCodeInput.transcript_path);
 
-	if (!rawUsage) {
+	if (!tail) {
 		return {
 			primary: '?',
 			metadata: {},
@@ -222,7 +355,7 @@ async function collectContextData(
 	}
 
 	// Normalize usage from different provider formats
-	const usage = normalizeUsage(rawUsage);
+	const usage = normalizeUsage(tail.usage);
 
 	if (usage.total === 0) {
 		return {
@@ -232,8 +365,27 @@ async function collectContextData(
 		};
 	}
 
-	// Get context window limit
-	const modelId = claudeCodeInput.model?.id ?? 'default';
+	// Resolve the effective model in order of authority:
+	//   1. transcript `message.model` — exact upstream billing identity
+	//   2. stdin `model.id`          — Claude Code's native view
+	//   3. proxy switch-state        — warm start when transcript is empty
+	//      (only reachable above when usage.total === 0)
+	//   4. `default`                 — 200K safe fallback
+	const claudeModelId = claudeCodeInput.model?.id;
+	const transcriptModelId = tail.model;
+	const switchedModelId = transcriptModelId
+		? null
+		: await resolveSwitchedModelId();
+	const modelId =
+		transcriptModelId ?? switchedModelId ?? claudeModelId ?? 'default';
+	const modelSource: 'transcript' | 'switch-state' | 'stdin' | 'default' =
+		transcriptModelId
+			? 'transcript'
+			: switchedModelId
+				? 'switch-state'
+				: claudeModelId
+					? 'stdin'
+					: 'default';
 	const contextLimit = getContextLimit(modelId);
 
 	// Calculate usage percentage
@@ -259,6 +411,9 @@ async function collectContextData(
 			totalTokens: String(usage.total),
 			contextLimit: String(contextLimit),
 			percentage: String(percentage),
+			modelId,
+			modelSource,
+			claudeModelId: claudeModelId ?? '',
 		},
 		color,
 	};

@@ -4,12 +4,14 @@ All notable changes to oh-my-claude are documented here. Detailed changelogs are
 
 ## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-25
 
-### Latest: v2.2.14-beta.1
+### Latest: v2.2.14-beta.2
 
 - **DeepSeek V4 + GLM Claude-tier mapping** — proxy-side `claudeTierMap` rewrites Claude-tier requests: DeepSeek `opus → deepseek-v4-pro (effort=max)` / `sonnet → deepseek-v4-pro (effort=high)` / `haiku → deepseek-v4-flash (fast path)`; ZhiPu + Z.AI `opus → glm-5.1` / `sonnet → glm-5-turbo` / `haiku → glm-4.5-air`
 - **DeepSeek V4 Flash + GLM-4.5 Air** — new haiku-tier models added to the DeepSeek and ZhiPu/Z.AI rosters
 - **Legacy DeepSeek names removed** — `deepseek-chat` / `deepseek-reasoner` hard-removed from aliases, statusline, `omc cc` picker, and `/omc-switch` ahead of the 2026-07-24 upstream sunset
 - **`omc cc` Windows PowerShell fix** — inline and remote-control launches now use `cmd.exe` on native Windows so `claude.cmd`/`claude.exe` resolve via `PATHEXT` instead of failing under `/bin/bash`
+- **Statusline context bar respects the switched provider model** — `context` segment now queries the proxy switch state and sizes the context window against the effective upstream model (fixes ~5x over-report on DeepSeek V4 / Qwen 3.6 1M sessions); DeepSeek V4 window corrected from 128K to 1M per official pricing docs
+- **Context segment sources model from the transcript** — `parseTranscriptTail()` reads the assistant entry's `message.model` (the exact upstream billing identity, verified directly off a real `.jsonl`), so switched sessions no longer rely on a proxy control-API round-trip and native Claude picks up the dated `claude-opus-4-7-…` slug. Fixed Claude Opus 4.6 / 4.7 context windows to 1M (both ship with 1M at standard pricing), corrected `glm-5-turbo` to 128K, and added explicit `glm-4.6` (200K) / `glm-4.5` (128K) rows against the authoritative vendor docs
 
 ### Previous: v2.2.13
 
