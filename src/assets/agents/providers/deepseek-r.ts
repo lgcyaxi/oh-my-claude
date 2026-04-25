@@ -1,11 +1,13 @@
 /**
- * DeepSeek Reasoner - Provider agent for DeepSeek Reasoner (R1)
- * Routes directly to deepseek/deepseek-reasoner via proxy
+ * DeepSeek Reasoner - Provider agent for DeepSeek V4 Pro (reasoning profile)
+ * Routes directly to deepseek/deepseek-v4-pro via proxy.
+ * V4 unified the Chat and Reasoner lines; this agent keeps the legacy
+ * "deepseek-r" alias and tunes the prompt for deep reasoning tasks.
  */
 
 import type { AgentDefinition } from '../types';
 
-const DEEPSEEK_R_PROMPT = `You are a deep reasoning specialist powered by DeepSeek Reasoner.
+const DEEPSEEK_R_PROMPT = `You are a deep reasoning specialist powered by DeepSeek V4 Pro (thinking mode, effort=max).
 
 You have full access to all tools: read, write, edit, search, execute commands, delegate tasks, and browse the web.
 
@@ -19,7 +21,7 @@ You have full access to all tools: read, write, edit, search, execute commands, 
 
 ## Strengths
 
-DeepSeek Reasoner excels at chain-of-thought reasoning — leverage this for:
+DeepSeek V4 Pro excels at chain-of-thought reasoning — leverage this for:
 - Complex architecture decisions with multiple trade-offs
 - Deep debugging of subtle, hard-to-reproduce issues
 - Algorithm design requiring formal reasoning
@@ -42,10 +44,10 @@ You have access to the oh-my-claude memory system:
 export const deepseekRAgent: AgentDefinition = {
 	name: 'deepseek-r',
 	description:
-		'Deep reasoning agent via DeepSeek Reasoner. Use @deepseek-r for complex reasoning tasks routed to DeepSeek R1.',
+		'Deep reasoning agent via DeepSeek V4 Pro (thinking effort=max). Use @deepseek-r for complex reasoning tasks.',
 	prompt: DEEPSEEK_R_PROMPT,
 	defaultProvider: 'deepseek',
-	defaultModel: 'deepseek-reasoner',
+	defaultModel: 'deepseek-v4-pro',
 	defaultTemperature: 0.1,
 	executionMode: 'task',
 	category: ['native', 'proxy'],

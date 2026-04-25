@@ -64,12 +64,27 @@ export function resolveProxySwitchAlias(providerOption?: string): string {
 	return alias.length > 0 ? alias : 'revert';
 }
 
+/**
+ * Resolve the shell for `spawnSync('claude', ...)`.
+ *
+ * On native Windows (not MSYS / Git Bash), returns `true` so Node spawns via
+ * cmd.exe and resolves `claude.cmd` via PATHEXT. Otherwise honours $SHELL
+ * with a 'bash' fallback. Ignores $SHELL on native Windows because bash.exe's
+ * PATH lookup cannot find Windows .cmd shims, causing
+ * `/bin/bash: line 1: claude: command not found`.
+ */
+export function resolveCCShell(): boolean | string {
+	const isWindows = process.platform === 'win32';
+	const isMsys = !!process.env.MSYSTEM;
+	if (isWindows && !isMsys) return true;
+	return process.env.SHELL || 'bash';
+}
+
 export function runNativeCC(claudeArgs: string[]): never {
-	const shell = process.env.SHELL || (process.env.MSYSTEM ? 'bash' : true);
 	const result = spawnSync('claude', claudeArgs, {
 		stdio: 'inherit',
 		env: process.env,
-		shell,
+		shell: resolveCCShell(),
 	});
 	process.exit(result.status ?? 0);
 }

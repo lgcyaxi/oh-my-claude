@@ -11,7 +11,7 @@ export interface ProxySwitchState {
 	switched: boolean;
 	/** Provider name (e.g., "deepseek", "zhipu", "minimax") */
 	provider?: string;
-	/** Model name (e.g., "deepseek-reasoner", "GLM-5") */
+	/** Model name (e.g., "deepseek-v4-pro", "GLM-5") */
 	model?: string;
 	/** Timestamp when the switch was activated */
 	switchedAt?: number;

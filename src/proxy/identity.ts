@@ -17,7 +17,7 @@
  * Only touches known identity patterns — everything else passes through.
  *
  * @param body - Parsed request body (mutated in-place)
- * @param model - Target model name (e.g., "deepseek-chat")
+ * @param model - Target model name (e.g., "deepseek-v4-pro")
  */
 export function rewriteSystemIdentity(
 	body: Record<string, unknown>,

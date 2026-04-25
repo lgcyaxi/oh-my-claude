@@ -26,6 +26,7 @@ import {
 	splitCCIntoProxyPane,
 	spawnProxyInNativeTerminal,
 } from './cc-terminals';
+import { resolveCCShell } from './cc-routing';
 
 /**
  * Create and attach a tmux session using detach-then-attach pattern.
@@ -374,7 +375,7 @@ export async function launchInlineSession(options: {
 			dimText('  Use /omc-switch in-session to change provider\n'),
 		);
 
-		const shell = process.env.SHELL || 'bash';
+		const shell = resolveCCShell();
 		const result = spawnSync('claude', ['remote-control'], {
 			stdio: 'inherit',
 			env: {
@@ -531,7 +532,7 @@ export async function launchInlineSession(options: {
 		}
 	}
 
-	const shell = process.env.SHELL || 'bash';
+	const shell = resolveCCShell();
 
 	if (debug) {
 		const { dimText: dim } = createFormatters();

@@ -185,7 +185,7 @@ function resolveMemoryProvider(
 		zhipu: 'glm-5.1',
 		minimax: 'MiniMax-M2.7',
 			'minimax-cn': 'MiniMax-M2.7',
-		deepseek: 'deepseek-chat',
+		deepseek: 'deepseek-v4-pro',
 		kimi: 'kimi-for-coding',
 		aliyun: 'qwen3.6-plus',
 	};

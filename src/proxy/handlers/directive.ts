@@ -77,14 +77,19 @@ export async function handleDirectiveRoute(
 		} else {
 			const body = parsedBody;
 			body.model = model;
-			sanitizeRequestBody(body, provider);
+			// Directive names the model explicitly — derive DeepSeek effort from
+			// the target model: Pro takes the thinking path (effort=max), Flash
+			// takes the fast path (no effort, thinking stripped).
+			const directiveEffort = resolveDirectiveEffort(provider, model);
+			sanitizeRequestBody(body, provider, { effort: directiveEffort });
 			forwardBody = body;
 
 			const url = new URL(req.url);
 			targetUrl = `${baseUrl}/v1/messages${url.search}`;
 
+			const effortNote = directiveEffort ? ` effort=${directiveEffort}` : '';
 			console.error(
-				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, model)} (directive) /v1/messages`,
+				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, model)} (directive${effortNote}) /v1/messages`,
 			);
 		}
 
@@ -142,4 +147,22 @@ export async function handleDirectiveRoute(
 		);
 		return await handlePassthrough(req, reqId, bodyText, sessionTag);
 	}
+}
+
+/**
+ * Decide DeepSeek thinking effort when the route directive names an explicit
+ * model. No tier lookup needed — the model fully determines the code path.
+ *
+ *   - `deepseek-v4-pro`   → effort=max (thinking path)
+ *   - `deepseek-v4-flash` → undefined  (fast path, sanitizer strips thinking)
+ *
+ * Other providers ignore the returned value.
+ */
+function resolveDirectiveEffort(
+	provider: string,
+	model: string,
+): 'low' | 'medium' | 'high' | 'max' | undefined {
+	if (provider !== 'deepseek') return undefined;
+	if (model === 'deepseek-v4-pro') return 'max';
+	return undefined;
 }

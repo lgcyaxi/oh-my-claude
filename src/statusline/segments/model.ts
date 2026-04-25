@@ -93,14 +93,17 @@ const MODEL_DISPLAY: Record<string, string> = {
 
 /** Full model names for external providers (used when switched) */
 const EXTERNAL_MODEL_DISPLAY: Record<string, string> = {
-	// DeepSeek
-	'deepseek-reasoner': 'DeepSeek R',
-	'deepseek-chat': 'DeepSeek Chat',
+	// DeepSeek V4 — legacy `deepseek-chat` / `deepseek-reasoner` names are
+	// hard-removed; the proxy rewrites all requests to the V4 pair.
+	'deepseek-v4-pro': 'DeepSeek V4 Pro',
+	'deepseek-v4-flash': 'DeepSeek V4 Flash',
 	// ZhiPu / Z.AI
 	'glm-5.1': 'GLM-5.1',
+	'glm-5-turbo': 'GLM-5 Turbo',
 	'glm-5': 'GLM-5',
 	'GLM-5': 'GLM-5',
 	'glm-4.7': 'GLM-4.7',
+	'glm-4.5-air': 'GLM-4.5 Air',
 	// MiniMax
 	'minimax-m2.7': 'MiniMax-M2.7',
 	'MiniMax-M2.7': 'MiniMax-M2.7',

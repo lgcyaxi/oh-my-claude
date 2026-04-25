@@ -106,7 +106,7 @@ natively with full tool access. Always `switch_revert` when done.
 |-------|---------------|---------|
 | **Hephaestus** | kimi/K2.5 | Intensive code generation |
 | **Oracle** | aliyun/qwen3.6-plus | Architecture, deep reasoning |
-| **Oracle** | deepseek/deepseek-chat | Fast pattern review and reasoning |
+| **Oracle** | deepseek/deepseek-v4-pro | Fast pattern review and reasoning (V4 thinking, effort=max) |
 | **Research Route** | zhipu/glm-5.1 | External docs and library research via proxy |
 | **Frontend-UI-UX** | kimi/K2.5 | All frontend/UI work |
 | **Docs Route (Long-form)** | minimax/MiniMax-M2.7 | Documentation, README via proxy |

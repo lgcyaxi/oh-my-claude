@@ -141,14 +141,16 @@ const MODEL_ABBREV: Record<string, string> = {
 	'claude-sonnet-4.5': 'S',
 	'claude-opus-4.5': 'O',
 	'claude-haiku-4.5': 'H',
-	// DeepSeek models
-	'deepseek-reasoner': 'R',
-	'deepseek-chat': 'C',
+	// DeepSeek V4 — legacy `deepseek-chat` / `deepseek-reasoner` hard-removed.
+	'deepseek-v4-pro': 'DS4',
+	'deepseek-v4-flash': 'DS4F',
 	// ZhiPu / Z.AI models
 	'glm-5.1': 'G51',
+	'glm-5-turbo': 'G5T',
 	'glm-5': 'G5',
 	'GLM-5': 'G5',
 	'glm-4.7': 'G47',
+	'glm-4.5-air': 'G45A',
 	// MiniMax models
 	'minimax-m2.1': 'M2',
 	'MiniMax-M2.7': 'M27',

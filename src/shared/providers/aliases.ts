@@ -23,7 +23,7 @@ export interface AliasTarget {
 const PROVIDER_INFO_ENTRIES: Record<string, ProviderInfo> = {
 	deepseek: {
 		provider: 'deepseek',
-		defaultModel: 'deepseek-chat',
+		defaultModel: 'deepseek-v4-pro',
 		name: 'DeepSeek',
 		baseUrl: 'https://api.deepseek.com/anthropic',
 		apiKeyEnv: 'DEEPSEEK_API_KEY',
@@ -88,11 +88,18 @@ const PROVIDER_INFO_ENTRIES: Record<string, ProviderInfo> = {
 
 /** All recognized aliases → { provider, model }. Includes short forms and full names. */
 const ALIAS_MAP: Record<string, AliasTarget> = {
-	// DeepSeek
-	ds: { provider: 'deepseek', model: 'deepseek-chat' },
-	deepseek: { provider: 'deepseek', model: 'deepseek-chat' },
-	'ds-r': { provider: 'deepseek', model: 'deepseek-reasoner' },
-	'deepseek-reasoner': { provider: 'deepseek', model: 'deepseek-reasoner' },
+	// DeepSeek V4 — legacy `deepseek-chat` / `deepseek-reasoner` names hard-removed
+	// (DeepSeek sunsets them on 2026-07-24; both mapped to deepseek-v4-flash anyway).
+	// Pro tier (opus/sonnet): thinking enabled, effort set via resolver/sanitizer.
+	ds: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+	dr: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+	'ds-r': { provider: 'deepseek', model: 'deepseek-v4-pro' },
+	deepseek: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+	'deepseek-v4': { provider: 'deepseek', model: 'deepseek-v4-pro' },
+	'deepseek-v4-pro': { provider: 'deepseek', model: 'deepseek-v4-pro' },
+	// Flash tier (haiku): lite non-thinking variant.
+	'ds-f': { provider: 'deepseek', model: 'deepseek-v4-flash' },
+	'deepseek-v4-flash': { provider: 'deepseek', model: 'deepseek-v4-flash' },
 	// ZhiPu
 	zp: { provider: 'zhipu', model: 'glm-5.1' },
 	zhipu: { provider: 'zhipu', model: 'glm-5.1' },

@@ -14,6 +14,30 @@ import modelsRegistry from '../../shared/config/models-registry.json';
 /** Build a set of valid model IDs per provider from the registry (cached) */
 export const providerModelSets = new Map<string, Set<string>>();
 
+/** Canonical Claude capability tiers. */
+export type ClaudeTier = 'opus' | 'sonnet' | 'haiku';
+
+/** Effective route decided by tier mapping + user overrides. */
+export interface EffectiveRoute {
+	model: string;
+	effort?: 'low' | 'medium' | 'high' | 'max';
+}
+
+interface ClaudeTierEntry {
+	model: string;
+	effort?: 'low' | 'medium' | 'high' | 'max';
+}
+
+/**
+ * Registry-driven Claude tier maps per provider. Populated below from
+ * `modelsRegistry.providers[].claudeTierMap`. Only providers that opted into
+ * tier mapping (DeepSeek, ZhiPu, Z.AI today) appear here.
+ */
+export const providerClaudeTierMaps = new Map<
+	string,
+	Record<ClaudeTier, ClaudeTierEntry>
+>();
+
 /**
  * Reverse map: model ID → provider name(s) that serve it.
  * Built from registry at startup. Used for model-driven auto-routing.
@@ -38,6 +62,17 @@ for (const p of modelsRegistry.providers) {
 		p.models.map((m: { id: string; realId?: string }) => m.realId ?? m.id),
 	);
 	providerModelSets.set(p.name, models);
+
+	const tierMap = (
+		p as { claudeTierMap?: Partial<Record<ClaudeTier, ClaudeTierEntry>> }
+	).claudeTierMap;
+	if (tierMap?.opus && tierMap.sonnet && tierMap.haiku) {
+		providerClaudeTierMaps.set(p.name, {
+			opus: tierMap.opus,
+			sonnet: tierMap.sonnet,
+			haiku: tierMap.haiku,
+		});
+	}
 
 	for (const m of p.models) {
 		const displayId = m.id;
@@ -77,38 +112,78 @@ if (aliases) {
 }
 
 /**
- * Resolve the effective model for a switched provider request.
+ * Detect which Claude capability tier (opus / sonnet / haiku) a model name
+ * belongs to. Returns null for non-Claude or ambiguous names.
  *
- * When Claude Code's `/model <name>` command is used, the request body
- * contains the user-chosen model. If that model is valid for the current
- * switched provider, we respect it — enabling mid-session model switching
- * (e.g., `/model qwen3-coder-next` when switched to Aliyun).
+ * Matches substrings so it works for both full Anthropic IDs
+ * ("claude-opus-4-6-20250101") and short logical names ("claude-opus").
+ */
+export function resolveClaudeTier(model: string): ClaudeTier | null {
+	const lower = model.toLowerCase();
+	if (!lower.startsWith('claude-')) return null;
+	if (lower.includes('opus')) return 'opus';
+	if (lower.includes('sonnet')) return 'sonnet';
+	if (lower.includes('haiku')) return 'haiku';
+	return null;
+}
+
+/**
+ * Resolve the effective route (model + optional effort) for a switched
+ * provider request.
  *
- * Otherwise, fall back to the switch state's default model.
+ * Resolution order:
+ *   1. User explicit override via `/model <name>` — respected if the model
+ *      is valid for this provider (or the provider accepts any model, e.g.
+ *      Ollama). This branch never sets `effort`.
+ *   2. Claude-tier request (request model starts with `claude-`) + provider
+ *      exposes a `claudeTierMap` in the registry — return the tier entry
+ *      ({ model, effort? }).
+ *   3. Fallback: the provider's current switch default model, no effort.
+ */
+export function resolveEffectiveRoute(
+	requestModel: string | undefined,
+	switchModel: string,
+	provider: string,
+): EffectiveRoute {
+	// (1) /model override path — respect user's explicit choice.
+	if (requestModel && requestModel !== switchModel && !requestModel.startsWith('claude-')) {
+		const validModels = providerModelSets.get(provider);
+		if (validModels && validModels.size === 0) {
+			return { model: requestModel };
+		}
+		if (validModels?.has(requestModel)) {
+			return { model: requestModel };
+		}
+	}
+
+	// (2) Claude tier → provider-specific mapping.
+	const tierMap = providerClaudeTierMaps.get(provider);
+	if (tierMap && requestModel) {
+		const tier = resolveClaudeTier(requestModel);
+		if (tier) {
+			const entry = tierMap[tier];
+			if (entry) {
+				const route: EffectiveRoute = { model: entry.model };
+				if (entry.effort) route.effort = entry.effort;
+				return route;
+			}
+		}
+	}
+
+	// (3) Fallback to the current switch default.
+	return { model: switchModel };
+}
+
+/**
+ * Thin shim around {@link resolveEffectiveRoute} that returns just the model
+ * string. Kept for callers that don't need the effort decision.
  */
 export function resolveEffectiveModel(
 	requestModel: string | undefined,
 	switchModel: string,
 	provider: string,
 ): string {
-	if (!requestModel || requestModel === switchModel) return switchModel;
-
-	// Claude Code sends Anthropic model IDs (e.g. "claude-sonnet-4-5-20241022")
-	// when no /model override is active. These are never valid for external providers.
-	if (requestModel.startsWith('claude-')) return switchModel;
-
-	const validModels = providerModelSets.get(provider);
-
-	// Empty model set (e.g. Ollama) — allow any non-Claude model via /model switching
-	if (validModels && validModels.size === 0) {
-		return requestModel;
-	}
-
-	if (validModels?.has(requestModel)) {
-		return requestModel;
-	}
-
-	return switchModel;
+	return resolveEffectiveRoute(requestModel, switchModel, provider).model;
 }
 
 /**

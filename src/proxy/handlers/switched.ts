@@ -13,7 +13,7 @@ import { isOpenAIFormatProvider } from '../converters/openai-stream';
 import { convertAnthropicToOpenAI } from '../converters/openai-request';
 import { convertAnthropicToResponses } from '../converters/responses-request';
 import { wrapWithCapture } from '../response/cache';
-import { resolveEffectiveModel } from '../routing/model-resolver';
+import { resolveEffectiveRoute } from '../routing/model-resolver';
 import { forwardToProvider } from '../routing/provider-forward';
 import { createStreamingResponse } from '../response/stream';
 import {
@@ -51,14 +51,13 @@ export async function handleSwitched(
 		const useResponsesAPI = RESPONSES_API_PROVIDERS.has(providerType);
 		const openAIFormat = isOpenAIFormatProvider(providerType);
 
-		// Parse body and resolve effective model (supports `/model` command)
+		// Parse body and resolve effective route (model + optional tier-driven effort).
+		// Supports `/model` override and Claude tier → provider-model mapping
+		// (e.g. claude-opus → deepseek-v4-pro w/ effort=max).
 		const body = JSON.parse(bodyText) as Record<string, unknown>;
 		const originalModel = body.model as string;
-		const effectiveModel = resolveEffectiveModel(
-			originalModel,
-			model,
-			provider,
-		);
+		const route = resolveEffectiveRoute(originalModel, model, provider);
+		const effectiveModel = route.model;
 
 		// Rewrite Claude identity in system prompt before any conversion
 		rewriteSystemIdentity(body, effectiveModel);
@@ -82,7 +81,7 @@ export async function handleSwitched(
 			);
 		} else {
 			body.model = effectiveModel;
-			sanitizeRequestBody(body, provider);
+			sanitizeRequestBody(body, provider, { effort: route.effort });
 			forwardBody = body;
 
 			const url = new URL(req.url);
@@ -90,8 +89,9 @@ export async function handleSwitched(
 
 			const modelNote =
 				effectiveModel !== model ? ` (user: ${effectiveModel})` : '';
+			const effortNote = route.effort ? ` effort=${route.effort}` : '';
 			console.error(
-				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, effectiveModel)} (switched${modelNote}) /v1/messages`,
+				`[proxy #${reqId}]${sessionTag} → ${displayModel(provider, effectiveModel)} (switched${modelNote}${effortNote}) /v1/messages`,
 			);
 		}
 

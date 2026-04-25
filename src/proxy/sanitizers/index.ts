@@ -6,8 +6,9 @@
  * prevents most 400 errors from third-party APIs.
  *
  * Provider-specific sanitizers:
- * - DeepSeek: rejects tool_reference, thinking signatures differ,
- *   Reasoner model requires thinking blocks in every assistant message.
+ * - DeepSeek V4: unified thinking model (`deepseek-v4-pro`). Enforces
+ *   thinking=enabled + output_config.effort=max and replaces Claude's signed
+ *   thinking blocks with empty DeepSeek-compatible placeholders.
  * - Kimi: strips thinking blocks and unsupported content types from
  *   conversation history (needed when switching mid-session via omc-switch).
  * - OpenRouter: truncates metadata.user_id, strips thinking blocks,
@@ -19,8 +20,18 @@ import {
 	stripTopLevelKeys,
 	stripUnsupportedContentTypes,
 } from './types';
-import { sanitizeDeepSeekChat, sanitizeDeepSeekReasoner } from './deepseek';
+import { sanitizeDeepSeekV4 } from './deepseek';
 import { sanitizeOpenRouter } from './openrouter';
+
+/** Optional per-provider sanitizer options (currently only DeepSeek uses them). */
+export interface SanitizeOpts {
+	/**
+	 * Thinking effort injected as DeepSeek's `output_config.effort`. Forwarded
+	 * by the switched/directive handlers from the tier resolver so opus/sonnet
+	 * tiers map to `max`/`high` and haiku (Flash) takes the fast path.
+	 */
+	effort?: 'low' | 'medium' | 'high' | 'max';
+}
 
 /**
  * Sanitize a request body for the target provider.
@@ -34,15 +45,16 @@ import { sanitizeOpenRouter } from './openrouter';
 export function sanitizeRequestBody(
 	body: Record<string, unknown>,
 	provider: string,
+	opts?: SanitizeOpts,
 ): void {
 	switch (provider) {
 		case 'deepseek': {
-			const model = body.model as string | undefined;
-			if (model === 'deepseek-reasoner') {
-				sanitizeDeepSeekReasoner(body);
-			} else {
-				sanitizeDeepSeekChat(body);
-			}
+			// V4 split: `deepseek-v4-pro` takes the thinking path with
+			// effort (max|high) forwarded from the tier resolver;
+			// `deepseek-v4-flash` takes the fast path (no thinking).
+			// Legacy model IDs (`deepseek-chat`, `deepseek-reasoner`) are
+			// hard-removed from the aliases/registry and never reach here.
+			sanitizeDeepSeekV4(body, { effort: opts?.effort });
 			return;
 		}
 

@@ -2,9 +2,16 @@
 
 All notable changes to oh-my-claude are documented here. Detailed changelogs are in `docs/changelog/`.
 
-## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-13
+## [2.2.x](changelog/v2.2.x.md) — 2026-03-12 to 2026-04-25
 
-### Latest: v2.2.13
+### Latest: v2.2.14-beta.1
+
+- **DeepSeek V4 + GLM Claude-tier mapping** — proxy-side `claudeTierMap` rewrites Claude-tier requests: DeepSeek `opus → deepseek-v4-pro (effort=max)` / `sonnet → deepseek-v4-pro (effort=high)` / `haiku → deepseek-v4-flash (fast path)`; ZhiPu + Z.AI `opus → glm-5.1` / `sonnet → glm-5-turbo` / `haiku → glm-4.5-air`
+- **DeepSeek V4 Flash + GLM-4.5 Air** — new haiku-tier models added to the DeepSeek and ZhiPu/Z.AI rosters
+- **Legacy DeepSeek names removed** — `deepseek-chat` / `deepseek-reasoner` hard-removed from aliases, statusline, `omc cc` picker, and `/omc-switch` ahead of the 2026-07-24 upstream sunset
+- **`omc cc` Windows PowerShell fix** — inline and remote-control launches now use `cmd.exe` on native Windows so `claude.cmd`/`claude.exe` resolve via `PATHEXT` instead of failing under `/bin/bash`
+
+### Previous: v2.2.13
 
 - **Session Identity Fix** — Deterministic session ID from CWD (SHA-256 hash) so `/continue` finds prior conversation history; fixed cross-project session leak in resume
 - **Proxy Reuse** — Reuses healthy proxy already running for the same project instead of spawning a new one

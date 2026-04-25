@@ -26,7 +26,7 @@ Use @mentions to delegate to specialized agents (role-based):
 | @reviewer        | Reviewer        | Code review, quality assurance          | claude-sonnet     |
 | @scout           | Scout           | Quick codebase exploration              | claude-haiku      |
 | @explore         | Explore         | Contextual grep, find patterns          | claude-haiku      |
-| @analyst         | Analyst         | Quick code analysis, pattern review     | deepseek-chat     |
+| @analyst         | Analyst         | Quick code analysis, pattern review     | deepseek-v4-pro   |
 | @librarian       | Librarian       | External docs, library research         | glm-5.1           |
 | @document-writer | Document Writer | READMEs, API docs, guides               | MiniMax-M2.7      |
 
@@ -36,8 +36,8 @@ Use @mentions to target specific providers (provider agents):
 | ----------- | ---------- | ----------------- | ------------------------------------ |
 | @kimi       | Kimi       | kimi-for-coding   | General coding tasks via Kimi K2.5   |
 | @mm-cn      | MiniMax CN | MiniMax-M2.7      | General tasks via MiniMax China      |
-| @deepseek   | DeepSeek   | deepseek-chat     | General tasks via DeepSeek           |
-| @deepseek-r | DeepSeek   | deepseek-reasoner | Reasoning-heavy tasks via DeepSeek R |
+| @deepseek   | DeepSeek   | deepseek-v4-pro   | General tasks via DeepSeek V4 Pro    |
+| @deepseek-r | DeepSeek   | deepseek-v4-pro   | Reasoning-heavy tasks (effort=max)   |
 | @qwen       | Aliyun     | qwen3.6-plus      | General tasks via Qwen               |
 | @zhipu      | ZhiPu      | glm-5.1           | General tasks via ZhiPu GLM          |
 
@@ -76,7 +76,7 @@ cheaper/specialized models instead of consuming Anthropic tokens.
 | Deep reasoning / architecture | `Task(subagent_type="oracle")`          | Routes to qwen3.6-plus         |
 | Code implementation           | `Task(subagent_type="hephaestus")`      | Routes to kimi-for-coding      |
 | Visual / multimodal           | `Task(subagent_type="navigator")`       | Routes to kimi-for-coding      |
-| Quick analysis                | `Task(subagent_type="analyst")`         | Routes to deepseek-chat        |
+| Quick analysis                | `Task(subagent_type="analyst")`         | Routes to deepseek-v4-pro      |
 | Library research              | `Task(subagent_type="librarian")`       | Routes to glm-5.1              |
 | Documentation                 | `Task(subagent_type="document-writer")` | Routes to MiniMax-M2.7         |
 | Code review                   | `Task(subagent_type="claude-reviewer")` | Uses Claude (quality critical) |
@@ -88,7 +88,7 @@ subtasks are independent:
 ```
 Task(subagent_type="oracle", prompt="analyze API design")    // → qwen3.6-plus
 Task(subagent_type="hephaestus", prompt="implement changes") // → kimi-for-coding
-Task(subagent_type="analyst", prompt="review patterns")      // → deepseek-chat
+Task(subagent_type="analyst", prompt="review patterns")      // → deepseek-v4-pro
 ```
 
 **Escalation Routing (check BEFORE acting directly):**
@@ -133,7 +133,7 @@ Agent routing (switch_model, only for sustained 3+ turn work):
 
 - Deep impl → `switch_model(kimi, K2.5)`, work directly
 - Reasoning → `switch_model(aliyun, qwen3.6-plus)`, work directly
-- Analysis → `switch_model(deepseek, deepseek-chat)`, work directly
+- Analysis → `switch_model(deepseek, deepseek-v4-pro)`, work directly
 - Research → `switch_model(zhipu, glm-5.1)`, work directly
 - Docs → `switch_model(minimax, MiniMax-M2.7)`, work directly
 

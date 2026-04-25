@@ -6,9 +6,22 @@
 			"name": "deepseek",
 			"label": "DeepSeek",
 			"models": [
-				{ "id": "deepseek-reasoner", "label": "DeepSeek Reasoner" },
-				{ "id": "deepseek-chat", "label": "DeepSeek Chat" }
-			]
+				{
+					"id": "deepseek-v4-pro",
+					"label": "DeepSeek V4 Pro",
+					"note": "thinking model — opus/sonnet tier"
+				},
+				{
+					"id": "deepseek-v4-flash",
+					"label": "DeepSeek V4 Flash",
+					"note": "lite / haiku tier"
+				}
+			],
+			"claudeTierMap": {
+				"opus":   { "model": "deepseek-v4-pro",   "effort": "max" },
+				"sonnet": { "model": "deepseek-v4-pro",   "effort": "high" },
+				"haiku":  { "model": "deepseek-v4-flash" }
+			}
 		},
 		{
 			"name": "zhipu",
@@ -16,16 +29,29 @@
 			"models": [
 				{ "id": "glm-5.1", "label": "ZhiPu GLM-5.1" },
 				{ "id": "glm-5", "label": "ZhiPu GLM-5" },
-				{ "id": "glm-5-turbo", "label": "ZhiPu GLM-5 Turbo" }
-			]
+				{ "id": "glm-5-turbo", "label": "ZhiPu GLM-5 Turbo" },
+				{ "id": "glm-4.5-air", "label": "ZhiPu GLM-4.5 Air", "note": "haiku tier" }
+			],
+			"claudeTierMap": {
+				"opus":   { "model": "glm-5.1" },
+				"sonnet": { "model": "glm-5-turbo" },
+				"haiku":  { "model": "glm-4.5-air" }
+			}
 		},
 		{
 			"name": "zai",
 			"label": "Z.AI",
 			"models": [
 				{ "id": "glm-5.1", "label": "GLM-5.1 (Z.AI)" },
-				{ "id": "glm-5", "label": "GLM-5 (Z.AI)" }
-			]
+				{ "id": "glm-5", "label": "GLM-5 (Z.AI)" },
+				{ "id": "glm-5-turbo", "label": "GLM-5 Turbo (Z.AI)" },
+				{ "id": "glm-4.5-air", "label": "GLM-4.5 Air (Z.AI)", "note": "haiku tier" }
+			],
+			"claudeTierMap": {
+				"opus":   { "model": "glm-5.1" },
+				"sonnet": { "model": "glm-5-turbo" },
+				"haiku":  { "model": "glm-4.5-air" }
+			}
 		},
 		{
 			"name": "minimax",
@@ -131,11 +157,11 @@
 			"model": "qwen3.6-plus",
 			"temperature": 0.1,
 			"description": "Deep reasoning, architecture, debugging",
-			"fallback": { "provider": "deepseek", "model": "deepseek-reasoner" }
+			"fallback": { "provider": "deepseek", "model": "deepseek-v4-pro" }
 		},
 		"analyst": {
 			"provider": "deepseek",
-			"model": "deepseek-chat",
+			"model": "deepseek-v4-pro",
 			"temperature": 0.1,
 			"description": "Quick code analysis and pattern review",
 			"fallback": { "provider": "aliyun", "model": "qwen3.6-plus" }
@@ -166,7 +192,7 @@
 			"model": "kimi-for-coding",
 			"temperature": 0.3,
 			"description": "Deep implementation, complex refactoring, code forge",
-			"fallback": { "provider": "deepseek", "model": "deepseek-chat" }
+			"fallback": { "provider": "deepseek", "model": "deepseek-v4-pro" }
 		},
 		"ui-designer": {
 			"provider": "kimi",
@@ -191,16 +217,16 @@
 		},
 		"deepseek": {
 			"provider": "deepseek",
-			"model": "deepseek-chat",
+			"model": "deepseek-v4-pro",
 			"temperature": 0.3,
-			"description": "Provider agent: general-purpose via DeepSeek Chat",
+			"description": "Provider agent: general-purpose via DeepSeek V4 Pro",
 			"agentType": "provider"
 		},
 		"deepseek-r": {
 			"provider": "deepseek",
-			"model": "deepseek-reasoner",
+			"model": "deepseek-v4-pro",
 			"temperature": 0.1,
-			"description": "Provider agent: deep reasoning via DeepSeek Reasoner",
+			"description": "Provider agent: deep reasoning via DeepSeek V4 Pro (thinking effort=max)",
 			"agentType": "provider"
 		},
 		"qwen": {
@@ -251,7 +277,7 @@
 		},
 		"quick": {
 			"provider": "deepseek",
-			"model": "deepseek-chat",
+			"model": "deepseek-v4-pro",
 			"temperature": 0.3
 		},
 		"writing": {

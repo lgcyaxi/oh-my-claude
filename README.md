@@ -602,10 +602,13 @@ Each `cc` session gets its own proxy instance with isolated state. Multiple sess
 
 | Shortcut | Provider | Model |
 |----------|----------|-------|
-| `ds` | deepseek | deepseek-chat |
-| `dr` | deepseek | deepseek-reasoner |
+| `ds` | deepseek | deepseek-v4-pro |
+| `dr` | deepseek | deepseek-v4-pro *(V4 Pro, thinking effort=max for direct routes)* |
+| `ds-f` | deepseek | deepseek-v4-flash *(V4 lite / haiku tier, fast path)* |
 | `g51` | zhipu | glm-5.1 |
+| `g5t` | zhipu | glm-5-turbo |
 | `g5` | zhipu | glm-5 |
+| `gair` | zhipu | glm-4.5-air |
 | `mm` | minimax-cn | MiniMax-M2.7 |
 | `km` | kimi | kimi-for-coding |
 | `q` | aliyun | qwen3.6-plus |
@@ -615,17 +618,31 @@ Each `cc` session gets its own proxy instance with isolated state. Multiple sess
 | `or` | openrouter | nemotron-3-super (free) |
 | `ol` | ollama | *(auto-discovered)* |
 
+> **Legacy names hard-removed:** `deepseek-chat` and `deepseek-reasoner` are sunset on 2026-07-24. The aliases above are the only supported DeepSeek entry points.
+
+**Claude tier mapping (DeepSeek + ZhiPu/Z.AI):**
+
+Once a session is switched to DeepSeek or ZhiPu/Z.AI, Claude Code's own tier requests are transparently rewritten by the proxy:
+
+| Claude tier | DeepSeek                          | GLM (ZhiPu / Z.AI) |
+|-------------|-----------------------------------|--------------------|
+| `opus`      | `deepseek-v4-pro` (effort=max)    | `glm-5.1`          |
+| `sonnet`    | `deepseek-v4-pro` (effort=high)   | `glm-5-turbo`      |
+| `haiku`     | `deepseek-v4-flash` (fast path)   | `glm-4.5-air`      |
+
+No `ANTHROPIC_DEFAULT_*_MODEL` env vars are needed — mapping is entirely proxy-side.
+
 **Via CLI** (session ID supports prefix matching):
 ```bash
 oh-my-claude proxy switch                      # Show sessions and available models
 oh-my-claude proxy switch 505a GLM-5           # Switch session 505a... to GLM-5
-oh-my-claude proxy switch 505 deep             # Prefix match: deepseek-reasoner
+oh-my-claude proxy switch 505 deep             # Prefix match: deepseek-v4-pro
 oh-my-claude proxy revert 505a                 # Revert session to native Claude
 ```
 
 **Via MCP tool:**
 ```
-switch_model(provider="deepseek", model="deepseek-chat")
+switch_model(provider="deepseek", model="deepseek-v4-pro")
 ```
 
 ### MCP Tools
@@ -660,8 +677,8 @@ All agents run as native Task tool agents with full Claude Code tool access (Edi
 | UI-Designer | *(Claude native)* | Passthrough (dual-mode) |
 | @kimi | kimi-for-coding | Directive → Kimi |
 | @mm-cn | MiniMax-M2.7 | Directive → MiniMax CN |
-| @deepseek | deepseek-chat | Directive → DeepSeek |
-| @deepseek-r | deepseek-reasoner | Directive → DeepSeek |
+| @deepseek | deepseek-v4-pro | Directive → DeepSeek |
+| @deepseek-r | deepseek-v4-pro | Directive → DeepSeek (V4 reasoning) |
 | @qwen | qwen3.6-plus | Directive → Aliyun |
 | @zhipu | glm-5.1 | Directive → ZhiPu |
 
@@ -669,7 +686,7 @@ All agents run as native Task tool agents with full Claude Code tool access (Edi
 
 - **Session Isolation**: Each `oh-my-claude cc` session gets its own proxy instance — no interference between sessions
 - **Permanent Switches**: Model switches persist until explicitly reverted (no request counting)
-- **DeepSeek Reasoner Compatibility**: Proxy automatically injects required `thinking` blocks when switching mid-conversation to DeepSeek Reasoner
+- **DeepSeek V4 Compatibility**: Proxy automatically injects required `thinking` blocks and forces `output_config.effort=max` when switching mid-conversation to DeepSeek V4 Pro
 - **Graceful Fallback**: If provider API key is missing, silently falls back to native Claude
 - **Error Recovery**: Provider request failures fall back to native Claude
 
@@ -788,7 +805,7 @@ All task agents run via Claude Code's Task tool. Each agent's prompt contains an
 
 **Invocation:** `Task(subagent_type="analyst")` or use `@analyst` in prompts. The proxy auto-routes based on the embedded route directive.
 
-**Direct Model Access:** `execute_with_model(provider="deepseek", model="deepseek-reasoner", prompt="...")` — bypasses agent routing for token-efficient direct model calls.
+**Direct Model Access:** `execute_with_model(provider="deepseek", model="deepseek-v4-pro", prompt="...")` — bypasses agent routing for token-efficient direct model calls.
 
 > **5-Priority Routing Chain:** directive(1) → model-driven(2) → session(3) → global(4) → passthrough(5). Route directives embedded in agent prompts take highest priority, followed by model-ID auto-routing, then explicit session/global switches.
 

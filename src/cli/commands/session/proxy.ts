@@ -247,11 +247,16 @@ export function registerProxyCommand(program: Command) {
         "o3": "openai",
       };
 
-      // Available models with their providers and shorthand aliases
+      // Available models with their providers and shorthand aliases.
+      // DeepSeek V4: `ds`/`ds-r` → Pro (thinking, tier-driven effort);
+      // `ds-f` → Flash (haiku tier, non-thinking fast path).
       const availableModels = [
-        { model: "deepseek-reasoner", alias: "ds-r", provider: "deepseek", label: "DeepSeek Reasoner" },
-        { model: "deepseek-chat", alias: "ds-c", provider: "deepseek", label: "DeepSeek Chat" },
-        { model: "glm-5.1", alias: "zp", provider: "zhipu", label: "GLM-5.1" },
+        { model: "deepseek-v4-pro", alias: "ds", provider: "deepseek", label: "DeepSeek V4 Pro" },
+        { model: "deepseek-v4-pro", alias: "ds-r", provider: "deepseek", label: "DeepSeek V4 Pro (reasoning)" },
+        { model: "deepseek-v4-flash", alias: "ds-f", provider: "deepseek", label: "DeepSeek V4 Flash (haiku tier)" },
+        { model: "glm-5.1", alias: "zp", provider: "zhipu", label: "GLM-5.1 (opus tier)" },
+        { model: "glm-5-turbo", alias: "zp-t", provider: "zhipu", label: "GLM-5 Turbo (sonnet tier)" },
+        { model: "glm-4.5-air", alias: "zp-air", provider: "zhipu", label: "GLM-4.5 Air (haiku tier)" },
         { model: "glm-5", alias: "zp5", provider: "zhipu", label: "GLM-5" },
         { model: "MiniMax-M2.7", alias: "mm", provider: "minimax", label: "MiniMax M2.7" },
         { model: "MiniMax-M2.7", alias: "mn", provider: "minimax", label: "MiniMax M2.7" },

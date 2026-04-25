@@ -179,7 +179,7 @@ export async function forwardToUpstream(
  * with the original Claude model name from the request.
  *
  * This is needed when switching to external providers (DeepSeek, ZhiPu, etc.)
- * because they return their own model names (e.g., "deepseek-chat") in the response,
+ * because they return their own model names (e.g., "deepseek-v4-pro") in the response,
  * but Claude Code expects to see the original model name (e.g., "claude-opus-4-6").
  *
  * The transformation is done as a streaming transform to avoid buffering the entire response.

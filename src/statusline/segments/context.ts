@@ -33,7 +33,7 @@ const CONTEXT_WINDOWS: Record<string, number> = {
 	'claude-3-opus': 200_000,
 	'claude-3-sonnet': 200_000,
 	'claude-3-haiku': 200_000,
-	// DeepSeek (deepseek-chat V3, deepseek-reasoner)
+	// DeepSeek (deepseek-v4-pro — unified thinking model)
 	deepseek: 128_000,
 	// ZhiPu GLM (glm-5.1 before glm-5 before glm-4 — specificity)
 	'glm-5.1': 200_000,

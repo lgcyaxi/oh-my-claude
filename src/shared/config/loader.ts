@@ -199,7 +199,7 @@ export function isProviderConfigured(
  * Used when primary + explicit fallback both fail.
  */
 const UNIVERSAL_FALLBACK_CHAIN: { provider: string; model: string }[] = [
-  { provider: "deepseek", model: "deepseek-chat" },
+  { provider: "deepseek", model: "deepseek-v4-pro" },
   { provider: "aliyun", model: "qwen3.6-plus" },
   { provider: "zhipu", model: "glm-5" },
   { provider: "zai", model: "glm-5" },

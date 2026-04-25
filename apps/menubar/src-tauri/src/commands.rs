@@ -203,8 +203,8 @@ pub fn get_providers_inner() -> Vec<ProviderInfo> {
         ProviderInfo {
             name: "deepseek".to_string(),
             models: vec![
-                ModelInfo { id: "deepseek-reasoner".to_string(), label: "DeepSeek Reasoner".to_string() },
-                ModelInfo { id: "deepseek-chat".to_string(), label: "DeepSeek Chat".to_string() },
+                ModelInfo { id: "deepseek-v4-pro".to_string(), label: "DeepSeek V4 Pro".to_string() },
+                ModelInfo { id: "deepseek-v4-flash".to_string(), label: "DeepSeek V4 Flash".to_string() },
             ],
         },
     ]

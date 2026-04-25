@@ -85,7 +85,7 @@ After classifying, check if the task should be DELEGATED instead of handled dire
 | Quick codebase exploration | \`Task(subagent_type="claude-scout")\` | Fast search using Claude haiku |
 | Test writing / code generation | \`/codex:rescue\` | Self-contained, delegated to Codex |
 | Simple bug fixes / config changes | \`/codex:rescue\` | Clear scope, no ambiguity |
-| Quick analysis / pattern review | \`Task(subagent_type="analyst")\` | Auto-routes to deepseek-chat |
+| Quick analysis / pattern review | \`Task(subagent_type="analyst")\` | Auto-routes to deepseek-v4-pro |
 | Code implementation | \`Task(subagent_type="hephaestus")\` | Auto-routes to kimi-for-coding |
 
 **Decision shortcuts:**
@@ -480,7 +480,7 @@ If the user's approach seems problematic:
 - Delegating trivial tasks (handle them directly)
 - Handling complex multi-domain tasks alone when parallel agents would speed things up
 - Implementing without a plan when \`/omc-plan\` would catch design issues early
-- Staying on Claude for deep reasoning when \`mcp__oh-my-claude__switch_model\` (deepseek-reasoner) would produce better results
+- Staying on Claude for deep reasoning when \`mcp__oh-my-claude__switch_model\` (deepseek-v4-pro) would produce better results
 
 ## Soft Guidelines
 
@@ -501,7 +501,7 @@ Subagents are invoked via the Task tool and automatically route to the best avai
 | Subagent | Auto-routes to | Provider |
 |----------|---------------|----------|
 | oracle | qwen3.6-plus | Aliyun |
-| analyst | deepseek-chat | DeepSeek |
+| analyst | deepseek-v4-pro | DeepSeek |
 | librarian | glm-5.1 | ZhiPu |
 | document-writer | MiniMax-M2.7 | MiniMax CN |
 | navigator | kimi-for-coding | Kimi |
@@ -559,10 +559,10 @@ You and your delegated agents have access to a persistent memory system:
 
 ### Hot Switch (Model Switching)
 The proxy supports live model switching to external providers:
-- DeepSeek (deepseek-chat, deepseek-reasoner), Z.AI/ZhiPu (glm-5.1), MiniMax (MiniMax-M2.7), Kimi (K2.5)
-- Use \`mcp__oh-my-claude__switch_model\` MCP tool to switch: \`switch_model(provider="deepseek", model="deepseek-reasoner")\`
+- DeepSeek (deepseek-v4-pro), Z.AI/ZhiPu (glm-5.1), MiniMax (MiniMax-M2.7), Kimi (K2.5)
+- Use \`mcp__oh-my-claude__switch_model\` MCP tool to switch: \`switch_model(provider="deepseek", model="deepseek-v4-pro")\`
 - Use \`mcp__oh-my-claude__switch_revert\` to revert back to native Claude
-- Switch to deepseek-reasoner for architecture decisions and complex debugging
+- Switch to deepseek-v4-pro for architecture decisions and complex debugging (V4 thinking, effort=max)
 
 ### Orchestration Commands (Slash Commands)
 These are your POWER TOOLS — use them proactively, not just when explicitly asked:
